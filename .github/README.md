@@ -2,7 +2,6 @@
 
 hello
 
-naber
 helloo
 
 helloo
