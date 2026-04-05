@@ -1,0 +1,87 @@
+'use client';
+
+import React from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useUser } from '@/components/context/UserContext';
+import { Home, FileText, CheckCircle, Settings, LogOut, PlusSquare } from 'lucide-react';
+
+export default function Sidebar() {
+    const { user, logout } = useUser();
+    const pathname = usePathname();
+    const router = useRouter();
+
+    const handleLogout = () => {
+        logout();
+        router.push('/');
+    };
+
+    const getNavItems = () => {
+        const base = [
+            { name: 'My Dashboard', href: '/dashboard', icon: Home },
+            { name: 'My Authored Papers', href: '/papers?filter=authored', icon: FileText }
+        ];
+
+        if (!user.isCoordinator) {
+            base.push({ name: 'My Assigned Reviews', href: '/papers?filter=reviews', icon: CheckCircle });
+        } else {
+            base.push({ name: 'All Papers (System)', href: '/papers', icon: FileText });
+            base.push({ name: 'Register Paper', href: '/register', icon: PlusSquare });
+        }
+
+        return base;
+    };
+
+    const navItems = getNavItems();
+
+    return (
+        <aside className="w-64 border-r border-[#ffffff1a] glass flex flex-col pt-6 pb-4">
+            <div className="px-6 mb-8">
+                <h1 className="text-xl font-bold tracking-tight text-white">BILSEN</h1>
+                <p className="text-xs text-slate-400 mt-1 uppercase tracking-wider">Review System</p>
+            </div>
+
+            <div className="px-4 mb-8">
+                <div className="p-3 rounded-lg bg-white/5 border border-white/10 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-semibold text-sm border border-blue-500/20">
+                        {user.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-200 truncate">{user.name}</p>
+                        <p className="text-xs text-slate-500 truncate">{user.isCoordinator ? 'Coordinator' : 'Standard User'}</p>
+                    </div>
+                </div>
+            </div>
+
+            <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
+                {navItems.map((item) => {
+                    const isActive = pathname === item.href || (pathname.startsWith('/papers') && item.href.startsWith('/papers'));
+                    const Icon = item.icon;
+                    return (
+                        <Link
+                            key={item.name}
+                            href={item.href}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
+                                ? 'bg-blue-600/10 text-blue-400'
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                                }`}
+                        >
+                            <Icon className={`w-5 h-5 ${isActive ? 'text-blue-400' : 'text-slate-500'}`} />
+                            {item.name}
+                        </Link>
+                    );
+                })}
+            </nav>
+
+            <div className="px-4 mt-auto pt-4 border-t border-white/5">
+                <button
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                >
+                    <LogOut className="w-5 h-5" />
+                    Log out
+                </button>
+            </div>
+        </aside>
+    );
+}
