@@ -1,0 +1,28 @@
+# BILSEN Review Management System - Design & Workflow Assumptions
+
+The following assumptions and clarifications define the specific behaviors modeled in our Activity and State diagrams:
+
+1. **Rounds & Deadlines**: 
+   - A round is definitively and strictly closed *manually* by the Coordinator (it does not automatically close exactly on the deadline or when all reviews are submitted).
+   - "Start Next Round" inherently creates a new round while pre-filling data from the previous round.
+
+2. **Reassignment Mechanics**:
+   - Reassigning a reviewer is always a *manual* action performed by the Coordinator, even if it is triggered by an approved decline or an overdue review. It is not an automated system fallback.
+
+3. **Paper State Lifecycle**:
+   - A paper initializes in the `Draft` state when Title + Abstract are provided.
+   - It moves to `Registered` once fully submitted.
+   - The review pipeline dictates the sequential flow: `Human Review` -> `AI Review` AND `Checklist fill verification` -> `Completed` -> `Closed`.
+   - AI Review and Verification of Checklists occur in parallel *after* all human reviews are complete.
+
+4. **Reviewer Assignment Constraints**:
+   - Reviewers must *Accept* an invitation before they can request a deadline extension.
+   - A decline request requires Coordinator approval. If denied, the reviewer must either formally accept the assignment or negotiate off-platform.
+   - A missed deadline flags the assignment as `Overdue`. Overdue assignments act as terminal states for that specific reviewer's pipeline unless re-extended by the Coordinator.
+
+5. **Entity Updating**:
+   - Updates to a paper's abstract or topics by the Author/Coordinator can happen *at any time* and do not trigger system-wide notifications to reviewers.
+
+6. **System & Analytics Visibility**:
+   - End-of-round Analytics (Rating Dashboard) are public. *Anyone* logging into the system can view aggregate metrics in a competition-style format.
+   - Detailed paper history (artifacts, individual reviewer feedback) are strictly restricted to the Author of the paper, the explicitly assigned Reviewers for that paper, and the Coordinator.

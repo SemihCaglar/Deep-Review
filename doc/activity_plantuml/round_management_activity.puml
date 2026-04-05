@@ -1,0 +1,41 @@
+@startuml
+title Round Management Activity Diagram
+|Coordinator|
+start
+:Create Review Round (or Start Next Round);
+:Set Round Deadline;
+
+|System|
+:Suggest Eligible Reviewers;
+note right: Based on Interests,\nAvailability, Parent Paper Author
+
+|Author|
+:Propose Reviewer(s) (optional);
+
+|Coordinator|
+:Review Suggestions & Author Proposals;
+:Select and Assign Reviewers;
+
+|System|
+:Send Invitation Emails;
+
+|Coordinator|
+while (Round Active?) is (Yes)
+  switch (Choose Action)
+  case (Send Reminder)
+    :Manually Send Reminder to Reviewer(s);
+  case (Edit Deadline)
+    :Edit Round Deadline;
+  case (Reassign)
+    :Reassign Reviewer;
+    note right: Triggered by decline approval\nor manual choice
+  case (Wait)
+    :Monitor Review Progress;
+  endswitch
+endwhile (No, Close Round)
+
+|Coordinator|
+:Close Round;
+
+stop
+@enduml

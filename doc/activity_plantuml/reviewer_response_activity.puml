@@ -1,0 +1,40 @@
+@startuml
+title Reviewer Response Activity Diagram
+|Reviewer|
+start
+:Receive Invitation Email;
+:Respond to Invitation;
+if (Decline Assignment?) then (Yes)
+  :Request to Decline Assignment;
+  :Provide Reason;
+  |Coordinator|
+  :Process Decline Request;
+  if (Approve Decline?) then (Yes)
+    :Reassign Reviewer;
+    stop
+  else (No, Deny Decline)
+  endif
+else (No)
+endif
+
+|Reviewer|
+:Access Paper;
+
+if (Need more time?) then (Yes, Extension Req)
+  :Request Deadline Extension;
+  :Provide Reason;
+  |Coordinator|
+  :Process Extension Request;
+  if (Approve?) then (Yes)
+    :Update Deadline;
+  else (No)
+    :Keep Original Deadline;
+  endif
+else (No)
+endif
+
+|Reviewer|
+:Submit Review Feedback;
+:Mark Review Completed;
+stop
+@enduml

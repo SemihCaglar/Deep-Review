@@ -1,0 +1,48 @@
+@startuml
+title Post-Review Phase Activity Diagram
+|System|
+start
+:Generate Checklist based on Paper Type;
+
+|Author or Coordinator|
+:Fill out Conference Checklist;
+note right: e.g., formatting, camera-ready\nrequirements, ethics forms.
+
+:Run AI Review;
+note right: Can only be run after \nHuman Review concludes.
+
+fork
+  |AI Review Engine|
+  :Analyze Paper Content;
+  :Generate Draft Review Feedback;
+
+  |System|
+  fork
+    :Validate AI Output (Guardrails);
+    note right: No fabricated references.\nMust include verifiable metadata.
+  fork again
+    :Check for duplicate references;
+    note right: Ensure suggested citations\nare not already in the paper.
+  end fork
+  
+  if (Previous AI Review Exists?) then (Yes)
+    :Archive previous version;
+    :Save as new version (vX+1);
+  else (No)
+    :Save AI Review as Finalized Feedback (v1);
+  endif
+
+fork again
+  |AI Review Engine|
+  :Review unfilled Checklist items;
+  :Attempt to fill missing items via AI;
+  
+  |System|
+  :Verify Conference Checklist is 100% Filled;
+  :Mark Checklist Verification Complete;
+end fork
+
+|Author or Coordinator|
+:View AI Output & Status;
+stop
+@enduml

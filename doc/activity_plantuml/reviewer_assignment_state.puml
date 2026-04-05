@@ -1,0 +1,30 @@
+@startuml
+title Reviewer Assignment State Diagram
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam linetype polyline
+hide empty description
+
+[*] --> Invited : Coordinator sends invitation
+
+Invited --> Accepted : Reviewer accepts
+Invited --> PendingDecline : Reviewer requests decline
+
+PendingDecline --> Declined : Coordinator approves
+PendingDecline --> Accepted : Coordinator denies (forced assignment)
+
+Accepted --> PendingExtension : Reviewer requests deadline extension
+PendingExtension --> Accepted : Coordinator approves (Deadline updated)\nOR Coordinator denies (Previous deadline kept)
+
+Accepted --> Submitted : Reviewer submits feedback & ratings
+Submitted --> [*]
+
+Declined --> [*]
+
+Invited --> Cancelled : Coordinator reassigns reviewer
+Accepted --> Cancelled : Coordinator reassigns reviewer
+
+Cancelled --> [*]
+
+@enduml

@@ -1,0 +1,20 @@
+@startuml
+title Paper State Diagram
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam linetype polyline
+hide empty description
+[*] --> Draft : Create Paper (Title + Abstract)
+Draft --> HumanReview : Coordinator assigns reviewers & starts round
+
+HumanReview --> ReviewDone : Reviews Submitted (Human Review complete)
+
+ReviewDone --> Completed : Author or Coordinator runs AI Review\n& System verifies Checklist
+
+Completed --> Archived : Coordinator or Author clicks Archive
+Archived --> Draft : Reopen (if rejected)
+Archived --> Closed : Accepted
+
+Closed --> [*]
+@enduml
