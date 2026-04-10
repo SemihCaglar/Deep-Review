@@ -1,6 +1,6 @@
 import { ChildEntity, OneToMany } from 'typeorm';
 import { User, UserRole } from './User';
-import { Paper } from './Paper';
+import type { Paper } from './Paper';
 
 @ChildEntity()
 export class Coordinator extends User {
@@ -9,6 +9,6 @@ export class Coordinator extends User {
     this.role = UserRole.Coordinator;
   }
 
-  @OneToMany(() => Paper, paper => paper.coordinator)
+  @OneToMany('Paper', 'coordinator')
   coordinatedPapers: Paper[];
 }

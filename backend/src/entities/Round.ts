@@ -1,9 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, ManyToMany, JoinTable, OneToMany } from 'typeorm';
-import { Paper } from './Paper';
-import { Assignment } from './Assignment';
-import { ChecklistItem } from './ChecklistItem';
-import { AIReviewReport } from './AIReviewReport';
-import { User } from './User';
+import type { Paper } from './Paper';
+import type { Assignment } from './Assignment';
+import type { ChecklistItem } from './ChecklistItem';
+import type { AIReviewReport } from './AIReviewReport';
+import type { User } from './User';
 
 export enum RoundStatus {
   Open = 'Open',
@@ -28,19 +28,19 @@ export class Round {
   })
   status: RoundStatus;
 
-  @ManyToOne(() => Paper, paper => paper.rounds)
+  @ManyToOne('Paper', 'rounds')
   paper: Paper;
 
-  @ManyToMany(() => User)
+  @ManyToMany('User')
   @JoinTable()
   proposedReviewers: User[];
 
-  @OneToMany(() => Assignment, assignment => assignment.round)
+  @OneToMany('Assignment', 'round')
   assignments: Assignment[];
 
-  @OneToMany(() => ChecklistItem, checklist => checklist.round)
+  @OneToMany('ChecklistItem', 'round')
   checklistItems: ChecklistItem[];
 
-  @OneToMany(() => AIReviewReport, report => report.round)
+  @OneToMany('AIReviewReport', 'round')
   aiReviewReports: AIReviewReport[];
 }

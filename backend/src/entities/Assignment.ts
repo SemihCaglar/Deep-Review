@@ -1,9 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, JoinColumn } from 'typeorm';
-import { Round } from './Round';
-import { Summary } from './Summary';
-import { Rating } from './Rating';
-import { Extension } from './Extension';
-import { User } from './User';
+import type { Round } from './Round';
+import type { Summary } from './Summary';
+import type { Rating } from './Rating';
+import type { Extension } from './Extension';
+import type { User } from './User';
 
 export enum AssignmentStatus {
   Invited = 'Invited',
@@ -26,18 +26,18 @@ export class Assignment {
   })
   status: AssignmentStatus;
 
-  @ManyToOne(() => Round, round => round.assignments)
+  @ManyToOne('Round', 'assignments')
   round: Round;
 
-  @ManyToOne(() => User, member => member.assignments)
+  @ManyToOne('User', 'assignments')
   reviewer: User;
 
-  @OneToOne(() => Extension, extension => extension.assignment, { nullable: true })
+  @OneToOne('Extension', 'assignment', { nullable: true })
   extension: Extension;
 
-  @OneToOne(() => Summary, summary => summary.assignment, { nullable: true })
+  @OneToOne('Summary', 'assignment', { nullable: true })
   reviewSummary: Summary;
 
-  @OneToOne(() => Rating, rating => rating.assignment, { nullable: true })
+  @OneToOne('Rating', 'assignment', { nullable: true })
   rating: Rating;
 }

@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
-import { User } from './User';
+import type { User } from './User';
 
 @Entity()
 export class BlackoutPeriod {
@@ -15,6 +15,6 @@ export class BlackoutPeriod {
   @Column({ type: 'text', nullable: true })
   reason: string | null;
 
-  @ManyToOne(() => User, user => user.blackoutPeriods, { onDelete: 'CASCADE' })
+  @ManyToOne('User', 'blackoutPeriods', { onDelete: 'CASCADE' })
   member: User;
 }

@@ -9,11 +9,11 @@ import {
   TableInheritance,
   UpdateDateColumn,
 } from 'typeorm';
-import { Assignment } from './Assignment';
-import { BlackoutPeriod } from './BlackoutPeriod';
-import { EmailNotification } from './EmailNotification';
-import { Paper } from './Paper';
-import { Topic } from './Topic';
+import type { Assignment } from './Assignment';
+import type { BlackoutPeriod } from './BlackoutPeriod';
+import type { EmailNotification } from './EmailNotification';
+import type { Paper } from './Paper';
+import type { Topic } from './Topic';
 
 export enum UserRole {
   LabMember = 'LabMember',
@@ -79,20 +79,20 @@ export abstract class User {
   @UpdateDateColumn({ type: 'datetime' })
   updatedAt: Date;
 
-  @ManyToMany(() => Paper, paper => paper.authors)
+  @ManyToMany('Paper', 'authors')
   @JoinTable()
   writtenPapers: Paper[];
 
-  @ManyToMany(() => Topic)
+  @ManyToMany('Topic')
   @JoinTable()
   interests: Topic[];
 
-  @OneToMany(() => Assignment, assignment => assignment.reviewer)
+  @OneToMany('Assignment', 'reviewer')
   assignments: Assignment[];
 
-  @OneToMany(() => BlackoutPeriod, blackout => blackout.member, { cascade: true })
+  @OneToMany('BlackoutPeriod', 'member', { cascade: true })
   blackoutPeriods: BlackoutPeriod[];
 
-  @OneToMany(() => EmailNotification, notification => notification.recipient)
+  @OneToMany('EmailNotification', 'recipient')
   notifications: EmailNotification[];
 }

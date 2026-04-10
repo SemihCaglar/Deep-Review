@@ -1,8 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable, ManyToOne, OneToMany } from 'typeorm';
-import { Coordinator } from './Coordinator';
-import { Topic } from './Topic';
-import { Round } from './Round';
-import { User } from './User';
+import type { Coordinator } from './Coordinator';
+import type { Topic } from './Topic';
+import type { Round } from './Round';
+import type { User } from './User';
 
 export enum PaperStatus {
   Draft = 'Draft',
@@ -44,13 +44,13 @@ export class Paper {
   @Column({ nullable: true })
   overleafLink: string;
 
-  @ManyToMany(() => User, member => member.writtenPapers)
+  @ManyToMany('User', 'writtenPapers')
   authors: User[];
 
-  @ManyToOne(() => Coordinator, coordinator => coordinator.coordinatedPapers)
+  @ManyToOne('Coordinator', 'coordinatedPapers')
   coordinator: Coordinator;
 
-  @ManyToMany(() => Topic)
+  @ManyToMany('Topic')
   @JoinTable()
   topics: Topic[];
 
@@ -58,6 +58,6 @@ export class Paper {
   @JoinTable()
   parentPapers: Paper[];
 
-  @OneToMany(() => Round, round => round.paper)
+  @OneToMany('Round', 'paper')
   rounds: Round[];
 }
