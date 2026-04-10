@@ -3,7 +3,7 @@ import { Paper } from './Paper';
 import { Assignment } from './Assignment';
 import { ChecklistItem } from './ChecklistItem';
 import { AIReviewReport } from './AIReviewReport';
-import { LabMember } from './LabMember';
+import { User } from './User';
 
 export enum RoundStatus {
   Open = 'Open',
@@ -31,9 +31,9 @@ export class Round {
   @ManyToOne(() => Paper, paper => paper.rounds)
   paper: Paper;
 
-  @ManyToMany(() => LabMember)
+  @ManyToMany(() => User)
   @JoinTable()
-  proposedReviewers: LabMember[];
+  proposedReviewers: User[];
 
   @OneToMany(() => Assignment, assignment => assignment.round)
   assignments: Assignment[];

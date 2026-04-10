@@ -1,8 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable, ManyToOne, OneToMany } from 'typeorm';
-import { LabMember } from './LabMember';
 import { Coordinator } from './Coordinator';
 import { Topic } from './Topic';
 import { Round } from './Round';
+import { User } from './User';
 
 export enum PaperStatus {
   Draft = 'Draft',
@@ -44,8 +44,8 @@ export class Paper {
   @Column({ nullable: true })
   overleafLink: string;
 
-  @ManyToMany(() => LabMember, member => member.writtenPapers)
-  authors: LabMember[];
+  @ManyToMany(() => User, member => member.writtenPapers)
+  authors: User[];
 
   @ManyToOne(() => Coordinator, coordinator => coordinator.coordinatedPapers)
   coordinator: Coordinator;

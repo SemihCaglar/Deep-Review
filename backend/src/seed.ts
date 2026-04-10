@@ -3,6 +3,7 @@ import { AppDataSource } from './data-source';
 import { LabMember } from './entities/LabMember';
 import { Paper, PaperStatus } from './entities/Paper';
 import { Assignment, AssignmentStatus } from './entities/Assignment';
+import { ApprovalStatus } from './entities/User';
 
 async function seed() {
     await AppDataSource.initialize();
@@ -14,10 +15,22 @@ async function seed() {
     const assignRepo = AppDataSource.getRepository(Assignment);
 
     // 2. Create standard users mimicking Mock Data Context
-    const user1 = Object.assign(new LabMember(), { name: 'Semih User', email: 'semih@builder.app', passwordHash: '123' });
+    const user1 = Object.assign(new LabMember(), {
+        name: 'Semih User',
+        email: 'semih@builder.app',
+        passwordHash: '123',
+        approvalStatus: ApprovalStatus.Approved,
+        approvalReviewedAt: new Date(),
+    });
     await memberRepo.save(user1);
 
-    const user2 = Object.assign(new LabMember(), { name: 'Emily Chen', email: 'emily@builder.app', passwordHash: '123' });
+    const user2 = Object.assign(new LabMember(), {
+        name: 'Emily Chen',
+        email: 'emily@builder.app',
+        passwordHash: '123',
+        approvalStatus: ApprovalStatus.Approved,
+        approvalReviewedAt: new Date(),
+    });
     await memberRepo.save(user2);
 
     // 3. Create Papers
