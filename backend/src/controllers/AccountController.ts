@@ -85,8 +85,14 @@ export class AccountController {
     res.status(501).json({ message: 'Not Implemented' });
   }
   static async approveSignUp(req: Request, res: Response) {
+    const id = AccountController.parseRouteId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ message: 'Valid signup id is required' });
+    }
+
     const memberRepo = AppDataSource.getRepository(LabMember);
-    const member = await memberRepo.findOne({ where: { id: req.params.id } });
+    const member = await memberRepo.findOne({ where: { id } });
 
     if (!member) {
       return res.status(404).json({ message: 'Pending signup not found' });
@@ -110,8 +116,14 @@ export class AccountController {
     });
   }
   static async rejectSignUp(req: Request, res: Response) {
+    const id = AccountController.parseRouteId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ message: 'Valid signup id is required' });
+    }
+
     const memberRepo = AppDataSource.getRepository(LabMember);
-    const member = await memberRepo.findOne({ where: { id: req.params.id } });
+    const member = await memberRepo.findOne({ where: { id } });
 
     if (!member) {
       return res.status(404).json({ message: 'Pending signup not found' });
@@ -142,6 +154,15 @@ export class AccountController {
 
     const trimmedNote = note.trim();
     return trimmedNote ? trimmedNote : null;
+  }
+
+  private static parseRouteId(id: unknown): string | null {
+    if (typeof id !== 'string') {
+      return null;
+    }
+
+    const trimmedId = id.trim();
+    return trimmedId ? trimmedId : null;
   }
 
   private static serializeAccount(member: LabMember) {
