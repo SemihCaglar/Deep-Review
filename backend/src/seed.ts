@@ -4,6 +4,7 @@ import { LabMember } from './entities/LabMember';
 import { Paper, PaperStatus } from './entities/Paper';
 import { Assignment, AssignmentStatus } from './entities/Assignment';
 import { ApprovalStatus } from './entities/User';
+import { hashPassword } from './services/accountSecurity';
 
 async function seed() {
     await AppDataSource.initialize();
@@ -18,7 +19,7 @@ async function seed() {
     const user1 = Object.assign(new LabMember(), {
         name: 'Semih User',
         email: 'semih@builder.app',
-        passwordHash: '123',
+        passwordHash: await hashPassword('123'),
         approvalStatus: ApprovalStatus.Approved,
         approvalReviewedAt: new Date(),
     });
@@ -27,7 +28,7 @@ async function seed() {
     const user2 = Object.assign(new LabMember(), {
         name: 'Emily Chen',
         email: 'emily@builder.app',
-        passwordHash: '123',
+        passwordHash: await hashPassword('123'),
         approvalStatus: ApprovalStatus.Approved,
         approvalReviewedAt: new Date(),
     });
@@ -66,7 +67,7 @@ async function seed() {
     });
     await assignRepo.save(a1);
 
-    console.log(`✅ successfully seeded data into Postgres! user.id='${user1.id}'`);
+    console.log(`✅ successfully seeded database! user.id='${user1.id}'`);
     await AppDataSource.destroy();
 }
 

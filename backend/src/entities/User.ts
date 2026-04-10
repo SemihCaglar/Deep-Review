@@ -65,6 +65,9 @@ export abstract class User {
   failedLogins: number;
 
   @Column({ type: 'datetime', nullable: true })
+  failedLoginWindowStartedAt: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
   lockedUntil: Date | null;
 
   @Column({ type: 'datetime', nullable: true })
