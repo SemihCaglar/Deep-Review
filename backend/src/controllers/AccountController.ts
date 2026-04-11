@@ -1,8 +1,12 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { LabMember } from '../entities/LabMember';
+import { PasswordResetToken } from '../entities/PasswordResetToken';
 import { ApprovalStatus, User } from '../entities/User';
 import {
+  accountSecurityPolicy,
+  createPasswordResetToken,
+  hashPasswordResetToken,
   hashPassword,
   isAccountLocked,
   registerFailedLoginAttempt,
@@ -117,10 +121,58 @@ export class AccountController {
     res.status(501).json({ message: 'Not Implemented' });
   }
   static async sendPasswordReset(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    const { email } = req.body ?? {};
+
+    if (typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ message: 'email is required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const tokenRepo = AppDataSource.getRepository(PasswordResetToken);
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await userRepo.findOne({ where: { email: normalizedEmail } });
+
+    if (user) {
+      const resetToken = createPasswordResetToken();
+      const token = tokenRepo.create({
+        tokenHash: hashPasswordResetToken(resetToken),
+        expiresAt: new Date(Date.now() + accountSecurityPolicy.passwordResetTokenTtlMs),
+        usedAt: null,
+        user,
+      });
+
+      await tokenRepo.save(token);
+
+      console.log(`Password reset token for ${user.email}: ${resetToken}`);
+    }
+
+    return AccountController.passwordResetRequestAccepted(res);
   }
   static async resetPassword(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    const { token, newPassword } = req.body ?? {};
+
+    if (typeof token !== 'string' || typeof newPassword !== 'string' || !token.trim() || !newPassword) {
+      return res.status(400).json({ message: 'token and newPassword are required' });
+    }
+
+    const tokenRepo = AppDataSource.getRepository(PasswordResetToken);
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const resetToken = await tokenRepo.findOne({
+      where: { tokenHash: hashPasswordResetToken(token.trim()) },
+      relations: { user: true },
+    });
+
+    if (!resetToken || resetToken.usedAt || resetToken.expiresAt.getTime() <= Date.now()) {
+      return res.status(400).json({ message: 'Invalid or expired reset token' });
+    }
+
+    resetToken.user.passwordHash = await hashPassword(newPassword);
+    resetToken.usedAt = new Date();
+
+    await userRepo.save(resetToken.user);
+    await tokenRepo.save(resetToken);
+
+    return res.status(200).json({ message: 'Password reset successful' });
   }
   static async updateProfile(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
@@ -228,6 +280,12 @@ export class AccountController {
 
   private static authenticationFailed(res: Response) {
     return res.status(401).json({ message: 'Invalid email or password' });
+  }
+
+  private static passwordResetRequestAccepted(res: Response) {
+    return res.status(200).json({
+      message: 'If an account exists for that email, a password reset link will be sent',
+    });
   }
 
   private static isUniqueConstraintError(error: unknown): boolean {

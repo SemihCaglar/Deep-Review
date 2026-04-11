@@ -1,6 +1,6 @@
-import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'crypto';
+import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
-import { User } from '../entities/User';
+import type { User } from '../entities/User';
 
 const scrypt = promisify(scryptCallback);
 
@@ -9,6 +9,8 @@ const PASSWORD_KEY_LENGTH = 64;
 const LOCKOUT_THRESHOLD = 5;
 const LOCKOUT_WINDOW_MS = 10 * 60 * 1000;
 const LOCKOUT_DURATION_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_BYTES = 32;
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(PASSWORD_SALT_BYTES).toString('hex');
@@ -32,6 +34,14 @@ export async function verifyPassword(password: string, passwordHash: string): Pr
   }
 
   return timingSafeEqual(storedKey, derivedKey);
+}
+
+export function createPasswordResetToken(): string {
+  return randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString('hex');
+}
+
+export function hashPasswordResetToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 export function isAccountLocked(user: Pick<User, 'lockedUntil'>, now: Date = new Date()): boolean {
@@ -77,4 +87,5 @@ export const accountSecurityPolicy = {
   lockoutThreshold: LOCKOUT_THRESHOLD,
   lockoutWindowMs: LOCKOUT_WINDOW_MS,
   lockoutDurationMs: LOCKOUT_DURATION_MS,
+  passwordResetTokenTtlMs: PASSWORD_RESET_TOKEN_TTL_MS,
 };
