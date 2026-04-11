@@ -1,20 +1,20 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
-import { LabMember } from './LabMember';
+import type { User } from './User';
 
 @Entity()
 export class BlackoutPeriod {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ type: 'datetime' })
   startDate: Date;
 
-  @Column()
+  @Column({ type: 'datetime' })
   endDate: Date;
 
-  @Column({ nullable: true })
-  reason: string;
+  @Column({ type: 'text', nullable: true })
+  reason: string | null;
 
-  @ManyToOne(() => LabMember, member => member.blackoutPeriods)
-  member: LabMember;
+  @ManyToOne('User', 'blackoutPeriods', { onDelete: 'CASCADE' })
+  member: User;
 }

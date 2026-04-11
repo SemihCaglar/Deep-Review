@@ -1,23 +1,176 @@
 import { Request, Response } from 'express';
+import { AppDataSource } from '../data-source';
+import { LabMember } from '../entities/LabMember';
+import { PasswordResetToken } from '../entities/PasswordResetToken';
+import { ApprovalStatus, User } from '../entities/User';
+import {
+  accountSecurityPolicy,
+  createPasswordResetToken,
+  hashPasswordResetToken,
+  hashPassword,
+  isAccountLocked,
+  registerFailedLoginAttempt,
+  registerSuccessfulLogin,
+  verifyPassword,
+} from '../services/accountSecurity';
 
 export class AccountController {
   static async signUp(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    const { name, email, password } = req.body ?? {};
+
+    if (
+      typeof name !== 'string' ||
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !name.trim() ||
+      !email.trim() ||
+      !password
+    ) {
+      return res.status(400).json({ message: 'name, email, and password are required' });
+    }
+
+    const memberRepo = AppDataSource.getRepository(LabMember);
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingUser = await memberRepo.findOne({
+      where: { email: normalizedEmail },
+    });
+
+    if (existingUser) {
+      return res.status(409).json({ message: 'Email is already in use' });
+    }
+
+    const member = memberRepo.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      passwordHash: await hashPassword(password),
+      approvalStatus: ApprovalStatus.Pending,
+      approvalReviewedAt: null,
+      approvalNote: null,
+      failedLogins: 0,
+      failedLoginWindowStartedAt: null,
+      lockedUntil: null,
+      lastLoginAt: null,
+    });
+
+    let savedMember: LabMember;
+
+    try {
+      savedMember = await memberRepo.save(member);
+    } catch (error) {
+      if (AccountController.isUniqueConstraintError(error)) {
+        return res.status(409).json({ message: 'Email is already in use' });
+      }
+
+      throw error;
+    }
+
+    return res.status(201).json({
+      message: 'Signup submitted and pending approval',
+      user: AccountController.serializeAccount(savedMember),
+    });
   }
   static async login(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    const { email, password } = req.body ?? {};
+
+    if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
+      return res.status(400).json({ message: 'email and password are required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await userRepo.findOne({ where: { email: normalizedEmail } });
+
+    if (!user) {
+      return AccountController.authenticationFailed(res);
+    }
+
+    if (user.approvalStatus !== ApprovalStatus.Approved) {
+      return res.status(403).json({ message: 'Account is not approved' });
+    }
+
+    if (isAccountLocked(user)) {
+      return res.status(423).json({ message: 'Account is temporarily locked' });
+    }
+
+    const passwordMatches = await verifyPassword(password, user.passwordHash);
+
+    if (!passwordMatches) {
+      registerFailedLoginAttempt(user);
+      await userRepo.save(user);
+
+      if (isAccountLocked(user)) {
+        return res.status(423).json({ message: 'Account is temporarily locked' });
+      }
+
+      return AccountController.authenticationFailed(res);
+    }
+
+    registerSuccessfulLogin(user);
+    const savedUser = await userRepo.save(user);
+
+    return res.status(200).json({
+      message: 'Login successful',
+      user: AccountController.serializeAccount(savedUser),
+    });
   }
   static async logout(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    return res.status(200).json({ message: 'Logout successful' });
   }
   static async changePassword(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
   static async sendPasswordReset(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    const { email } = req.body ?? {};
+
+    if (typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ message: 'email is required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const tokenRepo = AppDataSource.getRepository(PasswordResetToken);
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await userRepo.findOne({ where: { email: normalizedEmail } });
+
+    if (user) {
+      const resetToken = createPasswordResetToken();
+      const token = tokenRepo.create({
+        tokenHash: hashPasswordResetToken(resetToken),
+        expiresAt: new Date(Date.now() + accountSecurityPolicy.passwordResetTokenTtlMs),
+        usedAt: null,
+        user,
+      });
+
+      await tokenRepo.save(token);
+    }
+
+    return AccountController.passwordResetRequestAccepted(res);
   }
   static async resetPassword(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    const { token, newPassword } = req.body ?? {};
+
+    if (typeof token !== 'string' || typeof newPassword !== 'string' || !token.trim() || !newPassword) {
+      return res.status(400).json({ message: 'token and newPassword are required' });
+    }
+
+    const tokenRepo = AppDataSource.getRepository(PasswordResetToken);
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const resetToken = await tokenRepo.findOne({
+      where: { tokenHash: hashPasswordResetToken(token.trim()) },
+      relations: { user: true },
+    });
+
+    if (!resetToken || resetToken.usedAt || resetToken.expiresAt.getTime() <= Date.now()) {
+      return res.status(400).json({ message: 'Invalid or expired reset token' });
+    }
+
+    resetToken.user.passwordHash = await hashPassword(newPassword);
+    resetToken.usedAt = new Date();
+
+    await userRepo.save(resetToken.user);
+    await tokenRepo.save(resetToken);
+
+    return res.status(200).json({ message: 'Password reset successful' });
   }
   static async updateProfile(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
@@ -29,9 +182,111 @@ export class AccountController {
     res.status(501).json({ message: 'Not Implemented' });
   }
   static async approveSignUp(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    const id = AccountController.parseRouteId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ message: 'Valid signup id is required' });
+    }
+
+    const memberRepo = AppDataSource.getRepository(LabMember);
+    const member = await memberRepo.findOne({ where: { id } });
+
+    if (!member) {
+      return res.status(404).json({ message: 'Pending signup not found' });
+    }
+
+    if (member.approvalStatus !== ApprovalStatus.Pending) {
+      return res.status(409).json({ message: 'Only pending signups can be approved' });
+    }
+
+    const note = AccountController.parseApprovalNote(req.body?.note);
+
+    member.approvalStatus = ApprovalStatus.Approved;
+    member.approvalReviewedAt = new Date();
+    member.approvalNote = note;
+
+    const savedMember = await memberRepo.save(member);
+
+    return res.status(200).json({
+      message: 'Signup approved',
+      user: AccountController.serializeAccount(savedMember),
+    });
   }
   static async rejectSignUp(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    const id = AccountController.parseRouteId(req.params.id);
+
+    if (!id) {
+      return res.status(400).json({ message: 'Valid signup id is required' });
+    }
+
+    const memberRepo = AppDataSource.getRepository(LabMember);
+    const member = await memberRepo.findOne({ where: { id } });
+
+    if (!member) {
+      return res.status(404).json({ message: 'Pending signup not found' });
+    }
+
+    if (member.approvalStatus !== ApprovalStatus.Pending) {
+      return res.status(409).json({ message: 'Only pending signups can be rejected' });
+    }
+
+    const note = AccountController.parseApprovalNote(req.body?.note);
+
+    member.approvalStatus = ApprovalStatus.Rejected;
+    member.approvalReviewedAt = new Date();
+    member.approvalNote = note;
+
+    const savedMember = await memberRepo.save(member);
+
+    return res.status(200).json({
+      message: 'Signup rejected',
+      user: AccountController.serializeAccount(savedMember),
+    });
+  }
+
+  private static parseApprovalNote(note: unknown): string | null {
+    if (typeof note !== 'string') {
+      return null;
+    }
+
+    const trimmedNote = note.trim();
+    return trimmedNote ? trimmedNote : null;
+  }
+
+  private static parseRouteId(id: unknown): string | null {
+    if (typeof id !== 'string') {
+      return null;
+    }
+
+    const trimmedId = id.trim();
+    return trimmedId ? trimmedId : null;
+  }
+
+  private static serializeAccount(member: User) {
+    return {
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      role: member.role,
+      approvalStatus: member.approvalStatus,
+      approvalReviewedAt: member.approvalReviewedAt,
+      approvalNote: member.approvalNote,
+      createdAt: member.createdAt,
+      updatedAt: member.updatedAt,
+    };
+  }
+
+  private static authenticationFailed(res: Response) {
+    return res.status(401).json({ message: 'Invalid email or password' });
+  }
+
+  private static passwordResetRequestAccepted(res: Response) {
+    return res.status(200).json({
+      message: 'If an account exists for that email, a password reset link will be sent',
+    });
+  }
+
+  private static isUniqueConstraintError(error: unknown): boolean {
+    return error instanceof Error && error.message.includes('UNIQUE constraint failed');
   }
 }

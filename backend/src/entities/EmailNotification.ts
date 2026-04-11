@@ -1,5 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
-import { User } from './User';
+import type { User } from './User';
 
 export enum EmailStatus {
   Pending = 'Pending',
@@ -28,6 +28,6 @@ export class EmailNotification {
   })
   status: EmailStatus;
 
-  @ManyToOne(() => User, user => user.notifications)
+  @ManyToOne('User', 'notifications')
   recipient: User;
 }

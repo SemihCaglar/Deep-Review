@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn, ManyToOne } from 'typeorm';
-import { Assignment } from './Assignment';
-import { LabMember } from './LabMember';
+import type { Assignment } from './Assignment';
+import type { User } from './User';
 
 @Entity()
 export class Rating {
@@ -16,10 +16,10 @@ export class Rating {
   @Column('float')
   timeScore: number;
 
-  @OneToOne(() => Assignment, assignment => assignment.rating)
+  @OneToOne('Assignment', 'rating')
   @JoinColumn()
   assignment: Assignment;
 
-  @ManyToOne(() => LabMember)
-  rater: LabMember;
+  @ManyToOne('User')
+  rater: User;
 }
