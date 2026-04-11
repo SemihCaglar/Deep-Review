@@ -142,8 +142,6 @@ export class AccountController {
       });
 
       await tokenRepo.save(token);
-
-      console.log(`Password reset token for ${user.email}: ${resetToken}`);
     }
 
     return AccountController.passwordResetRequestAccepted(res);
