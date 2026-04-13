@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, ManyToMany, JoinTable, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, ManyToMany, JoinTable, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import type { Paper } from './Paper';
 import type { Assignment } from './Assignment';
 import type { ChecklistItem } from './ChecklistItem';
@@ -27,6 +27,18 @@ export class Round {
     default: RoundStatus.Open
   })
   status: RoundStatus;
+
+  @Column({ type: 'datetime' })
+  startedAt: Date;
+
+  @Column({ type: 'datetime', nullable: true })
+  closedAt: Date | null;
+
+  @CreateDateColumn({ type: 'datetime' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ type: 'datetime' })
+  updatedAt: Date;
 
   @ManyToOne('Paper', 'rounds')
   paper: Paper;

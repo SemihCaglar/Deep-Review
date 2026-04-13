@@ -1,7 +1,9 @@
 import 'reflect-metadata';
 import { AppDataSource } from './data-source';
 import { LabMember } from './entities/LabMember';
+import { Coordinator } from './entities/Coordinator';
 import { Paper, PaperStatus } from './entities/Paper';
+import { Round, RoundStatus } from './entities/Round';
 import { Assignment, AssignmentStatus } from './entities/Assignment';
 import { ApprovalStatus } from './entities/User';
 import { hashPassword } from './services/accountSecurity';
@@ -16,7 +18,7 @@ async function seed() {
     const assignRepo = AppDataSource.getRepository(Assignment);
 
     // 2. Create standard users mimicking Mock Data Context
-    const user1 = Object.assign(new LabMember(), {
+    const user1 = Object.assign(new Coordinator(), {
         name: 'Semih User',
         email: 'semih@builder.app',
         passwordHash: await hashPassword('123'),
@@ -50,6 +52,7 @@ async function seed() {
         creationTime: new Date(),
         targetVenue: 'Frontend Conf 2026',
         status: PaperStatus.Registered,
+        coordinator: user1,
     });
     await paperRepo.save(p2);
 
@@ -60,12 +63,52 @@ async function seed() {
     user2.writtenPapers = [p2];
     await memberRepo.save(user2);
 
-    // 4. Create Assignments
+    // 4. Create Rounds & Assignments
+    const roundRepo = AppDataSource.getRepository(Round);
+
+    const r1 = Object.assign(new Round(), {
+        paper: p1,
+        roundNumber: 1,
+        deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 days
+        status: RoundStatus.Open,
+        startedAt: new Date()
+    });
+    await roundRepo.save(r1);
+
+    const r2 = Object.assign(new Round(), {
+        paper: p2,
+        roundNumber: 1,
+        deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // +14 days
+        status: RoundStatus.Open,
+        startedAt: new Date()
+    });
+    await roundRepo.save(r2);
+
     const a1 = Object.assign(new Assignment(), {
+        round: r1,
+        reviewer: user1,
         status: AssignmentStatus.Invited,
-        reviewer: user1
+        invitedAt: new Date()
     });
     await assignRepo.save(a1);
+
+    const a2 = Object.assign(new Assignment(), {
+        round: r1,
+        reviewer: user2,
+        status: AssignmentStatus.Accepted,
+        invitedAt: new Date(),
+        acceptedAt: new Date()
+    });
+    await assignRepo.save(a2);
+
+    const a3 = Object.assign(new Assignment(), {
+        round: r2,
+        reviewer: user1,
+        status: AssignmentStatus.Declined,
+        invitedAt: new Date(),
+        declineReason: 'Conflict of interest.'
+    });
+    await assignRepo.save(a3);
 
     console.log(`✅ successfully seeded database! user.id='${user1.id}'`);
     await AppDataSource.destroy();

@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn, CreateDateColumn } from 'typeorm';
 import { Assignment } from './Assignment';
 
 @Entity()
@@ -6,8 +6,11 @@ export class Summary {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column('text')
-  text: string;
+  @Column({ type: 'text', nullable: true })
+  text: string | null;
+
+  @CreateDateColumn({ type: 'datetime' })
+  submittedAt: Date;
 
   @OneToOne(() => Assignment, assignment => assignment.reviewSummary)
   @JoinColumn()
