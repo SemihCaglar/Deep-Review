@@ -13,7 +13,7 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "@types/node": "^25.5.2"
+    "@types/node": "^18.19.130"
   },
   "dependencies": {
     "@types/cors": "^2.8.19",

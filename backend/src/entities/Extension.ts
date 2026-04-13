@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn, CreateDateColumn } from 'typeorm';
 import { Assignment } from './Assignment';
 
 export enum ExtensionStatus {
@@ -15,8 +15,11 @@ export class Extension {
   @Column('text')
   reason: string;
 
-  @Column({ nullable: true })
-  acceptedDate: Date;
+  @Column({ type: 'datetime', nullable: true })
+  newDeadline: Date | null;
+
+  @CreateDateColumn({ type: 'datetime' })
+  requestedAt: Date;
 
   @Column({
     type: 'simple-enum',
