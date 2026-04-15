@@ -28,8 +28,8 @@ export class Round {
   })
   status: RoundStatus;
 
-  @Column({ type: 'datetime' })
-  startedAt: Date;
+  @Column({ type: 'datetime', nullable: true })
+  startedAt: Date | null;
 
   @Column({ type: 'datetime', nullable: true })
   closedAt: Date | null;

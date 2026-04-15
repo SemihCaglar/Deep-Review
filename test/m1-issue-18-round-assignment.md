@@ -6,7 +6,7 @@ This file documents that the `Round`, `Assignment`, `Extension`, `Rating`, and `
 ## Start backend and run seed
 
 ```bash
-cd ~/Team8/backend
+cd backend
 # Reset and seed database
 npx ts-node src/seed.ts
 
@@ -21,7 +21,8 @@ When the assignment and round controllers are implemented, use the following com
 
 ### Get Round Assignments (To be evaluated when endpoint exists)
 ```bash
-curl -X GET http://localhost:3001/api/rounds/r1/status
+# Note: Obtain the true UUID of the round from the output of the seed script or database
+curl -X GET http://localhost:3001/api/rounds/<roundId>/status
 ```
 
 ### Try assigning the same reviewer twice to test UNIQUE constraint

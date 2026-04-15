@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, JoinColumn, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, JoinColumn, Unique, CreateDateColumn } from 'typeorm';
 import type { Round } from './Round';
 import type { Summary } from './Summary';
 import type { Rating } from './Rating';
@@ -30,7 +30,7 @@ export class Assignment {
   @Column({ type: 'datetime', nullable: true })
   deadline: Date | null;
 
-  @Column({ type: 'datetime' })
+  @CreateDateColumn({ type: 'datetime' })
   invitedAt: Date;
 
   @Column({ type: 'datetime', nullable: true })
@@ -42,13 +42,11 @@ export class Assignment {
   @Column({ type: 'text', nullable: true })
   declineReason: string | null;
 
-  @Column({ default: false })
-  reliabilityFlag: boolean;
 
-  @ManyToOne('Round', 'assignments')
+  @ManyToOne('Round', 'assignments', { nullable: false, onDelete: 'CASCADE' })
   round: Round;
 
-  @ManyToOne('User', 'assignments')
+  @ManyToOne('User', 'assignments', { nullable: false, onDelete: 'CASCADE' })
   reviewer: User;
 
   @OneToOne('Extension', 'assignment', { nullable: true })
