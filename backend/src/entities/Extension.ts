@@ -15,8 +15,11 @@ export class Extension {
   @Column('text')
   reason: string;
 
+  @Column({ type: 'datetime' })
+  requestedDeadline: Date;
+
   @Column({ type: 'datetime', nullable: true })
-  newDeadline: Date | null;
+  approvedDeadline: Date | null;
 
   @CreateDateColumn({ type: 'datetime' })
   requestedAt: Date;

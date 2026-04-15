@@ -43,6 +43,7 @@ async function seed() {
         creationTime: new Date(),
         targetVenue: 'CS319 Symposium',
         status: PaperStatus.HumanReview,
+        coordinator: user1,
     });
     await paperRepo.save(p1);
 
@@ -56,8 +57,10 @@ async function seed() {
     });
     await paperRepo.save(p2);
 
-    // Save relation properly from the owning side (LabMember)
-    user1.writtenPapers = [p1];
+    // The coordinator is also an author on every paper in BILSEN.
+    // user1 (coordinator) is linked as author of both papers.
+    // user2 is linked as author of p2 as well.
+    user1.writtenPapers = [p1, p2];
     await memberRepo.save(user1);
 
     user2.writtenPapers = [p2];
