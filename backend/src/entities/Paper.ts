@@ -40,9 +40,6 @@ export class Paper {
   status: PaperStatus;
 
   @Column({ nullable: true })
-  manuscriptUrl: string;
-
-  @Column({ nullable: true })
   overleafLink: string;
 
   @ManyToMany('User', 'writtenPapers')
