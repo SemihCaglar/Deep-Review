@@ -10,6 +10,7 @@ import type { ReviewerResponse } from './ReviewerResponse';
 export enum AssignmentStatus {
   Invited = 'Invited',
   Accepted = 'Accepted',
+  PendingExtension = 'PendingExtension',
   PendingDecline = 'PendingDecline',
   Declined = 'Declined',
   Overdue = 'Overdue',

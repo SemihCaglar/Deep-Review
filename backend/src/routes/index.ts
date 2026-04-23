@@ -3,6 +3,7 @@ import { AccountController } from '../controllers/AccountController';
 import { AdminController } from '../controllers/AdminController';
 import { AIReviewController } from '../controllers/AIReviewController';
 import { AssignmentController } from '../controllers/AssignmentController';
+import { CoordinatorController } from '../controllers/CoordinatorController';
 import { PaperController } from '../controllers/PaperController';
 import { RatingAnalyticsController } from '../controllers/RatingAnalyticsController';
 import { ReviewerResponseController } from '../controllers/ReviewerResponseController';
@@ -49,6 +50,8 @@ router.post('/assignments/invite', AssignmentController.sendInvitations);
 router.post('/assignments/remind', AssignmentController.sendReminders);
 router.delete('/assignments/:id', AssignmentController.cancelAssignment);
 router.put('/assignments/:id/deadline', AssignmentController.updateAssignmentDeadline);
+router.patch('/assignments/:id/process-decline', CoordinatorController.processDeclineRequest);
+router.patch('/assignments/:id/process-extension', CoordinatorController.processExtensionRequest);
 
 // ==== PAPER ROUTES ====
 router.post('/papers', PaperController.registerPaper);
@@ -73,6 +76,9 @@ router.get('/ratings/user/:id', RatingAnalyticsController.getUserAnalytics);
 // ==== REVIEWER RESPONSE ROUTES ====
 router.patch('/responses/:id/accept', ReviewerResponseController.acceptInvitation);
 router.post('/responses/:id/decline-request', ReviewerResponseController.requestDeclineForAssignment);
+router.post('/responses/:id/extension-request', ReviewerResponseController.requestExtensionForAssignment);
+router.post('/responses/:id/process-decline', ReviewerResponseController.processDeclineRequest);
+router.post('/responses/:id/process-extension', ReviewerResponseController.processExtensionRequest);
 router.post('/responses/invitation', ReviewerResponseController.respondToInvitation);
 router.post('/responses/decline', ReviewerResponseController.requestDecline);
 router.post('/responses/extension', ReviewerResponseController.requestDeadlineExtension);
