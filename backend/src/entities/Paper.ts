@@ -3,6 +3,7 @@ import type { Coordinator } from './Coordinator';
 import type { Topic } from './Topic';
 import type { Round } from './Round';
 import type { User } from './User';
+import type { Lab } from './Lab';
 
 export enum PaperStatus {
   Draft = 'Draft',
@@ -60,4 +61,7 @@ export class Paper {
 
   @OneToMany('Round', 'paper')
   rounds: Round[];
+
+  @ManyToMany('Lab', 'papers')
+  labs: Lab[];
 }

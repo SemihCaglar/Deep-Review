@@ -14,6 +14,7 @@ import type { BlackoutPeriod } from './BlackoutPeriod';
 import type { EmailNotification } from './EmailNotification';
 import type { Paper } from './Paper';
 import type { Topic } from './Topic';
+import type { Lab } from './Lab';
 
 export enum UserRole {
   LabMember = 'LabMember',
@@ -95,4 +96,7 @@ export abstract class User {
 
   @OneToMany('EmailNotification', 'recipient')
   notifications: EmailNotification[];
+
+  @ManyToMany('Lab', 'members')
+  labs: Lab[];
 }
