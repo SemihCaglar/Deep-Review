@@ -13,6 +13,7 @@ import {
   registerSuccessfulLogin,
   verifyPassword,
 } from '../services/accountSecurity';
+import { generateAuthToken } from '../services/tokenService';
 
 export class AccountController {
   static async signUp(req: Request, res: Response) {
@@ -111,6 +112,7 @@ export class AccountController {
 
     return res.status(200).json({
       message: 'Login successful',
+      token: generateAuthToken(savedUser),
       user: AccountController.serializeAccount(savedUser),
     });
   }

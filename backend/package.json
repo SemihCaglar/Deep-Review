@@ -18,8 +18,10 @@
   "dependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
     "reflect-metadata": "^0.2.2",
     "sqlite3": "^5.1.7",
     "ts-node": "^10.9.2",

@@ -8,6 +8,7 @@ import { RatingAnalyticsController } from '../controllers/RatingAnalyticsControl
 import { ReviewerResponseController } from '../controllers/ReviewerResponseController';
 import { RoundController } from '../controllers/RoundController';
 import { SearchController } from '../controllers/SearchController';
+import { authenticateRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -18,9 +19,9 @@ router.post('/account/logout', AccountController.logout);
 router.post('/account/change-password', AccountController.changePassword);
 router.post('/account/reset-password/request', AccountController.sendPasswordReset);
 router.post('/account/reset-password', AccountController.resetPassword);
-router.put('/account/profile', AccountController.updateProfile);
-router.put('/account/interests', AccountController.setInterests);
-router.put('/account/blackout-periods', AccountController.setBlackoutPeriods);
+router.put('/account/profile', authenticateRequest, AccountController.updateProfile);
+router.put('/account/interests', authenticateRequest, AccountController.setInterests);
+router.put('/account/blackout-periods', authenticateRequest, AccountController.setBlackoutPeriods);
 router.post('/account/approve/:id', AccountController.approveSignUp);
 router.post('/account/reject/:id', AccountController.rejectSignUp);
 
