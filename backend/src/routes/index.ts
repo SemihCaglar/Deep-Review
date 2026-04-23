@@ -71,6 +71,8 @@ router.get('/ratings/overall', RatingAnalyticsController.getOverallAnalytics);
 router.get('/ratings/user/:id', RatingAnalyticsController.getUserAnalytics);
 
 // ==== REVIEWER RESPONSE ROUTES ====
+router.patch('/responses/:id/accept', ReviewerResponseController.acceptInvitation);
+router.post('/responses/:id/decline-request', ReviewerResponseController.requestDeclineForAssignment);
 router.post('/responses/invitation', ReviewerResponseController.respondToInvitation);
 router.post('/responses/decline', ReviewerResponseController.requestDecline);
 router.post('/responses/extension', ReviewerResponseController.requestDeadlineExtension);
