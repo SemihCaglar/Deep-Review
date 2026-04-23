@@ -4,7 +4,11 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Unique,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import type { Lab } from './Lab';
 
 /**
  * Enum of all valid template names in the system.
@@ -28,6 +32,7 @@ export enum TemplateName {
 }
 
 @Entity()
+@Unique(['name', 'lab'])
 export class Template {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -38,7 +43,6 @@ export class Template {
   @Column({
     type: 'simple-enum',
     enum: TemplateName,
-    unique: true,
   })
   name: TemplateName;
 
@@ -61,4 +65,8 @@ export class Template {
 
   @UpdateDateColumn({ type: 'datetime' })
   updatedAt: Date;
+
+  @ManyToOne('Lab', { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn()
+  lab: Lab | null;
 }

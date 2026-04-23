@@ -3,7 +3,11 @@ import {
   PrimaryGeneratedColumn,
   Column,
   UpdateDateColumn,
+  Unique,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import type { Lab } from './Lab';
 
 /**
  * Enum of all configurable system policy keys.
@@ -30,6 +34,7 @@ export enum PolicyKey {
 }
 
 @Entity()
+@Unique(['key', 'lab'])
 export class SystemPolicy {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -40,7 +45,6 @@ export class SystemPolicy {
   @Column({
     type: 'simple-enum',
     enum: PolicyKey,
-    unique: true,
   })
   key: PolicyKey;
 
@@ -63,4 +67,8 @@ export class SystemPolicy {
 
   @UpdateDateColumn({ type: 'datetime' })
   updatedAt: Date;
+
+  @ManyToOne('Lab', { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn()
+  lab: Lab | null;
 }
