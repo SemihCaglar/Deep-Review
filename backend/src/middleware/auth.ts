@@ -3,10 +3,7 @@ import { AppDataSource } from '../data-source';
 import { ApprovalStatus, User } from '../entities/User';
 import { isAccountLocked } from '../services/accountSecurity';
 import { verifyAuthToken } from '../services/tokenService';
-
-type AuthenticatedRequest = Request & {
-  user?: User;
-};
+import type { AuthenticatedRequest } from '../types/auth';
 
 export async function authenticateRequest(
   req: AuthenticatedRequest,

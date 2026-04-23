@@ -8,6 +8,7 @@ import { RatingAnalyticsController } from '../controllers/RatingAnalyticsControl
 import { ReviewerResponseController } from '../controllers/ReviewerResponseController';
 import { RoundController } from '../controllers/RoundController';
 import { SearchController } from '../controllers/SearchController';
+import { TopicController } from '../controllers/TopicController';
 import { authenticateRequest } from '../middleware/auth';
 
 const router = Router();
@@ -96,6 +97,7 @@ router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistIt
 router.put('/rounds/:id/checklist/:itemId', RoundController.updateChecklistItem);
 
 // ==== SEARCH ROUTES ====
+router.get('/topics', TopicController.getAllTopics);
 router.get('/search/papers/title', SearchController.searchPapersByTitle);
 router.get('/search/papers/status', SearchController.searchPapersByStatus);
 router.get('/search/papers/venue', SearchController.searchPapersByVenue);
