@@ -21,6 +21,16 @@ export type ChangePasswordResponse = {
   message: string;
 };
 
+export type TopicOption = {
+  id: string;
+  name: string;
+};
+
+export type AccountUserResponse = {
+  message: string;
+  user: StoredAuthUser;
+};
+
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
 };
@@ -72,6 +82,34 @@ export function changePasswordRequest(
       confirmNewPassword,
     },
   });
+}
+
+export function getTopicsRequest() {
+  return apiRequest<TopicOption[]>('/topics');
+}
+
+export function updateInterestsRequest(topicIds: string[], otherInterests: string[] = []) {
+  return apiRequest<AccountUserResponse>('/account/interests', {
+    method: 'PUT',
+    body: {
+      topicIds,
+      otherInterests,
+    },
+  });
+}
+
+export function updateProfileRequest(name: string, email: string) {
+  return apiRequest<AccountUserResponse>('/account/profile', {
+    method: 'PUT',
+    body: {
+      name,
+      email,
+    },
+  });
+}
+
+export function getCurrentProfileRequest() {
+  return apiRequest<{ user: StoredAuthUser }>('/account/profile');
 }
 
 function buildUrl(path: string) {

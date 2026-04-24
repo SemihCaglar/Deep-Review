@@ -17,6 +17,7 @@ export type StoredAuthUser = {
   createdAt: string;
   updatedAt: string;
   interests?: StoredTopic[];
+  otherInterests?: string[];
 };
 
 function canUseStorage() {

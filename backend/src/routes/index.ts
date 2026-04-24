@@ -20,6 +20,7 @@ router.post('/account/logout', AccountController.logout);
 router.post('/account/change-password', authenticateRequest, AccountController.changePassword);
 router.post('/account/reset-password/request', AccountController.sendPasswordReset);
 router.post('/account/reset-password', AccountController.resetPassword);
+router.get('/account/profile', authenticateRequest, AccountController.getProfile);
 router.put('/account/profile', authenticateRequest, AccountController.updateProfile);
 router.put('/account/interests', authenticateRequest, AccountController.setInterests);
 router.put('/account/blackout-periods', authenticateRequest, AccountController.setBlackoutPeriods);

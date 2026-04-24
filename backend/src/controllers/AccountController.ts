@@ -56,6 +56,7 @@ export class AccountController {
       failedLoginWindowStartedAt: null,
       lockedUntil: null,
       lastLoginAt: null,
+      otherInterests: [],
     });
 
     let savedMember: LabMember;
@@ -226,6 +227,27 @@ export class AccountController {
 
     return res.status(200).json({ message: 'Password reset successful' });
   }
+  static async getProfile(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const user = await userRepo.findOne({
+      where: { id: authenticatedUser.id },
+      relations: { interests: true },
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    return res.status(200).json({
+      user: AccountController.serializeAccount(user, { includeInterests: true }),
+    });
+  }
   static async updateProfile(req: AuthenticatedRequest, res: Response) {
     const { name, email } = req.body ?? {};
     const authenticatedUser = req.user;
@@ -277,7 +299,7 @@ export class AccountController {
     }
   }
   static async setInterests(req: AuthenticatedRequest, res: Response) {
-    const { topicIds } = req.body ?? {};
+    const { topicIds, otherInterests } = req.body ?? {};
     const authenticatedUser = req.user;
 
     if (!authenticatedUser) {
@@ -288,7 +310,29 @@ export class AccountController {
       return res.status(400).json({ message: 'topicIds must be an array of strings' });
     }
 
+    if (
+      otherInterests !== undefined &&
+      !Array.isArray(otherInterests)
+    ) {
+      return res.status(400).json({ message: 'otherInterests must be an array of strings' });
+    }
+
     const normalizedTopicIds = [...new Set(topicIds.map(topicId => topicId.trim()))];
+    const normalizedOtherInterests = Array.isArray(otherInterests)
+      ? [...new Set(
+          otherInterests.map(otherInterest =>
+            typeof otherInterest === 'string' ? otherInterest.trim() : '',
+          ),
+        )].filter(Boolean)
+      : [];
+
+    if (
+      Array.isArray(otherInterests) &&
+      otherInterests.some(otherInterest => typeof otherInterest !== 'string' || !otherInterest.trim())
+    ) {
+      return res.status(400).json({ message: 'otherInterests must be an array of strings' });
+    }
+
     const userRepo = AppDataSource.getRepository<User>('User');
     const topicRepo = AppDataSource.getRepository(Topic);
     const user = await userRepo.findOne({
@@ -310,13 +354,20 @@ export class AccountController {
       return res.status(400).json({ message: 'One or more topicIds are invalid' });
     }
 
+    const hasOtherTopic = topics.some(topic => topic.name === 'Other');
+
+    if (hasOtherTopic && normalizedOtherInterests.length === 0) {
+      return res.status(400).json({ message: 'otherInterests is required when Other is selected' });
+    }
+
     user.interests = topics;
+    user.otherInterests = hasOtherTopic ? normalizedOtherInterests : [];
 
     const savedUser = await userRepo.save(user);
 
     return res.status(200).json({
       message: 'Interests updated successfully',
-      user: AccountController.serializeAccount(savedUser),
+      user: AccountController.serializeAccount(savedUser, { includeInterests: true }),
     });
   }
   static async setBlackoutPeriods(req: Request, res: Response) {
@@ -403,8 +454,8 @@ export class AccountController {
     return trimmedId ? trimmedId : null;
   }
 
-  private static serializeAccount(member: User) {
-    return {
+  private static serializeAccount(member: User, options: { includeInterests?: boolean } = {}) {
+    const account = {
       id: member.id,
       name: member.name,
       email: member.email,
@@ -414,7 +465,20 @@ export class AccountController {
       approvalNote: member.approvalNote,
       createdAt: member.createdAt,
       updatedAt: member.updatedAt,
+      otherInterests: member.otherInterests ?? [],
     };
+
+    if (options.includeInterests) {
+      return {
+        ...account,
+        interests: (member.interests ?? []).map(topic => ({
+          id: topic.id,
+          name: topic.name,
+        })),
+      };
+    }
+
+    return account;
   }
 
   private static authenticationFailed(res: Response) {

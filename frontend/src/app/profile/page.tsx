@@ -4,20 +4,36 @@ import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, KeyRound, PencilLine, Tags, UserCircle2 } from 'lucide-react';
-import { getStoredUser } from '@/lib/auth';
+import { ApiError, getCurrentProfileRequest } from '@/lib/api';
+import { getStoredUser, setStoredUser } from '@/lib/auth';
 import { MOCK_PAPERS } from '@/lib/mockData';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const [storedUser, setStoredUser] = React.useState(getStoredUser());
+  const [storedUser, setLocalStoredUser] = React.useState(getStoredUser());
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
 
   React.useEffect(() => {
-    const user = getStoredUser();
-    setStoredUser(user);
+    const cachedUser = getStoredUser();
 
-    if (!user) {
+    if (!cachedUser) {
       router.replace('/login');
+      return;
     }
+
+    setLocalStoredUser(cachedUser);
+
+    getCurrentProfileRequest()
+      .then(response => {
+        setStoredUser(response.user);
+        setLocalStoredUser(response.user);
+        setIsLoading(false);
+      })
+      .catch(caughtError => {
+        setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load profile.');
+        setIsLoading(false);
+      });
   }, [router]);
 
   if (!storedUser) {
@@ -25,6 +41,18 @@ export default function ProfilePage() {
   }
 
   const authoredPapers = MOCK_PAPERS.filter(paper => paper.authors.includes(storedUser.id));
+  const normalInterestPills =
+    storedUser.interests
+      ?.filter(topic => topic.name !== 'Other')
+      .map(topic => ({ id: topic.id, label: topic.name })) ?? [];
+  const otherInterestPills =
+    storedUser.interests?.some(topic => topic.name === 'Other')
+      ? (storedUser.otherInterests ?? []).map((interest, index) => ({
+          id: `other-${index}`,
+          label: interest,
+        }))
+      : [];
+  const interestPills = [...normalInterestPills, ...otherInterestPills];
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -76,24 +104,38 @@ export default function ProfilePage() {
         </section>
 
         <section className="glass rounded-2xl border border-white/5 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Tags className="w-5 h-5 text-blue-300" />
-            <h2 className="text-lg font-semibold text-white">Topic Interests</h2>
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              <Tags className="w-5 h-5 text-blue-300" />
+              <h2 className="text-lg font-semibold text-white">Interests</h2>
+            </div>
+            <Link
+              href="/profile/interests"
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors whitespace-nowrap"
+            >
+              Add / Remove Interests
+            </Link>
           </div>
 
-          {storedUser.interests?.length ? (
+          {isLoading ? (
+            <p className="text-sm text-slate-400">Loading profile...</p>
+          ) : error ? (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {error}
+            </div>
+          ) : interestPills.length ? (
             <div className="flex flex-wrap gap-2">
-              {storedUser.interests.map(topic => (
+              {interestPills.map(topic => (
                 <span
                   key={topic.id}
                   className="px-3 py-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 text-sm text-blue-200"
                 >
-                  {topic.name}
+                  {topic.label}
                 </span>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-slate-400">No topic interests selected yet.</p>
+            <p className="text-sm text-slate-400">You have not selected any topic interests yet.</p>
           )}
         </section>
       </div>
