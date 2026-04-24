@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { Home, FileText, CheckCircle, Settings, LogOut, PlusSquare } from 'lucide-react';
+import { Home, FileText, CheckCircle, UserCircle2, LogOut, PlusSquare } from 'lucide-react';
 
 export default function Sidebar() {
     const { user, logout } = useUser();
@@ -19,6 +19,7 @@ export default function Sidebar() {
     const getNavItems = () => {
         const base = [
             { name: 'My Dashboard', href: '/dashboard', icon: Home },
+            { name: 'My Profile', href: '/profile', icon: UserCircle2 },
             { name: 'My Authored Papers', href: '/papers?filter=authored', icon: FileText }
         ];
 
@@ -55,7 +56,10 @@ export default function Sidebar() {
 
             <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
                 {navItems.map((item) => {
-                    const isActive = pathname === item.href || (pathname.startsWith('/papers') && item.href.startsWith('/papers'));
+                    const isActive =
+                        pathname === item.href ||
+                        (pathname.startsWith('/papers') && item.href.startsWith('/papers')) ||
+                        (pathname.startsWith('/profile') && item.href === '/profile');
                     const Icon = item.icon;
                     return (
                         <Link

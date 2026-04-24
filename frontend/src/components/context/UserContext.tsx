@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState } from 'react';
 import { User, MOCK_USERS } from '@/lib/mockData';
+import { clearToken, type StoredAuthUser } from '@/lib/auth';
 
 interface UserContextType {
     user: User;
@@ -11,6 +12,9 @@ interface UserContextType {
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
+const EMPTY_USER: User = { id: '', name: '', isCoordinator: false, email: '' };
+const AUTH_USER_KEY = 'bilsen_auth_user';
+const LEGACY_USER_KEY = 'bilsen_user';
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
     // Default to coordinator for easy access (server render)
@@ -20,14 +24,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     // Sync from localStorage after hydration
     React.useEffect(() => {
         setMounted(true);
-        const savedUser = localStorage.getItem('bilsen_user');
-        if (savedUser) {
-            try {
-                setUser(JSON.parse(savedUser) as User);
-            } catch (e) {
-                console.error('Failed to parse user from localStorage', e);
-            }
+        const authUser = readAuthUserFromStorage();
+
+        if (authUser) {
+            setUser(authUser);
+            return;
         }
+
+        const legacyUser = readLegacyUserFromStorage();
+        setUser(legacyUser ?? EMPTY_USER);
     }, []);
 
     // Handle saving user to state and localStorage
@@ -44,7 +49,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     };
 
     const logout = () => {
-        handleSetUser({ id: '', name: '', isCoordinator: false, email: '' });
+        clearToken();
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem(AUTH_USER_KEY);
+            localStorage.removeItem(LEGACY_USER_KEY);
+        }
+        handleSetUser(EMPTY_USER);
     };
 
     // Prevent rendering children until mounted to avoid hydration flash entirely
@@ -57,6 +67,50 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             {children}
         </UserContext.Provider>
     );
+}
+
+function readAuthUserFromStorage(): User | null {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    const rawAuthUser = localStorage.getItem(AUTH_USER_KEY);
+    if (!rawAuthUser) {
+        return null;
+    }
+
+    try {
+        const parsedUser = JSON.parse(rawAuthUser) as StoredAuthUser;
+        return {
+            id: parsedUser.id,
+            name: parsedUser.name,
+            email: parsedUser.email,
+            isCoordinator: parsedUser.role === 'Coordinator' || parsedUser.role === 'Admin',
+        };
+    } catch (e) {
+        console.error('Failed to parse auth user from localStorage', e);
+        localStorage.removeItem(AUTH_USER_KEY);
+        return null;
+    }
+}
+
+function readLegacyUserFromStorage(): User | null {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    const rawLegacyUser = localStorage.getItem(LEGACY_USER_KEY);
+    if (!rawLegacyUser) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(rawLegacyUser) as User;
+    } catch (e) {
+        console.error('Failed to parse legacy user from localStorage', e);
+        localStorage.removeItem(LEGACY_USER_KEY);
+        return null;
+    }
 }
 
 export function useUser() {

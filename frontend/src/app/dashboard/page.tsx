@@ -13,7 +13,7 @@ export default function Dashboard() {
         // Fetch real data from our DB using relative proxy
         fetch('/api/papers/all')
             .then(res => res.json())
-            .then(data => setPapers(data || []))
+            .then(data => setPZapers(data || []))
             .catch(console.error);
         
         fetch(`/api/search/reviews/reviewer/all`)
