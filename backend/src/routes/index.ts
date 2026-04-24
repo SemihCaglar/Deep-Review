@@ -17,7 +17,7 @@ const router = Router();
 router.post('/account/signup', AccountController.signUp);
 router.post('/account/login', AccountController.login);
 router.post('/account/logout', AccountController.logout);
-router.post('/account/change-password', AccountController.changePassword);
+router.post('/account/change-password', authenticateRequest, AccountController.changePassword);
 router.post('/account/reset-password/request', AccountController.sendPasswordReset);
 router.post('/account/reset-password', AccountController.resetPassword);
 router.put('/account/profile', authenticateRequest, AccountController.updateProfile);

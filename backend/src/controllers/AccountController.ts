@@ -7,6 +7,7 @@ import { Topic } from '../entities/Topic';
 import { ApprovalStatus, User } from '../entities/User';
 import {
   accountSecurityPolicy,
+  clearLoginLockout,
   createPasswordResetToken,
   hashPasswordResetToken,
   hashPassword,
@@ -122,8 +123,56 @@ export class AccountController {
   static async logout(req: Request, res: Response) {
     return res.status(200).json({ message: 'Logout successful' });
   }
-  static async changePassword(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async changePassword(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+    const { currentPassword, newPassword, confirmNewPassword } = req.body ?? {};
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (
+      typeof currentPassword !== 'string' ||
+      typeof newPassword !== 'string' ||
+      typeof confirmNewPassword !== 'string' ||
+      !currentPassword ||
+      !newPassword ||
+      !confirmNewPassword
+    ) {
+      return res
+        .status(400)
+        .json({ message: 'currentPassword, newPassword, and confirmNewPassword are required' });
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      return res.status(400).json({ message: 'New passwords do not match' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const user = await userRepo.findOne({ where: { id: authenticatedUser.id } });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const currentPasswordMatches = await verifyPassword(currentPassword, user.passwordHash);
+
+    if (!currentPasswordMatches) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+
+    const newPasswordMatchesCurrent = await verifyPassword(newPassword, user.passwordHash);
+
+    if (newPasswordMatchesCurrent) {
+      return res.status(400).json({ message: 'New password must be different from current password' });
+    }
+
+    user.passwordHash = await hashPassword(newPassword);
+    clearLoginLockout(user);
+
+    await userRepo.save(user);
+
+    return res.status(200).json({ message: 'Password changed successfully' });
   }
   static async sendPasswordReset(req: Request, res: Response) {
     const { email } = req.body ?? {};
