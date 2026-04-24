@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
+import { In } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { LabMember } from '../entities/LabMember';
 import { PasswordResetToken } from '../entities/PasswordResetToken';
+import { Topic } from '../entities/Topic';
 import { ApprovalStatus, User } from '../entities/User';
 import {
   accountSecurityPolicy,
@@ -13,6 +15,8 @@ import {
   registerSuccessfulLogin,
   verifyPassword,
 } from '../services/accountSecurity';
+import { generateAuthToken } from '../services/tokenService';
+import type { AuthenticatedRequest } from '../types/auth';
 
 export class AccountController {
   static async signUp(req: Request, res: Response) {
@@ -111,6 +115,7 @@ export class AccountController {
 
     return res.status(200).json({
       message: 'Login successful',
+      token: generateAuthToken(savedUser),
       user: AccountController.serializeAccount(savedUser),
     });
   }
@@ -172,11 +177,98 @@ export class AccountController {
 
     return res.status(200).json({ message: 'Password reset successful' });
   }
-  static async updateProfile(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async updateProfile(req: AuthenticatedRequest, res: Response) {
+    const { name, email } = req.body ?? {};
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ message: 'name is required' });
+    }
+
+    if (typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ message: 'email is required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await userRepo.findOne({ where: { id: authenticatedUser.id } });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (normalizedEmail !== user.email) {
+      const existingUser = await userRepo.findOne({ where: { email: normalizedEmail } });
+
+      if (existingUser && existingUser.id !== user.id) {
+        return res.status(409).json({ message: 'Email is already in use' });
+      }
+    }
+
+    user.name = name.trim();
+    user.email = normalizedEmail;
+
+    try {
+      const savedUser = await userRepo.save(user);
+
+      return res.status(200).json({
+        message: 'Profile updated successfully',
+        user: AccountController.serializeAccount(savedUser),
+      });
+    } catch (error) {
+      if (AccountController.isUniqueConstraintError(error)) {
+        return res.status(409).json({ message: 'Email is already in use' });
+      }
+
+      throw error;
+    }
   }
-  static async setInterests(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async setInterests(req: AuthenticatedRequest, res: Response) {
+    const { topicIds } = req.body ?? {};
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!Array.isArray(topicIds) || !topicIds.every(topicId => typeof topicId === 'string' && topicId.trim())) {
+      return res.status(400).json({ message: 'topicIds must be an array of strings' });
+    }
+
+    const normalizedTopicIds = [...new Set(topicIds.map(topicId => topicId.trim()))];
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const topicRepo = AppDataSource.getRepository(Topic);
+    const user = await userRepo.findOne({
+      where: { id: authenticatedUser.id },
+      relations: { interests: true },
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const topics = normalizedTopicIds.length
+      ? await topicRepo.find({
+          where: { id: In(normalizedTopicIds) },
+        })
+      : [];
+
+    if (topics.length !== normalizedTopicIds.length) {
+      return res.status(400).json({ message: 'One or more topicIds are invalid' });
+    }
+
+    user.interests = topics;
+
+    const savedUser = await userRepo.save(user);
+
+    return res.status(200).json({
+      message: 'Interests updated successfully',
+      user: AccountController.serializeAccount(savedUser),
+    });
   }
   static async setBlackoutPeriods(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
