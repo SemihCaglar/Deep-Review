@@ -17,6 +17,10 @@ export type LoginResponse = {
   user: StoredAuthUser;
 };
 
+export type ChangePasswordResponse = {
+  message: string;
+};
+
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
 };
@@ -52,6 +56,21 @@ export function loginRequest(email: string, password: string) {
   return apiRequest<LoginResponse>('/account/login', {
     method: 'POST',
     body: { email, password },
+  });
+}
+
+export function changePasswordRequest(
+  currentPassword: string,
+  newPassword: string,
+  confirmNewPassword: string,
+) {
+  return apiRequest<ChangePasswordResponse>('/account/change-password', {
+    method: 'POST',
+    body: {
+      currentPassword,
+      newPassword,
+      confirmNewPassword,
+    },
   });
 }
 
