@@ -68,7 +68,7 @@ router.get('/papers/all', PaperController.getAllPapers);
 router.put('/papers/:id/status', PaperController.updatePaperStatus);
 
 // ==== RATING ANALYTICS ROUTES ====
-router.post('/ratings', RatingAnalyticsController.rateReviewer);
+router.post('/ratings', authenticateRequest, RatingAnalyticsController.rateReviewer);
 router.get('/ratings/overall', RatingAnalyticsController.getOverallAnalytics);
 router.get('/ratings/user/:id', RatingAnalyticsController.getUserAnalytics);
 
