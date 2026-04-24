@@ -3,11 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, MailQuestion } from 'lucide-react';
-import { apiRequest, ApiError } from '@/lib/api';
-
-type PasswordResetRequestResponse = {
-  message: string;
-};
+import { ApiError, forgotPasswordRequest } from '@/lib/api';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = React.useState('');
@@ -22,11 +18,8 @@ export default function ForgotPasswordPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await apiRequest<PasswordResetRequestResponse>('/account/reset-password/request', {
-        method: 'POST',
-        body: { email },
-      });
-      setMessage(response.message);
+      const response = await forgotPasswordRequest(email);
+      setMessage(response.message || 'If an account exists for that email, a reset link has been sent.');
     } catch (caughtError) {
       setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to send reset request.');
     } finally {

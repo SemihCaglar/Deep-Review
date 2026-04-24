@@ -21,6 +21,14 @@ export type ChangePasswordResponse = {
   message: string;
 };
 
+export type ForgotPasswordResponse = {
+  message: string;
+};
+
+export type ResetPasswordResponse = {
+  message: string;
+};
+
 export type TopicOption = {
   id: string;
   name: string;
@@ -80,6 +88,25 @@ export function changePasswordRequest(
       currentPassword,
       newPassword,
       confirmNewPassword,
+    },
+  });
+}
+
+export function forgotPasswordRequest(email: string) {
+  return apiRequest<ForgotPasswordResponse>('/account/reset-password/request', {
+    method: 'POST',
+    body: {
+      email,
+    },
+  });
+}
+
+export function resetPasswordRequest(token: string, newPassword: string) {
+  return apiRequest<ResetPasswordResponse>('/account/reset-password', {
+    method: 'POST',
+    body: {
+      token,
+      newPassword,
     },
   });
 }

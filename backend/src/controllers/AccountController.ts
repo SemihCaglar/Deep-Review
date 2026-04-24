@@ -177,6 +177,7 @@ export class AccountController {
   }
   static async sendPasswordReset(req: Request, res: Response) {
     const { email } = req.body ?? {};
+    let rawResetToken: string | null = null;
 
     if (typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({ message: 'email is required' });
@@ -189,6 +190,7 @@ export class AccountController {
 
     if (user) {
       const resetToken = createPasswordResetToken();
+      rawResetToken = resetToken;
       const token = tokenRepo.create({
         tokenHash: hashPasswordResetToken(resetToken),
         expiresAt: new Date(Date.now() + accountSecurityPolicy.passwordResetTokenTtlMs),
@@ -199,7 +201,7 @@ export class AccountController {
       await tokenRepo.save(token);
     }
 
-    return AccountController.passwordResetRequestAccepted(res);
+    return AccountController.passwordResetRequestAccepted(res, rawResetToken);
   }
   static async resetPassword(req: Request, res: Response) {
     const { token, newPassword } = req.body ?? {};
@@ -485,10 +487,17 @@ export class AccountController {
     return res.status(401).json({ message: 'Invalid email or password' });
   }
 
-  private static passwordResetRequestAccepted(res: Response) {
-    return res.status(200).json({
+  private static passwordResetRequestAccepted(res: Response, resetToken: string | null = null) {
+    const responseBody: { message: string; resetToken?: string } = {
       message: 'If an account exists for that email, a password reset link will be sent',
-    });
+    };
+
+    if (process.env.NODE_ENV !== 'production' && resetToken) {
+      console.log(`[password-reset] Development reset token: ${resetToken}`);
+      responseBody.resetToken = resetToken;
+    }
+
+    return res.status(200).json(responseBody);
   }
 
   private static isUniqueConstraintError(error: unknown): boolean {

@@ -147,3 +147,14 @@ Known limitation assumption
 The dashboard currently contains unrelated pre-existing frontend issues outside this account/profile flow.
 These are treated as separate cleanup work and not as blockers for the account/profile implementation itself.
 
+The forgot/reset password frontend flow was tested in development mode without a real email delivery provider.
+
+For development/testing only:
+- the backend exposes the raw password reset token in non-production mode
+- this token is used manually by opening:
+  `/reset-password?token=...`
+
+This behavior is only for local/dev verification.
+Production behavior is still assumed to remain safe and generic:
+- no raw reset token is exposed
+- reset links should normally be delivered through the system’s email service

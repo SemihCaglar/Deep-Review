@@ -437,3 +437,47 @@ Result:
 ### Remaining known non-blocking items
 - full forgot/reset password frontend completion may still be handled separately
 - unrelated pre-existing dashboard TypeScript errors remain outside this account/profile flow scope
+
+### 11.1 Forgot password request
+Test flow:
+1. open `/forgot-password`
+2. enter approved user email
+3. submit request
+
+Expected result:
+- loading state appears
+- generic success message is shown
+- in development mode, backend also exposes a raw `resetToken` for manual testing
+
+Observed result:
+- passed
+
+### 11.2 Reset password page with token
+Test flow:
+1. obtain raw reset token from development response
+2. open:
+   `/reset-password?token=<raw-token>`
+3. enter new password
+4. confirm new password
+5. submit
+
+Expected result:
+- frontend validates password confirmation
+- backend accepts valid token
+- success message is shown
+- user is redirected back to `/login`
+
+Observed result:
+- passed
+
+### 11.3 Login with reset password
+Test flow:
+1. complete reset-password flow
+2. open `/login`
+3. log in with the new password
+
+Expected result:
+- login succeeds with the new password
+
+Observed result:
+- passed
