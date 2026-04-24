@@ -481,3 +481,189 @@ Expected result:
 
 Observed result:
 - passed
+
+## Signup / Coordinator Approval / Lab Members Manual Tests
+
+### 1. Bootstrap coordinator login
+Test flow:
+1. seed the backend
+2. start backend and frontend
+3. clear browser local storage
+4. log in with the seeded coordinator account
+
+Test credentials:
+- email: `eraytuzun@cs.bilkent.edu.tr`
+- password: `123`
+
+Expected result:
+- login succeeds
+- coordinator reaches the dashboard
+- coordinator-only navigation items are visible
+- `Pending Approvals` is visible in the sidebar
+- `Lab Members` is visible in the sidebar
+
+Observed result:
+- passed
+
+### 2. Signup page access
+Test flow:
+1. open `/login`
+2. click `Don't have an account? Sign up`
+3. verify navigation to `/signup`
+
+Expected result:
+- signup page opens correctly
+- page includes:
+  - full name
+  - email
+  - password
+  - confirm password
+
+Observed result:
+- passed
+
+### 3. New user signup request
+Test flow:
+1. open `/signup`
+2. submit a new account request with valid data
+
+Example data:
+- name: `Signup Test User`
+- email: `signuptest@example.com`
+- password: `secret123`
+- confirm password: `secret123`
+
+Expected result:
+- signup request is accepted
+- frontend shows a message that the account is pending coordinator approval
+
+Observed result:
+- passed
+
+### 4. Pending user cannot log in
+Test flow:
+1. after signup, open `/login`
+2. try logging in with the newly created pending user
+
+Expected result:
+- login is rejected
+- pending users cannot enter the system before approval
+
+Observed result:
+- passed
+
+### 5. Pending approval appears for coordinator
+Test flow:
+1. log back in as the coordinator
+2. open `/pending-approvals`
+
+Expected result:
+- the newly submitted signup request appears in the pending approvals list
+- visible fields include:
+  - name
+  - email
+  - submitted date
+  - approve button
+  - reject button
+
+Observed result:
+- passed
+
+### 6. Coordinator approval flow
+Test flow:
+1. on `/pending-approvals`, click `Approve` for the pending user
+2. verify the request disappears from the pending list
+
+Expected result:
+- approval succeeds
+- user is removed from the pending section
+- user appears in `Approval History` with:
+  - Approved status
+  - reviewed date
+  - note if provided
+
+Observed result:
+- passed
+
+### 7. Approved user can log in
+Test flow:
+1. log out as coordinator
+2. open `/login`
+3. log in using the approved user account
+
+Expected result:
+- login succeeds
+- approved user can access the system normally
+
+Observed result:
+- passed
+
+### 8. Rejection flow
+Test flow:
+1. create another new signup request
+2. log in as coordinator
+3. open `/pending-approvals`
+4. click `Reject` for that user
+
+Expected result:
+- rejection succeeds
+- user is removed from the pending list
+- user appears in `Approval History` with `Rejected` status
+
+Observed result:
+- passed
+
+### 9. Rejected user cannot log in
+Test flow:
+1. log out as coordinator
+2. try to log in using the rejected user account
+
+Expected result:
+- login is rejected
+- rejected users cannot enter the system
+
+Observed result:
+- passed
+
+### 10. Approval history behavior
+Test flow:
+1. open `/pending-approvals`
+2. scroll down to `Approval History`
+
+Expected result:
+- previously reviewed signup requests are listed
+- newest reviewed decisions appear first
+- bootstrap coordinator does not appear in approval history
+- only real signup-review decisions appear there
+
+Observed result:
+- passed
+
+### 11. Lab members behavior
+Test flow:
+1. open `/lab-members`
+2. inspect the members list after approvals
+
+Expected result:
+- approved users appear in the list
+- bootstrap coordinator appears in the list
+- pending users do not appear
+- rejected users do not appear
+- members are shown vertically, one per row
+
+Observed result:
+- passed
+
+### 12. Coordinator-only visibility
+Test flow:
+1. log in as coordinator
+2. verify `Pending Approvals` sidebar item is visible
+3. log in as a normal approved user
+4. verify `Pending Approvals` is not visible
+
+Expected result:
+- only coordinator/admin users see and access pending approvals
+- normal users do not see coordinator-only approval tools
+
+Observed result:
+- passed

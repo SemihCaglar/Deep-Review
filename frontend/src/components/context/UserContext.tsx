@@ -1,13 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useState } from 'react';
-import { User, MOCK_USERS } from '@/lib/mockData';
+import { User } from '@/lib/mockData';
 import { clearToken, type StoredAuthUser } from '@/lib/auth';
 
 interface UserContextType {
     user: User;
     setUser: (user: User) => void;
-    mockLogin: (userKey: keyof typeof MOCK_USERS) => void;
     logout: () => void;
 }
 
@@ -17,8 +16,7 @@ const AUTH_USER_KEY = 'bilsen_auth_user';
 const LEGACY_USER_KEY = 'bilsen_user';
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-    // Default to coordinator for easy access (server render)
-    const [user, setUser] = useState<User>(MOCK_USERS.coordinator);
+    const [user, setUser] = useState<User>(EMPTY_USER);
     const [mounted, setMounted] = useState(false);
 
     // Sync from localStorage after hydration
@@ -43,11 +41,6 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Quick helper to switch users by their mock key
-    const mockLogin = (userKey: keyof typeof MOCK_USERS) => {
-        handleSetUser(MOCK_USERS[userKey]);
-    };
-
     const logout = () => {
         clearToken();
         if (typeof window !== 'undefined') {
@@ -63,7 +56,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     return (
-        <UserContext.Provider value={{ user, setUser: handleSetUser, mockLogin, logout }}>
+        <UserContext.Provider value={{ user, setUser: handleSetUser, logout }}>
             {children}
         </UserContext.Provider>
     );

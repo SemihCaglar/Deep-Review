@@ -158,3 +158,7 @@ This behavior is only for local/dev verification.
 Production behavior is still assumed to remain safe and generic:
 - no raw reset token is exposed
 - reset links should normally be delivered through the system’s email service
+
+## Signup approval and lab membership assumption
+
+The system assumes a seeded bootstrap coordinator account exists from the beginning so that user onboarding can start without a circular dependency. Normal users do not enter the system as fully active accounts; instead, they register through the signup page and remain in `Pending` status until reviewed by the coordinator. Only approved users are allowed to log in, appear in the `Lab Members` page, and participate as normal system users. The coordinator reviews pending requests through the dedicated `Pending Approvals` page, where both current pending requests and reviewed approval history are visible. The bootstrap coordinator is intentionally shown in `Lab Members` as part of the lab, but is not treated as a normal approved signup in `Approval History`, since that account is created through seed/bootstrap rather than through the standard signup-review flow.

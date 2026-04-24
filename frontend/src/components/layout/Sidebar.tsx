@@ -2,13 +2,14 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { Home, FileText, CheckCircle, UserCircle2, LogOut, PlusSquare } from 'lucide-react';
+import { Home, FileText, CheckCircle, UserCircle2, LogOut, PlusSquare, UserCheck, Users } from 'lucide-react';
 
 export default function Sidebar() {
     const { user, logout } = useUser();
     const pathname = usePathname();
+    const searchParams = useSearchParams();
     const router = useRouter();
 
     const handleLogout = () => {
@@ -20,6 +21,8 @@ export default function Sidebar() {
         const base = [
             { name: 'My Dashboard', href: '/dashboard', icon: Home },
             { name: 'My Profile', href: '/profile', icon: UserCircle2 },
+            { name: 'Lab Members', href: '/lab-members', icon: Users },
+            ...(user.isCoordinator ? [{ name: 'Pending Approvals', href: '/pending-approvals', icon: UserCheck }] : []),
             { name: 'My Authored Papers', href: '/papers?filter=authored', icon: FileText }
         ];
 
@@ -56,10 +59,27 @@ export default function Sidebar() {
 
             <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
                 {navItems.map((item) => {
-                    const isActive =
-                        pathname === item.href ||
-                        (pathname.startsWith('/papers') && item.href.startsWith('/papers')) ||
-                        (pathname.startsWith('/profile') && item.href === '/profile');
+                    const authoredFilter = searchParams.get('filter');
+                    let isActive = false;
+
+                    if (item.href === '/dashboard') {
+                        isActive = pathname === '/dashboard';
+                    } else if (item.href === '/profile') {
+                        isActive = pathname === '/profile' || pathname.startsWith('/profile/');
+                    } else if (item.href === '/lab-members') {
+                        isActive = pathname === '/lab-members';
+                    } else if (item.href === '/pending-approvals') {
+                        isActive = pathname === '/pending-approvals';
+                    } else if (item.href === '/papers?filter=authored') {
+                        isActive = pathname === '/papers' && authoredFilter === 'authored';
+                    } else if (item.href === '/papers?filter=reviews') {
+                        isActive = pathname === '/papers' && authoredFilter === 'reviews';
+                    } else if (item.href === '/papers') {
+                        isActive = pathname === '/papers' && !authoredFilter;
+                    } else if (item.href === '/register') {
+                        isActive = pathname === '/register';
+                    }
+
                     const Icon = item.icon;
                     return (
                         <Link

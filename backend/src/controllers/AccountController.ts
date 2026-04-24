@@ -4,7 +4,7 @@ import { AppDataSource } from '../data-source';
 import { LabMember } from '../entities/LabMember';
 import { PasswordResetToken } from '../entities/PasswordResetToken';
 import { Topic } from '../entities/Topic';
-import { ApprovalStatus, User } from '../entities/User';
+import { ApprovalStatus, User, UserRole } from '../entities/User';
 import {
   accountSecurityPolicy,
   clearLoginLockout,
@@ -250,6 +250,87 @@ export class AccountController {
       user: AccountController.serializeAccount(user, { includeInterests: true }),
     });
   }
+  static async getPendingSignUps(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!AccountController.isCoordinatorOrAdmin(authenticatedUser)) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const pendingUsers = await userRepo.find({
+      where: { approvalStatus: ApprovalStatus.Pending },
+      order: { createdAt: 'ASC' },
+    });
+
+    return res.status(200).json({
+      users: pendingUsers.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        approvalStatus: user.approvalStatus,
+      })),
+    });
+  }
+  static async getReviewedSignUps(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!AccountController.isCoordinatorOrAdmin(authenticatedUser)) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const reviewedUsers = await userRepo.find({
+      where: [
+        { approvalStatus: ApprovalStatus.Approved, role: UserRole.LabMember },
+        { approvalStatus: ApprovalStatus.Rejected, role: UserRole.LabMember },
+      ],
+      order: { approvalReviewedAt: 'DESC' },
+    });
+
+    return res.status(200).json({
+      users: reviewedUsers.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        approvalStatus: user.approvalStatus,
+        approvalReviewedAt: user.approvalReviewedAt,
+        approvalNote: user.approvalNote,
+      })),
+    });
+  }
+  static async getLabMembers(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const approvedUsers = await userRepo.find({
+      where: { approvalStatus: ApprovalStatus.Approved },
+      order: { name: 'ASC' },
+    });
+
+    return res.status(200).json({
+      users: approvedUsers.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      })),
+    });
+  }
   static async updateProfile(req: AuthenticatedRequest, res: Response) {
     const { name, email } = req.body ?? {};
     const authenticatedUser = req.user;
@@ -375,7 +456,17 @@ export class AccountController {
   static async setBlackoutPeriods(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
-  static async approveSignUp(req: Request, res: Response) {
+  static async approveSignUp(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!AccountController.isCoordinatorOrAdmin(authenticatedUser)) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
     const id = AccountController.parseRouteId(req.params.id);
 
     if (!id) {
@@ -406,7 +497,17 @@ export class AccountController {
       user: AccountController.serializeAccount(savedMember),
     });
   }
-  static async rejectSignUp(req: Request, res: Response) {
+  static async rejectSignUp(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!AccountController.isCoordinatorOrAdmin(authenticatedUser)) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
     const id = AccountController.parseRouteId(req.params.id);
 
     if (!id) {
@@ -454,6 +555,10 @@ export class AccountController {
 
     const trimmedId = id.trim();
     return trimmedId ? trimmedId : null;
+  }
+
+  private static isCoordinatorOrAdmin(user: User) {
+    return user.role === UserRole.Coordinator || user.role === UserRole.Admin;
   }
 
   private static serializeAccount(member: User, options: { includeInterests?: boolean } = {}) {

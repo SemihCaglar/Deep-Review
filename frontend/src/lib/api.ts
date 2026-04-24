@@ -39,6 +39,31 @@ export type AccountUserResponse = {
   user: StoredAuthUser;
 };
 
+export type PendingSignup = {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  approvalStatus: string;
+  approvalReviewedAt?: string | null;
+  approvalNote?: string | null;
+};
+
+export type PendingSignupsResponse = {
+  users: PendingSignup[];
+};
+
+export type LabMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+export type LabMembersResponse = {
+  users: LabMember[];
+};
+
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
 };
@@ -74,6 +99,17 @@ export function loginRequest(email: string, password: string) {
   return apiRequest<LoginResponse>('/account/login', {
     method: 'POST',
     body: { email, password },
+  });
+}
+
+export function signupRequest(name: string, email: string, password: string) {
+  return apiRequest<AccountUserResponse>('/account/signup', {
+    method: 'POST',
+    body: {
+      name,
+      email,
+      password,
+    },
   });
 }
 
@@ -137,6 +173,30 @@ export function updateProfileRequest(name: string, email: string) {
 
 export function getCurrentProfileRequest() {
   return apiRequest<{ user: StoredAuthUser }>('/account/profile');
+}
+
+export function getLabMembersRequest() {
+  return apiRequest<LabMembersResponse>('/account/lab-members');
+}
+
+export function getPendingSignupsRequest() {
+  return apiRequest<PendingSignupsResponse>('/account/pending-signups');
+}
+
+export function getReviewedSignupsRequest() {
+  return apiRequest<PendingSignupsResponse>('/account/reviewed-signups');
+}
+
+export function approveSignupRequest(id: string) {
+  return apiRequest<AccountUserResponse>(`/account/approve/${id}`, {
+    method: 'POST',
+  });
+}
+
+export function rejectSignupRequest(id: string) {
+  return apiRequest<AccountUserResponse>(`/account/reject/${id}`, {
+    method: 'POST',
+  });
 }
 
 function buildUrl(path: string) {
