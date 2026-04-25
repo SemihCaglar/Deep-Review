@@ -6,6 +6,7 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 import type { User } from './User';
+import type { Lab } from './Lab';
 
 /**
  * Enum of critical actions that are tracked in the audit log.
@@ -61,13 +62,13 @@ export class AuditLog {
   /**
    * The name of the entity that was affected (e.g., 'User', 'Paper', 'Round').
    */
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   entityType: string | null;
 
   /**
    * The UUID of the specific entity that was affected.
    */
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   entityId: string | null;
 
   /**
@@ -86,4 +87,10 @@ export class AuditLog {
    */
   @ManyToOne('User', { nullable: true, onDelete: 'SET NULL' })
   actor: User | null;
+
+  /**
+   * The lab associated with this action, if any.
+   */
+  @ManyToOne('Lab', { nullable: true, onDelete: 'CASCADE' })
+  lab: Lab | null;
 }
