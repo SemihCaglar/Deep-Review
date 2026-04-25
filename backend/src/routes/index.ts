@@ -60,10 +60,10 @@ router.post('/papers/:id/parents', PaperController.linkParentPapers);
 router.put('/papers/:id/abstract', PaperController.updateAbstract);
 router.put('/papers/:id/topics-update', PaperController.updateTopics);
 router.get('/papers/:id/status', PaperController.getPaperStatus);
-router.get('/papers/:id/history', PaperController.getPaperHistory);
-router.get('/papers/my-written', PaperController.getMyWrittenPapers);
-router.get('/papers/my-reviewed', PaperController.getMyReviewedPapers);
-router.get('/papers/my-current-reviewed', PaperController.getMyCurrentReviewedPapers);
+router.get('/papers/:id/history', authenticateRequest, PaperController.getPaperHistory);
+router.get('/papers/my-written', authenticateRequest, PaperController.getMyWrittenPapers);
+router.get('/papers/my-reviewed', authenticateRequest, PaperController.getMyReviewedPapers);
+router.get('/papers/my-current-reviewed', authenticateRequest, PaperController.getMyCurrentReviewedPapers);
 router.get('/papers/all', PaperController.getAllPapers);
 router.put('/papers/:id/status', PaperController.updatePaperStatus);
 
