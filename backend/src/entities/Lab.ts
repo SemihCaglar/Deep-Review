@@ -1,7 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn, ManyToMany, JoinTable, OneToMany } from 'typeorm';
 import type { Coordinator } from './Coordinator';
 import type { Paper } from './Paper';
 import type { User } from './User';
+import type { AuditLog } from './AuditLog';
+import type { SystemPolicy } from './SystemPolicy';
+import type { Template } from './Template';
 
 @Entity()
 export class Lab {
@@ -25,6 +28,15 @@ export class Lab {
   @ManyToMany('User', 'labs')
   @JoinTable()
   members: User[];
+
+  @OneToMany('AuditLog', 'lab')
+  auditLogs: AuditLog[];
+
+  @OneToMany('SystemPolicy', 'lab')
+  systemPolicies: SystemPolicy[];
+
+  @OneToMany('Template', 'lab')
+  templates: Template[];
 
   @CreateDateColumn({ type: 'datetime' })
   createdAt: Date;

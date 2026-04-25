@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { Paper } from '../entities/Paper';
+<<<<<<< HEAD
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { RoundStatus } from '../entities/Round';
 
@@ -10,6 +11,12 @@ function queryString(value: unknown): string | undefined {
   if (Array.isArray(value) && typeof value[0] === 'string') return (value[0] as string).trim() || undefined;
   return undefined;
 }
+=======
+import { UserRole } from '../entities/User';
+import type { AuthenticatedRequest } from '../types/auth';
+import { Assignment, AssignmentStatus } from '../entities/Assignment';
+import { In } from 'typeorm';
+>>>>>>> issue-41
 
 export class PaperController {
   static async registerPaper(req: Request, res: Response) {
@@ -108,6 +115,7 @@ export class PaperController {
    * Access: coordinator of the paper OR any of its authors.
    */
   static async getPaperHistory(req: Request, res: Response) {
+<<<<<<< HEAD
     const paperId = String(req.params.id ?? '').trim();
     const userId  = queryString(req.query.userId);
 
@@ -192,6 +200,32 @@ export class PaperController {
       });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
+=======
+    try {
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+      const paperId = req.params.id as string;
+      const repo = AppDataSource.getRepository(Paper);
+      const paper = await repo.findOne({ 
+        where: { id: paperId },
+        relations: ['authors', 'rounds', 'rounds.assignments', 'rounds.assignments.reviewer']
+      });
+
+      if (!paper) {
+        return res.status(404).json({ message: 'Paper not found' });
+      }
+
+      // Check authorization (author, assigned reviewer, or admin/coordinator)
+      const isAuthor = paper.authors.some(a => a.id === authReq.user!.id);
+      const isReviewer = paper.rounds.some(r => r.assignments.some(a => a.reviewer.id === authReq.user!.id));
+      if (!isAuthor && !isReviewer && authReq.user!.role !== UserRole.Coordinator && authReq.user!.role !== UserRole.Admin) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+
+      res.status(200).json(paper);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+>>>>>>> issue-41
     }
   }
 
@@ -202,6 +236,7 @@ export class PaperController {
    * Filters at the database level via the join table — does NOT load all papers into memory.
    */
   static async getMyWrittenPapers(req: Request, res: Response) {
+<<<<<<< HEAD
     const userId = queryString(req.query.userId);
     if (!userId) return res.status(400).json({ message: 'userId query param is required' });
 
@@ -229,6 +264,21 @@ export class PaperController {
       return res.status(200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
+=======
+    try {
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+      const repo = AppDataSource.getRepository(Paper);
+      const papers = await repo.find({
+        where: {
+          authors: { id: authReq.user.id }
+        },
+        relations: ['authors', 'topics']
+      });
+      res.status(200).json(papers);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+>>>>>>> issue-41
     }
   }
 
@@ -240,6 +290,7 @@ export class PaperController {
    * Tagged with the caller's most recent assignment status for that paper.
    */
   static async getMyReviewedPapers(req: Request, res: Response) {
+<<<<<<< HEAD
     const userId = queryString(req.query.userId);
     if (!userId) return res.status(400).json({ message: 'userId query param is required' });
 
@@ -291,6 +342,26 @@ export class PaperController {
       return res.status(200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
+=======
+    try {
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+      const repo = AppDataSource.getRepository(Assignment);
+      const assignments = await repo.find({
+        where: {
+          reviewer: { id: authReq.user.id },
+          status: AssignmentStatus.Completed
+        },
+        relations: ['round', 'round.paper', 'round.paper.authors']
+      });
+      
+      const papers = assignments.map(a => a.round.paper).filter(p => !!p);
+      const uniquePapers = Array.from(new Map(papers.map(p => [p.id, p])).values());
+      
+      res.status(200).json(uniquePapers);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+>>>>>>> issue-41
     }
   }
 
@@ -301,6 +372,7 @@ export class PaperController {
    * "Active" means: assignment.status IN [Invited, Accepted, Overdue] AND round.status = Open.
    */
   static async getMyCurrentReviewedPapers(req: Request, res: Response) {
+<<<<<<< HEAD
     const userId = queryString(req.query.userId);
     if (!userId) return res.status(400).json({ message: 'userId query param is required' });
 
@@ -337,6 +409,26 @@ export class PaperController {
       return res.status(200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
+=======
+    try {
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+      const repo = AppDataSource.getRepository(Assignment);
+      const assignments = await repo.find({
+        where: {
+          reviewer: { id: authReq.user.id },
+          status: In([AssignmentStatus.Invited, AssignmentStatus.Accepted, AssignmentStatus.Overdue])
+        },
+        relations: ['round', 'round.paper', 'round.paper.authors']
+      });
+      
+      const papers = assignments.map(a => a.round.paper).filter(p => !!p);
+      const uniquePapers = Array.from(new Map(papers.map(p => [p.id, p])).values());
+      
+      res.status(200).json(uniquePapers);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+>>>>>>> issue-41
     }
   }
 
