@@ -1,9 +1,11 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { Paper } from '../entities/Paper';
-<<<<<<< HEAD
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { RoundStatus } from '../entities/Round';
+import { UserRole } from '../entities/User';
+import type { AuthenticatedRequest } from '../types/auth';
+import { In } from 'typeorm';
 
 /** Safely extracts a single string from a query param (which Express types as string | string[]). */
 function queryString(value: unknown): string | undefined {
@@ -11,12 +13,6 @@ function queryString(value: unknown): string | undefined {
   if (Array.isArray(value) && typeof value[0] === 'string') return (value[0] as string).trim() || undefined;
   return undefined;
 }
-=======
-import { UserRole } from '../entities/User';
-import type { AuthenticatedRequest } from '../types/auth';
-import { Assignment, AssignmentStatus } from '../entities/Assignment';
-import { In } from 'typeorm';
->>>>>>> issue-41
 
 export class PaperController {
   static async registerPaper(req: Request, res: Response) {
@@ -39,17 +35,20 @@ export class PaperController {
   }
 
   /**
-   * GET /papers/:id/status?userId=<uuid>
+   * GET /papers/:id/status
    *
    * Returns the current status and a snapshot of the latest round for a specific paper.
    * Access: coordinator of the paper OR any of its authors.
+   * Auth: uses JWT token from authenticateRequest middleware (req.user).
    */
   static async getPaperStatus(req: Request, res: Response) {
-    const paperId = String(req.params.id ?? '').trim();
-    const userId  = queryString(req.query.userId);
+    const authReq = req as AuthenticatedRequest;
+    if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
 
+    const paperId = String(req.params.id ?? '').trim();
     if (!paperId) return res.status(400).json({ message: 'Paper id is required' });
-    if (!userId)  return res.status(400).json({ message: 'userId query param is required' });
+
+    const userId = authReq.user.id;
 
     try {
       const paper = await AppDataSource.getRepository(Paper).findOne({
@@ -66,11 +65,12 @@ export class PaperController {
 
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      // Access control: direct coordinator, lab coordinator, or author only
+      // Access control: direct coordinator, lab coordinator, author, or admin
       const isExplicitCoordinator = paper.coordinator?.id === userId;
       const isLabCoordinator = paper.labs?.some(lab => lab.coordinator?.id === userId) ?? false;
       const isAuthor = paper.authors?.some(a => a.id === userId) ?? false;
-      if (!isExplicitCoordinator && !isLabCoordinator && !isAuthor) {
+      const isAdmin = authReq.user!.role === UserRole.Admin;
+      if (!isExplicitCoordinator && !isLabCoordinator && !isAuthor && !isAdmin) {
         return res.status(403).json({ message: 'Access denied' });
       }
 
@@ -107,22 +107,24 @@ export class PaperController {
   }
 
   /**
-   * GET /papers/:id/history?userId=<uuid>
+   * GET /papers/:id/history
    *
    * Returns the full round-by-round review history for a specific paper.
    * Response depth: rounds + assignments (reviewer info, summary, extension, rating).
    * Excludes checklist items and AI review reports (available via dedicated endpoints).
-   * Access: coordinator of the paper OR any of its authors.
+   * Access: coordinator, lab coordinator, author, assigned reviewer, or admin.
+   * Auth: uses JWT token (req.user).
    */
   static async getPaperHistory(req: Request, res: Response) {
-<<<<<<< HEAD
-    const paperId = String(req.params.id ?? '').trim();
-    const userId  = queryString(req.query.userId);
-
-    if (!paperId) return res.status(400).json({ message: 'Paper id is required' });
-    if (!userId)  return res.status(400).json({ message: 'userId query param is required' });
-
     try {
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+
+      const paperId = String(req.params.id ?? '').trim();
+      const userId = authReq.user.id;
+
+      if (!paperId) return res.status(400).json({ message: 'Paper id is required' });
+
       const paper = await AppDataSource.getRepository(Paper).findOne({
         where: { id: paperId },
         relations: [
@@ -141,12 +143,18 @@ export class PaperController {
 
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      // Access control: direct coordinator, lab coordinator, or author only
       const isExplicitCoordinator = paper.coordinator?.id === userId;
       const isLabCoordinator = paper.labs?.some(lab => lab.coordinator?.id === userId) ?? false;
       const isAuthor = paper.authors?.some(a => a.id === userId) ?? false;
-      if (!isExplicitCoordinator && !isLabCoordinator && !isAuthor) {
-        return res.status(403).json({ message: 'Access denied' });
+      const isReviewer =
+        paper.rounds?.some(r =>
+          r.assignments?.some(a => a.reviewer?.id === userId)
+        ) ?? false;
+      const isAdmin = authReq.user.role === UserRole.Admin;
+      const isCoordinator = authReq.user.role === UserRole.Coordinator;
+
+      if (!isExplicitCoordinator && !isLabCoordinator && !isAuthor && !isReviewer && !isAdmin && !isCoordinator) {
+        return res.status(403).json({ message: 'Forbidden' });
       }
 
       const rounds = (paper.rounds ?? [])
@@ -159,14 +167,14 @@ export class PaperController {
           startedAt:   round.startedAt,
           closedAt:    round.closedAt,
           assignments: (round.assignments ?? []).map(assignment => ({
-            assignmentId: assignment.id,
-            reviewerId:   assignment.reviewer?.id   ?? null,
-            reviewerName: assignment.reviewer?.name ?? null,
-            status:       assignment.status,
-            deadline:     assignment.deadline,
-            invitedAt:    assignment.invitedAt,
-            acceptedAt:   assignment.acceptedAt,
-            submittedAt:  assignment.submittedAt,
+            assignmentId:  assignment.id,
+            reviewerId:    assignment.reviewer?.id   ?? null,
+            reviewerName:  assignment.reviewer?.name ?? null,
+            status:        assignment.status,
+            deadline:      assignment.deadline,
+            invitedAt:     assignment.invitedAt,
+            acceptedAt:    assignment.acceptedAt,
+            submittedAt:   assignment.submittedAt,
             declineReason: assignment.declineReason,
             summary: assignment.reviewSummary
               ? {
@@ -200,50 +208,23 @@ export class PaperController {
       });
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
-=======
-    try {
-      const authReq = req as AuthenticatedRequest;
-      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
-      const paperId = req.params.id as string;
-      const repo = AppDataSource.getRepository(Paper);
-      const paper = await repo.findOne({ 
-        where: { id: paperId },
-        relations: ['authors', 'rounds', 'rounds.assignments', 'rounds.assignments.reviewer']
-      });
-
-      if (!paper) {
-        return res.status(404).json({ message: 'Paper not found' });
-      }
-
-      // Check authorization (author, assigned reviewer, or admin/coordinator)
-      const isAuthor = paper.authors.some(a => a.id === authReq.user!.id);
-      const isReviewer = paper.rounds.some(r => r.assignments.some(a => a.reviewer.id === authReq.user!.id));
-      if (!isAuthor && !isReviewer && authReq.user!.role !== UserRole.Coordinator && authReq.user!.role !== UserRole.Admin) {
-        return res.status(403).json({ message: 'Forbidden' });
-      }
-
-      res.status(200).json(paper);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
->>>>>>> issue-41
     }
   }
 
   /**
-   * GET /papers/my-written?userId=<uuid>
+   * GET /papers/my-written
    *
-   * Returns all papers that the caller is listed as an author of.
+   * Returns all papers that the authenticated caller is listed as an author of.
    * Filters at the database level via the join table — does NOT load all papers into memory.
+   * Auth: uses JWT token (req.user).
    */
   static async getMyWrittenPapers(req: Request, res: Response) {
-<<<<<<< HEAD
-    const userId = queryString(req.query.userId);
-    if (!userId) return res.status(400).json({ message: 'userId query param is required' });
-
     try {
-      // TypeORM translates this into a JOIN on the join table + WHERE userId = ?
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+
       const papers = await AppDataSource.getRepository(Paper).find({
-        where: { authors: { id: userId } },
+        where: { authors: { id: authReq.user.id } },
         relations: ['authors', 'topics', 'coordinator', 'rounds'],
       });
 
@@ -264,40 +245,24 @@ export class PaperController {
       return res.status(200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
-=======
-    try {
-      const authReq = req as AuthenticatedRequest;
-      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
-      const repo = AppDataSource.getRepository(Paper);
-      const papers = await repo.find({
-        where: {
-          authors: { id: authReq.user.id }
-        },
-        relations: ['authors', 'topics']
-      });
-      res.status(200).json(papers);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
->>>>>>> issue-41
     }
   }
 
   /**
-   * GET /papers/my-reviewed?userId=<uuid>
+   * GET /papers/my-reviewed
    *
-   * Returns all papers the caller has ever been assigned to review (any status, any round).
-   * Each paper is returned exactly once (deduplicated by paper.id).
+   * Returns all papers the authenticated caller has ever been assigned to review.
+   * Each paper is returned exactly once, deduplicated by paper.id.
    * Tagged with the caller's most recent assignment status for that paper.
+   * Auth: uses JWT token (req.user).
    */
   static async getMyReviewedPapers(req: Request, res: Response) {
-<<<<<<< HEAD
-    const userId = queryString(req.query.userId);
-    if (!userId) return res.status(400).json({ message: 'userId query param is required' });
-
     try {
-      // Query assignments for this reviewer directly — database-level filter
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+
       const assignments = await AppDataSource.getRepository(Assignment).find({
-        where: { reviewer: { id: userId } },
+        where: { reviewer: { id: authReq.user.id } },
         relations: ['round', 'round.paper', 'round.paper.topics', 'round.paper.authors'],
       });
 
@@ -321,7 +286,6 @@ export class PaperController {
           });
         } else {
           existing.totalRoundsReviewed += 1;
-          // Keep the assignment with the latest invitedAt as "most recent"
           if (assignment.invitedAt > existing.latestAssignment.invitedAt) {
             existing.latestAssignment = assignment;
           }
@@ -329,60 +293,39 @@ export class PaperController {
       }
 
       const result = Array.from(paperMap.values()).map(({ paper, latestAssignment, totalRoundsReviewed }) => ({
-        paperId:              paper.id,
-        title:                paper.title,
-        paperStatus:          paper.status,
-        targetVenue:          paper.targetVenue,
-        topics:               (paper.topics ?? []).map(t => ({ id: t.id, name: t.name })),
+        paperId:                paper.id,
+        title:                  paper.title,
+        paperStatus:            paper.status,
+        targetVenue:            paper.targetVenue,
+        topics:                 (paper.topics ?? []).map(t => ({ id: t.id, name: t.name })),
         latestAssignmentStatus: latestAssignment.status,
-        latestRoundNumber:    latestAssignment.round?.roundNumber ?? null,
+        latestRoundNumber:      latestAssignment.round?.roundNumber ?? null,
         totalRoundsReviewed,
       }));
 
       return res.status(200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
-=======
-    try {
-      const authReq = req as AuthenticatedRequest;
-      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
-      const repo = AppDataSource.getRepository(Assignment);
-      const assignments = await repo.find({
-        where: {
-          reviewer: { id: authReq.user.id },
-          status: AssignmentStatus.Completed
-        },
-        relations: ['round', 'round.paper', 'round.paper.authors']
-      });
-      
-      const papers = assignments.map(a => a.round.paper).filter(p => !!p);
-      const uniquePapers = Array.from(new Map(papers.map(p => [p.id, p])).values());
-      
-      res.status(200).json(uniquePapers);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
->>>>>>> issue-41
     }
   }
 
   /**
-   * GET /papers/my-current-reviewed?userId=<uuid>
+   * GET /papers/my-current-reviewed
    *
-   * Returns papers for which the caller has an active review assignment.
+   * Returns papers for which the authenticated caller has an active review assignment.
    * "Active" means: assignment.status IN [Invited, Accepted, Overdue] AND round.status = Open.
+   * Auth: uses JWT token (req.user).
    */
   static async getMyCurrentReviewedPapers(req: Request, res: Response) {
-<<<<<<< HEAD
-    const userId = queryString(req.query.userId);
-    if (!userId) return res.status(400).json({ message: 'userId query param is required' });
-
     try {
-      // Fetch all non-terminal assignments for this reviewer in one DB query
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+
       const allActive = await AppDataSource.getRepository(Assignment).find({
         where: [
-          { reviewer: { id: userId }, status: AssignmentStatus.Invited },
-          { reviewer: { id: userId }, status: AssignmentStatus.Accepted },
-          { reviewer: { id: userId }, status: AssignmentStatus.Overdue },
+          { reviewer: { id: authReq.user.id }, status: AssignmentStatus.Invited },
+          { reviewer: { id: authReq.user.id }, status: AssignmentStatus.Accepted },
+          { reviewer: { id: authReq.user.id }, status: AssignmentStatus.Overdue },
         ],
         relations: ['round', 'round.paper', 'round.paper.topics'],
       });
@@ -409,26 +352,6 @@ export class PaperController {
       return res.status(200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
-=======
-    try {
-      const authReq = req as AuthenticatedRequest;
-      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
-      const repo = AppDataSource.getRepository(Assignment);
-      const assignments = await repo.find({
-        where: {
-          reviewer: { id: authReq.user.id },
-          status: In([AssignmentStatus.Invited, AssignmentStatus.Accepted, AssignmentStatus.Overdue])
-        },
-        relations: ['round', 'round.paper', 'round.paper.authors']
-      });
-      
-      const papers = assignments.map(a => a.round.paper).filter(p => !!p);
-      const uniquePapers = Array.from(new Map(papers.map(p => [p.id, p])).values());
-      
-      res.status(200).json(uniquePapers);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
->>>>>>> issue-41
     }
   }
 

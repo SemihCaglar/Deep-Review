@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { Rating } from '../entities/Rating';
