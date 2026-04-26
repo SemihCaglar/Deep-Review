@@ -50,11 +50,11 @@ router.get('/ai/checklist', AIReviewController.getChecklist);
 router.post('/ai/validate', AIReviewController.validateAIOutput);
 
 // ==== ASSIGNMENT ROUTES ====
-router.post('/assignments', AssignmentController.assignReviewers);
-router.post('/assignments/invite', AssignmentController.sendInvitations);
-router.post('/assignments/remind', AssignmentController.sendReminders);
-router.delete('/assignments/:id', AssignmentController.cancelAssignment);
-router.put('/assignments/:id/deadline', AssignmentController.updateAssignmentDeadline);
+router.post('/assignments', authenticateRequest, AssignmentController.assignReviewers);
+router.post('/assignments/invite', authenticateRequest, AssignmentController.sendInvitations);
+router.post('/assignments/remind', authenticateRequest, AssignmentController.sendReminders);
+router.delete('/assignments/:id', authenticateRequest, AssignmentController.cancelAssignment);
+router.put('/assignments/:id/deadline', authenticateRequest, AssignmentController.updateAssignmentDeadline);
 
 // ==== PAPER ROUTES ====
 router.post('/papers', PaperController.registerPaper);
@@ -77,13 +77,12 @@ router.get('/ratings/overall', RatingAnalyticsController.getOverallAnalytics);
 router.get('/ratings/user/:id', RatingAnalyticsController.getUserAnalytics);
 
 // ==== REVIEWER RESPONSE ROUTES ====
-router.post('/responses/invitation', ReviewerResponseController.respondToInvitation);
-router.post('/responses/decline', ReviewerResponseController.requestDecline);
-router.post('/responses/extension', ReviewerResponseController.requestDeadlineExtension);
-router.post('/responses/process-decline', ReviewerResponseController.processDeclineRequest);
-router.post('/responses/process-extension', ReviewerResponseController.processExtensionRequest);
-router.post('/responses/summary', ReviewerResponseController.submitReviewSummary);
-router.post('/responses/complete', ReviewerResponseController.markReviewCompleted);
+router.post('/responses/invitation', authenticateRequest, ReviewerResponseController.respondToInvitation);
+router.post('/responses/decline', authenticateRequest, ReviewerResponseController.requestDecline);
+router.post('/responses/extension', authenticateRequest, ReviewerResponseController.requestDeadlineExtension);
+router.post('/responses/process-decline', authenticateRequest, ReviewerResponseController.processDeclineRequest);
+router.post('/responses/process-extension', authenticateRequest, ReviewerResponseController.processExtensionRequest);
+router.post('/responses/complete', authenticateRequest, ReviewerResponseController.completeReview);
 
 // ==== ROUND ROUTES ====
 router.post('/rounds', RoundController.createReviewRound);
