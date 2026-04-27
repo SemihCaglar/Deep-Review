@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from 'typeorm';
 import { Assignment } from './Assignment';
 
 export enum ExtensionStatus {
@@ -31,7 +31,6 @@ export class Extension {
   })
   status: ExtensionStatus;
 
-  @OneToOne(() => Assignment, assignment => assignment.extension)
-  @JoinColumn()
+  @ManyToOne(() => Assignment, assignment => assignment.extensions, { nullable: false, onDelete: 'CASCADE' })
   assignment: Assignment;
 }

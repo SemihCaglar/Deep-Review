@@ -90,25 +90,13 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       creationTime: new Date(),
       targetVenue: 'ICSE 2026',
       status: PaperStatus.HumanReview,
-      coordinators: [coordinator]
+      coordinators: [coordinator],
+      labs: [lab],
+      authors: [],
     });
-    paper.labs = [lab];
-    paper.authors = [];
+
     await paperRepo.save(paper);
-
-    const p2 = Object.assign(new Paper(), {
-        title: 'React Next.js Component Scaling',
-        abstractText: 'A comprehensive review of monorepos.',
-        creationTime: new Date(),
-        targetVenue: 'Frontend Conf 2026',
-        status: PaperStatus.Draft,
-        coordinators: [coordinator]
-    });
-    p2.labs = [lab];
-    p2.authors = [];
-    await paperRepo.save(p2);
-
-    console.log('✅ Papers created');
+    console.log('✅ Paper created');
   }
 
   // Round

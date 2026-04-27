@@ -3,6 +3,7 @@ import { AccountController } from '../controllers/AccountController';
 import { AdminController } from '../controllers/AdminController';
 import { AIReviewController } from '../controllers/AIReviewController';
 import { AssignmentController } from '../controllers/AssignmentController';
+import { CoordinatorController } from '../controllers/CoordinatorController';
 import { PaperController } from '../controllers/PaperController';
 import { RatingAnalyticsController } from '../controllers/RatingAnalyticsController';
 import { ReviewerResponseController } from '../controllers/ReviewerResponseController';
@@ -55,6 +56,8 @@ router.post('/assignments/invite', authenticateRequest, AssignmentController.sen
 router.post('/assignments/remind', authenticateRequest, AssignmentController.sendReminders);
 router.delete('/assignments/:id', authenticateRequest, AssignmentController.cancelAssignment);
 router.put('/assignments/:id/deadline', authenticateRequest, AssignmentController.updateAssignmentDeadline);
+router.patch('/assignments/:id/process-decline', authenticateRequest, CoordinatorController.processDeclineRequest);
+router.patch('/assignments/:id/process-extension', authenticateRequest, CoordinatorController.processExtensionRequest);
 
 // ==== PAPER ROUTES ====
 router.post('/papers', authenticateRequest, PaperController.registerPaper);
@@ -77,11 +80,19 @@ router.get('/ratings/overall', RatingAnalyticsController.getOverallAnalytics);
 router.get('/ratings/user/:id', RatingAnalyticsController.getUserAnalytics);
 
 // ==== REVIEWER RESPONSE ROUTES ====
+router.patch('/responses/:id/accept', authenticateRequest, ReviewerResponseController.acceptInvitation);
+router.post('/responses/:id/decline-request', authenticateRequest, ReviewerResponseController.requestDeclineForAssignment);
+router.post('/responses/:id/extension-request', authenticateRequest, ReviewerResponseController.requestExtensionForAssignment);
+// Legacy aliases for coordinator processing. Prefer the PATCH /assignments/:id/process-* routes above.
+router.post('/responses/:id/process-decline', authenticateRequest, ReviewerResponseController.processDeclineRequest);
+router.post('/responses/:id/process-extension', authenticateRequest, ReviewerResponseController.processExtensionRequest);
 router.post('/responses/invitation', authenticateRequest, ReviewerResponseController.respondToInvitation);
 router.post('/responses/decline', authenticateRequest, ReviewerResponseController.requestDecline);
 router.post('/responses/extension', authenticateRequest, ReviewerResponseController.requestDeadlineExtension);
+// Legacy aliases for clients that still submit assignmentId/responseId in the body.
 router.post('/responses/process-decline', authenticateRequest, ReviewerResponseController.processDeclineRequest);
 router.post('/responses/process-extension', authenticateRequest, ReviewerResponseController.processExtensionRequest);
+router.post('/responses/summary', authenticateRequest, ReviewerResponseController.submitReviewSummary);
 router.post('/responses/complete', authenticateRequest, ReviewerResponseController.completeReview);
 
 // ==== ROUND ROUTES ====
