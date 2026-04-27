@@ -90,6 +90,9 @@ export abstract class User {
   @JoinTable()
   interests: Topic[];
 
+  @Column({ type: 'simple-json', nullable: true })
+  otherInterests: string[] | null;
+
   @OneToMany('Assignment', 'reviewer')
   assignments: Assignment[];
 

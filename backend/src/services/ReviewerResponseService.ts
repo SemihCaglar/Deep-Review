@@ -1,8 +1,9 @@
+import { EntityManager } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { Extension, ExtensionStatus } from '../entities/Extension';
-import { Lab } from '../entities/Lab';
 import { ReviewerResponse, ReviewerResponseStatus } from '../entities/ReviewerResponse';
+import { CoordinatorDecision, CoordinatorService } from './CoordinatorService';
 
 export class ReviewerResponseServiceError extends Error {
   statusCode: number;
@@ -120,27 +121,27 @@ export class ReviewerResponseService {
       );
     }
 
-    const extensionRepository = AppDataSource.getRepository(Extension);
-    const assignmentRepository = AppDataSource.getRepository(Assignment);
+    return AppDataSource.transaction(async (manager) => {
+      const extension = new Extension();
+      extension.reason = trimmedReason;
+      extension.requestedDeadline = requestedDeadline;
+      extension.status = ExtensionStatus.Pending;
+      extension.assignment = assignment;
 
-    const extension = new Extension();
-    extension.reason = trimmedReason;
-    extension.requestedDeadline = requestedDeadline;
-    extension.status = ExtensionStatus.Pending;
-    extension.assignment = assignment;
+      assignment.status = AssignmentStatus.PendingExtension;
 
-    assignment.status = AssignmentStatus.PendingExtension;
+      const savedAssignment = await manager.getRepository(Assignment).save(assignment);
+      await manager.getRepository(Extension).save(extension);
+      await this.upsertCompatibilityResponseWithManager(
+        manager,
+        savedAssignment,
+        ReviewerResponseStatus.PendingExtension,
+        context.labId,
+        { extensionReason: trimmedReason },
+      );
 
-    const savedAssignment = await assignmentRepository.save(assignment);
-    await extensionRepository.save(extension);
-    await this.upsertCompatibilityResponse(
-      savedAssignment,
-      ReviewerResponseStatus.PendingExtension,
-      context.labId,
-      { extensionReason: trimmedReason },
-    );
-
-    return this.loadAssignmentForResponse(savedAssignment.id);
+      return this.loadAssignmentForResponseWithManager(manager, savedAssignment.id);
+    });
   }
 
   static async processDeclineRequest(
@@ -148,32 +149,11 @@ export class ReviewerResponseService {
     isApproved: boolean,
     context: ReviewerResponseContext,
   ): Promise<Assignment> {
-    const assignment = await this.findAssignmentByAssignmentOrResponseId(id);
-    await this.assertCoordinatorAndLabAccess(assignment, context);
-
-    if (assignment.status !== AssignmentStatus.PendingDecline) {
-      throw new ReviewerResponseServiceError(
-        400,
-        'Assignment must be PendingDecline before a decline request can be processed',
-      );
-    }
-
-    assignment.status = isApproved ? AssignmentStatus.Declined : AssignmentStatus.Accepted;
-    if (!isApproved) {
-      assignment.acceptedAt = assignment.acceptedAt ?? new Date();
-      assignment.declineReason = null;
-    }
-
-    const assignmentRepository = AppDataSource.getRepository(Assignment);
-    const savedAssignment = await assignmentRepository.save(assignment);
-    await this.upsertCompatibilityResponse(
-      savedAssignment,
-      isApproved ? ReviewerResponseStatus.Declined : ReviewerResponseStatus.Accepted,
-      context.labId,
-      { declineReason: isApproved ? assignment.declineReason ?? undefined : null },
+    return CoordinatorService.processDeclineRequest(
+      id,
+      this.toCoordinatorDecision(isApproved),
+      { coordinatorId: context.userId, labId: context.labId },
     );
-
-    return this.loadAssignmentForResponse(savedAssignment.id);
   }
 
   static async processExtensionRequest(
@@ -183,17 +163,7 @@ export class ReviewerResponseService {
     context: ReviewerResponseContext,
   ): Promise<Assignment> {
     const assignment = await this.findAssignmentByAssignmentOrResponseId(id);
-    await this.assertCoordinatorAndLabAccess(assignment, context);
-
-    if (assignment.status !== AssignmentStatus.PendingExtension) {
-      throw new ReviewerResponseServiceError(
-        400,
-        'Assignment must be PendingExtension before an extension request can be processed',
-      );
-    }
-
-    const extensionRepository = AppDataSource.getRepository(Extension);
-    const pendingExtension = await extensionRepository.findOne({
+    const pendingExtension = await AppDataSource.getRepository(Extension).findOne({
       where: {
         assignment: { id: assignment.id },
         status: ExtensionStatus.Pending,
@@ -206,32 +176,13 @@ export class ReviewerResponseService {
       throw new ReviewerResponseServiceError(404, 'Pending extension request not found for this assignment');
     }
 
-    assignment.status = AssignmentStatus.Accepted;
-
-    if (isApproved) {
-      const approvedDeadline =
-        newDeadline === undefined || newDeadline === null || newDeadline === ''
-          ? pendingExtension.requestedDeadline
-          : parseDate(newDeadline, 'newDeadline');
-
-      pendingExtension.status = ExtensionStatus.Approved;
-      pendingExtension.approvedDeadline = approvedDeadline;
-      assignment.deadline = approvedDeadline;
-    } else {
-      pendingExtension.status = ExtensionStatus.Rejected;
-      pendingExtension.approvedDeadline = null;
-    }
-
-    const assignmentRepository = AppDataSource.getRepository(Assignment);
-    await extensionRepository.save(pendingExtension);
-    const savedAssignment = await assignmentRepository.save(assignment);
-    await this.upsertCompatibilityResponse(
-      savedAssignment,
-      ReviewerResponseStatus.Accepted,
-      context.labId,
+    return CoordinatorService.processExtensionRequest(
+      id,
+      pendingExtension.id,
+      this.toCoordinatorDecision(isApproved),
+      newDeadline,
+      { coordinatorId: context.userId, labId: context.labId },
     );
-
-    return this.loadAssignmentForResponse(savedAssignment.id);
   }
 
   private static async findAssignmentByAssignmentOrResponseId(id: string): Promise<Assignment> {
@@ -288,26 +239,6 @@ export class ReviewerResponseService {
     }
   }
 
-  private static async assertCoordinatorAndLabAccess(
-    assignment: Assignment,
-    context: ReviewerResponseContext,
-  ): Promise<void> {
-    const assignmentLabIds = assignment.round.paper.labs?.map((lab) => lab.id) || [];
-    if (!assignmentLabIds.includes(context.labId)) {
-      throw new ReviewerResponseServiceError(403, 'Assignment does not belong to the provided lab');
-    }
-
-    const labRepository = AppDataSource.getRepository(Lab);
-    const lab = await labRepository.findOne({
-      where: { id: context.labId },
-      relations: ['coordinator'],
-    });
-
-    if (!lab?.coordinator || lab.coordinator.id !== context.userId) {
-      throw new ReviewerResponseServiceError(403, 'Only the lab coordinator can process this request');
-    }
-  }
-
   private static async upsertCompatibilityResponse(
     assignment: Assignment,
     status: ReviewerResponseStatus,
@@ -339,9 +270,61 @@ export class ReviewerResponseService {
     return responseRepository.save(response);
   }
 
+  private static async upsertCompatibilityResponseWithManager(
+    manager: EntityManager,
+    assignment: Assignment,
+    status: ReviewerResponseStatus,
+    labId: string,
+    updates?: ReviewerResponseCompatibilityUpdate,
+  ): Promise<ReviewerResponse> {
+    const responseRepository = manager.getRepository(ReviewerResponse);
+    let response = await responseRepository.findOne({
+      where: { assignment: { id: assignment.id } },
+      relations: ['assignment'],
+    });
+
+    if (!response) {
+      response = new ReviewerResponse();
+      response.assignment = assignment;
+      response.reviewer = assignment.reviewer;
+      response.reviewRound = assignment.round;
+      response.lab = assignment.round.paper.labs?.find((lab) => lab.id === labId) || null;
+    }
+
+    response.status = status;
+    if (updates?.declineReason !== undefined) {
+      response.declineReason = updates.declineReason;
+    }
+    if (updates?.extensionReason !== undefined) {
+      response.extensionReason = updates.extensionReason;
+    }
+
+    return responseRepository.save(response);
+  }
+
+  private static toCoordinatorDecision(isApproved: boolean): CoordinatorDecision {
+    return isApproved ? 'Approve' : 'Reject';
+  }
+
   private static async loadAssignmentForResponse(id: string): Promise<Assignment> {
     const assignmentRepository = AppDataSource.getRepository(Assignment);
     const assignment = await assignmentRepository.findOne({
+      where: { id },
+      relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
+    });
+
+    if (!assignment) {
+      throw new ReviewerResponseServiceError(404, 'Assignment not found after update');
+    }
+
+    return assignment;
+  }
+
+  private static async loadAssignmentForResponseWithManager(
+    manager: EntityManager,
+    id: string,
+  ): Promise<Assignment> {
+    const assignment = await manager.getRepository(Assignment).findOne({
       where: { id },
       relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
     });

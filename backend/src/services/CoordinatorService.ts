@@ -52,6 +52,7 @@ export class CoordinatorService {
       const isApproved = decision === 'Approve';
       assignment.status = isApproved ? AssignmentStatus.Declined : AssignmentStatus.Accepted;
       if (!isApproved) {
+        assignment.acceptedAt = assignment.acceptedAt ?? new Date();
         assignment.declineReason = null;
       }
 

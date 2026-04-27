@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable, OneToMany } from 'typeorm';
 import type { Coordinator } from './Coordinator';
 import type { Topic } from './Topic';
 import type { Round } from './Round';
@@ -7,7 +7,6 @@ import type { Lab } from './Lab';
 
 export enum PaperStatus {
   Draft = 'Draft',
-  Registered = 'Registered',
   HumanReview = 'HumanReview',
   AIReview = 'AIReview',
   Completed = 'Completed',
@@ -40,16 +39,14 @@ export class Paper {
   status: PaperStatus;
 
   @Column({ nullable: true })
-  manuscriptUrl: string;
-
-  @Column({ nullable: true })
   overleafLink: string;
 
   @ManyToMany('User', 'writtenPapers')
   authors: User[];
 
-  @ManyToOne('Coordinator', 'coordinatedPapers')
-  coordinator: Coordinator;
+  @ManyToMany('Coordinator', 'coordinatedPapers')
+  @JoinTable()
+  coordinators: Coordinator[];
 
   @ManyToMany('Topic')
   @JoinTable()

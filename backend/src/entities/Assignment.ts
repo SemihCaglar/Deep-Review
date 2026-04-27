@@ -4,6 +4,7 @@ import type { Summary } from './Summary';
 import type { Rating } from './Rating';
 import type { Extension } from './Extension';
 import type { User } from './User';
+import type { DeclineRequest } from './DeclineRequest';
 import type { ReviewFeedback } from './ReviewFeedback';
 import type { ReviewerResponse } from './ReviewerResponse';
 
@@ -15,7 +16,8 @@ export enum AssignmentStatus {
   Declined = 'Declined',
   Overdue = 'Overdue',
   Completed = 'Completed',
-  Reassigned = 'Reassigned'
+  Reassigned = 'Reassigned',
+  Cancelled = 'Cancelled'
 }
 
 @Entity()
@@ -67,4 +69,7 @@ export class Assignment {
 
   @OneToOne('ReviewerResponse', 'assignment', { nullable: true })
   response: ReviewerResponse | null;
+
+  @OneToMany('DeclineRequest', 'assignment')
+  declineRequests: DeclineRequest[];
 }
