@@ -90,8 +90,11 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       creationTime: new Date(),
       targetVenue: 'ICSE 2026',
       status: PaperStatus.HumanReview,
+      coordinators: [coordinator]
     });
-    await paperRepo.save(p1);
+    paper.labs = [lab];
+    paper.authors = [];
+    await paperRepo.save(paper);
 
     const p2 = Object.assign(new Paper(), {
         title: 'React Next.js Component Scaling',
@@ -99,12 +102,13 @@ export async function runSeed(options: { reset?: boolean } = {}) {
         creationTime: new Date(),
         targetVenue: 'Frontend Conf 2026',
         status: PaperStatus.Draft,
-        coordinator: user1,
-    paper.coordinators = [coordinator];
-    paper.labs = [lab];
-    paper.authors = [];
-    await paperRepo.save(paper);
-    console.log('✅ Paper created');
+        coordinators: [coordinator]
+    });
+    p2.labs = [lab];
+    p2.authors = [];
+    await paperRepo.save(p2);
+
+    console.log('✅ Papers created');
   }
 
   // Round
