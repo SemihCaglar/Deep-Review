@@ -52,7 +52,7 @@ async function seed() {
         abstractText: 'A comprehensive review of monorepos.',
         creationTime: new Date(),
         targetVenue: 'Frontend Conf 2026',
-        status: PaperStatus.Registered,
+        status: PaperStatus.Draft,
         coordinator: user1,
     });
     await paperRepo.save(p2);
