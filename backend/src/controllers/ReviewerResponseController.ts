@@ -5,6 +5,7 @@ import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest
 import { Extension, ExtensionStatus } from '../entities/Extension';
 import { Summary } from '../entities/Summary';
 import { UserRole } from '../entities/User';
+import { sendEmail } from '../services/emailService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class ReviewerResponseController {
@@ -42,7 +43,7 @@ export class ReviewerResponseController {
         return res.status(200).json({ message: 'Invitation accepted', id: assignment.id, status: assignment.status });
       }
 
-      // decline — create a pending DeclineRequest, assignment status unchanged
+      // decline — requires a reason, creates a pending DeclineRequest awaiting coordinator approval
       if (!reason) return res.status(400).json({ message: 'reason is required when declining' });
 
       const declineRepo = AppDataSource.getRepository(DeclineRequest);
@@ -51,44 +52,6 @@ export class ReviewerResponseController {
 
       return res.status(201).json({
         message: 'Decline request submitted and awaiting coordinator approval',
-        declineRequestId: declineRequest.id,
-      });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ message: 'Internal server error' });
-    }
-  }
-
-  static async requestDecline(req: AuthenticatedRequest, res: Response) {
-    try {
-      const user = req.user;
-      if (!user) return res.status(401).json({ message: 'Authentication required' });
-
-      const { assignmentId, reason } = req.body;
-      if (!assignmentId || !reason) {
-        return res.status(400).json({ message: 'Missing assignmentId or reason' });
-      }
-
-      const assignRepo = AppDataSource.getRepository(Assignment);
-      const assignment = await assignRepo.findOne({
-        where: { id: assignmentId },
-        relations: ['reviewer'],
-      });
-      if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
-
-      if (assignment.reviewer.id !== user.id) {
-        return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
-      }
-      if (assignment.status !== AssignmentStatus.Accepted) {
-        return res.status(400).json({ message: 'Assignment must be in Accepted status to request withdrawal' });
-      }
-
-      const declineRepo = AppDataSource.getRepository(DeclineRequest);
-      const declineRequest = declineRepo.create({ assignment, reason, status: DeclineRequestStatus.Pending });
-      await declineRepo.save(declineRequest);
-
-      return res.status(201).json({
-        message: 'Withdrawal request submitted and awaiting coordinator approval',
         declineRequestId: declineRequest.id,
       });
     } catch (err) {
@@ -159,14 +122,16 @@ export class ReviewerResponseController {
       if (!assignmentId || !reason || !requestedDeadline) {
         return res.status(400).json({ message: 'Missing assignmentId, reason, or requestedDeadline' });
       }
-      if (isNaN(new Date(requestedDeadline).getTime())) {
+
+      const requested = new Date(requestedDeadline);
+      if (isNaN(requested.getTime())) {
         return res.status(400).json({ message: 'Invalid requestedDeadline format' });
       }
 
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
         where: { id: assignmentId },
-        relations: ['reviewer'],
+        relations: ['reviewer', 'round', 'round.paper', 'round.paper.coordinators'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
 
@@ -177,17 +142,47 @@ export class ReviewerResponseController {
         return res.status(400).json({ message: 'Assignment must be in Accepted status to request an extension' });
       }
 
-      const extensionRepo = AppDataSource.getRepository(Extension);
-      const extension = extensionRepo.create({
-        assignment,
-        reason,
-        requestedDeadline: new Date(requestedDeadline),
-        status: ExtensionStatus.Pending,
-      });
-      await extensionRepo.save(extension);
+      if (assignment.deadline && requested <= assignment.deadline) {
+        return res.status(400).json({ message: 'Requested deadline must be after your current assignment deadline' });
+      }
 
-      return res.status(201).json({
-        message: 'Extension request submitted and awaiting coordinator approval',
+      const extensionRepo = AppDataSource.getRepository(Extension);
+
+      // Check for an existing pending extension — overwrite it instead of creating a duplicate
+      const pendingExtension = await extensionRepo.findOne({
+        where: { assignment: { id: assignmentId }, status: ExtensionStatus.Pending },
+      });
+
+      let extension: Extension;
+      let isUpdate = false;
+
+      if (pendingExtension) {
+        pendingExtension.reason = reason;
+        pendingExtension.requestedDeadline = requested;
+        extension = await extensionRepo.save(pendingExtension);
+        isUpdate = true;
+      } else {
+        extension = await extensionRepo.save(
+          extensionRepo.create({ assignment, reason, requestedDeadline: requested, status: ExtensionStatus.Pending })
+        );
+      }
+
+      // Notify all coordinators of the paper
+      const coordinators = assignment.round.paper.coordinators ?? [];
+      const paperTitle = assignment.round.paper.title;
+      const roundNumber = assignment.round.roundNumber;
+      const currentDeadline = assignment.deadline?.toISOString() ?? 'N/A';
+
+      await Promise.all(coordinators.map(c =>
+        sendEmail(
+          c,
+          `${isUpdate ? '[Updated] ' : ''}Extension Request from ${user.name}`,
+          `Hello ${c.name},\n\n${user.name} has ${isUpdate ? 'updated their' : 'submitted a new'} deadline extension request.\n\nPaper: ${paperTitle}\nRound: ${roundNumber}\nCurrent deadline: ${currentDeadline}\nRequested deadline: ${requested.toISOString()}\nReason: ${reason}\n\nPlease log in to approve or reject this request.`
+        )
+      ));
+
+      return res.status(isUpdate ? 200 : 201).json({
+        message: isUpdate ? 'Extension request updated' : 'Extension request submitted',
         extensionId: extension.id,
       });
     } catch (err) {

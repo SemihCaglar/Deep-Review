@@ -64,7 +64,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     console.log('✅ Lab created');
   }
 
-  // Reviewer (LabMember) — email receives the test invitation
+  // Reviewer 1 (LabMember) — email receives the test invitation
   const reviewer = await ensureUser(userRepo, {
     create: () => Object.assign(new LabMember(), {
       name: 'Test Reviewer',
@@ -73,12 +73,31 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     password: '123',
   });
 
-  // Add reviewer to lab if not already a member
+  // Reviewer 2 (LabMember) — fresh reviewer for invitation testing
+  const reviewer2 = await ensureUser(userRepo, {
+    create: () => Object.assign(new LabMember(), {
+      name: 'Second Reviewer',
+      email: 'esranurtatoglu24@gmail.com',
+    }),
+    password: '123',
+  });
+
+  // Add both reviewers to lab if not already members
   const labWithMembers = await labRepo.findOne({ where: { id: lab.id }, relations: ['members'] });
-  if (labWithMembers && !labWithMembers.members.find(m => m.id === reviewer.id)) {
-    labWithMembers.members.push(reviewer);
-    await labRepo.save(labWithMembers);
-    console.log('✅ Reviewer added to lab');
+  if (labWithMembers) {
+    let changed = false;
+    if (!labWithMembers.members.find(m => m.id === reviewer.id)) {
+      labWithMembers.members.push(reviewer);
+      changed = true;
+    }
+    if (!labWithMembers.members.find(m => m.id === reviewer2.id)) {
+      labWithMembers.members.push(reviewer2);
+      changed = true;
+    }
+    if (changed) {
+      await labRepo.save(labWithMembers);
+      console.log('✅ Reviewer(s) added to lab');
+    }
   }
 
   // Paper
@@ -113,7 +132,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     console.log('✅ Round created');
   }
 
-  // Assignment (Invited)
+  // Assignment for reviewer 1 (Invited)
   const existingAssignment = await assignRepo.findOne({ where: { round: { id: round.id }, reviewer: { id: reviewer.id } } });
   if (!existingAssignment) {
     const assignment = assignRepo.create({
@@ -123,12 +142,15 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       deadline: round.deadline,
     });
     await assignRepo.save(assignment);
-    console.log('✅ Assignment created (Invited)');
+    console.log('✅ Assignment 1 created (Invited)');
   }
+
+  // Reviewer 2 has no pre-created assignment — coordinator assigns via the UI which also sends the invitation email
 
   console.log(`\n🌱 Seed complete!`);
   console.log(`   Coordinator — email: eraytuzun@cs.bilkent.edu.tr  password: 123`);
-  console.log(`   Reviewer    — email: bilkentcs319@gmail.com        password: 123`);
+  console.log(`   Reviewer 1  — email: bilkentcs319@gmail.com        password: 123`);
+  console.log(`   Reviewer 2  — email: esranurtatoglu24@gmail.com    password: 123`);
   console.log(`   Round ID    — ${round.id}`);
 
   await AppDataSource.destroy();
@@ -165,7 +187,8 @@ async function ensureUser(
 }
 
 if (require.main === module) {
-  runSeed().catch(err => {
+  const reset = process.argv.includes('--reset');
+  runSeed({ reset }).catch(err => {
     console.error(err);
     process.exitCode = 1;
   });

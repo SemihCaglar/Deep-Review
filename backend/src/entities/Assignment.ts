@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, OneToMany, JoinColumn, Unique, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, OneToMany, JoinColumn, CreateDateColumn } from 'typeorm';
 import type { Round } from './Round';
 import type { Summary } from './Summary';
 import type { Rating } from './Rating';
@@ -17,7 +17,6 @@ export enum AssignmentStatus {
 }
 
 @Entity()
-@Unique(['round', 'reviewer'])
 export class Assignment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -32,6 +31,9 @@ export class Assignment {
   @Column({ type: 'datetime', nullable: true })
   deadline: Date | null;
 
+  @Column({ default: false })
+  invitationSent: boolean;
+
   @CreateDateColumn({ type: 'datetime' })
   invitedAt: Date;
 
@@ -44,15 +46,14 @@ export class Assignment {
   @Column({ type: 'text', nullable: true })
   declineReason: string | null;
 
-
   @ManyToOne('Round', 'assignments', { nullable: false, onDelete: 'CASCADE' })
   round: Round;
 
   @ManyToOne('User', 'assignments', { nullable: false, onDelete: 'CASCADE' })
   reviewer: User;
 
-  @OneToOne('Extension', 'assignment', { nullable: true })
-  extension: Extension;
+  @OneToMany('Extension', 'assignment')
+  extensions: Extension[];
 
   @OneToOne('Summary', 'assignment', { nullable: true })
   reviewSummary: Summary;

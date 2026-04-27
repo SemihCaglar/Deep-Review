@@ -1,6 +1,6 @@
 'use client';
 
-rimport React from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, MailQuestion } from 'lucide-react';
 import { ApiError, forgotPasswordRequest } from '@/lib/api';
