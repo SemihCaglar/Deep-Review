@@ -1,0 +1,206 @@
+# Issue #9 Profile and Interests API Test Notes
+## Purpose
+This document records the manual verification steps for the backend implementation of issue #9.
+## Scope
+This issue currently covers:
+- profile update with full name and email
+- topic interests update
+- topic list retrieval for frontend selection
+This issue does not cover:
+- availability schedule
+- password change flow
+- lab editing
+## Environment
+Run the backend with a JWT secret:
+```bash
+cd ~/Team8/backend
+JWT_SECRET=supersecret123 npm run dev
+
+Tested Behavior
+
+1. Create a new test user
+
+curl -X POST http://localhost:3001/api/account/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Profile Test User 2",
+    "email": "profiletest2@example.com",
+    "password": "secret123"
+  }'
+
+Expected:
+
+* Signup submitted and pending approval
+
+2. Approve the test user
+
+curl -X POST http://localhost:3001/api/account/approve/932b87b7-1d78-43a3-a8ea-876da9dc5485 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "note": "Approved for profile test."
+  }'
+
+Expected:
+
+* Signup approved
+
+3. Login and get JWT
+
+curl -X POST http://localhost:3001/api/account/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "profiletest2@example.com",
+    "password": "secret123"
+  }'
+
+Expected:
+
+* Login successful
+* JWT token returned
+
+4. Update profile successfully
+
+curl -X PUT http://localhost:3001/api/account/profile \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MzJiODdiNy0xZDc4LTQzYTMtYThlYS04NzZkYTlkYzU0ODUiLCJlbWFpbCI6InByb2ZpbGV0ZXN0MkBleGFtcGxlLmNvbSIsInJvbGUiOiJMYWJNZW1iZXIiLCJpYXQiOjE3NzY5NzYwMzQsImV4cCI6MTc3NzA2MjQzNH0.tMlzy4xqRAUEOrwbCQM48FUkaqQiZQId82n1CC6zN6o" \
+  -d '{
+    "name": "Ada Lovelace",
+    "email": "ada2@example.com"
+  }'
+
+Expected:
+
+* Profile updated successfully
+
+5. Login with updated email
+
+curl -X POST http://localhost:3001/api/account/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "ada2@example.com",
+    "password": "secret123"
+  }'
+
+Expected:
+
+* Login successful
+
+6. Update profile again and verify continued login
+
+curl -X PUT http://localhost:3001/api/account/profile \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MzJiODdiNy0xZDc4LTQzYTMtYThlYS04NzZkYTlkYzU0ODUiLCJlbWFpbCI6ImFkYTJAZXhhbXBsZS5jb20iLCJyb2xlIjoiTGFiTWVtYmVyIiwiaWF0IjoxNzc2OTc2MTQyLCJleHAiOjE3NzcwNjI1NDJ9.mbTEYwahZH3ow8BZUWB7ur-lrZ_viVTF-KrAdsRoNqM" \
+  -d '{
+    "name": "Ada Lovelace Updated",
+    "email": "ada2updated@example.com"
+  }'
+
+Expected:
+
+* Profile updated successfully
+
+Then verify login with the updated email:
+
+curl -X POST http://localhost:3001/api/account/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "ada2updated@example.com",
+    "password": "secret123"
+  }'
+
+Expected:
+
+* Login successful
+
+7. Duplicate email rejection
+
+Create and approve another user:
+
+curl -X POST http://localhost:3001/api/account/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Duplicate Email User",
+    "email": "duplicateuser@example.com",
+    "password": "secret123"
+  }'
+curl -X POST http://localhost:3001/api/account/approve/a741b533-3534-4319-8d61-0b3295be549a \
+  -H "Content-Type: application/json" \
+  -d '{
+    "note": "Approved for duplicate email test."
+  }'
+
+Then try to update the first user’s email to the already-used one:
+
+curl -X PUT http://localhost:3001/api/account/profile \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5Zjg4ODRkZi1lNzUzLTQwOTktOTNmNi05YmQ3YmQxZmVlNTgiLCJlbWFpbCI6ImFkYUBleGFtcGxlLmNvbSIsInJvbGUiOiJMYWJNZW1iZXIiLCJpYXQiOjE3NzY5NzM2NTMsImV4cCI6MTc3NzA2MDA1M30.s5p0d3fsfn_C-so5vrzYyRJ4oTCDIGMm-iGDqLslOig" \
+  -d '{
+    "name": "Ada Lovelace",
+    "email": "duplicateuser@example.com"
+  }'
+
+Expected:
+
+* Email is already in use
+
+8. Retrieve available topics
+
+curl http://localhost:3001/api/topics
+
+Expected:
+
+* non-empty topic list returned
+* includes seeded topics such as:
+    * Machine Learning
+    * Deep Learning
+    * Other
+
+9. Update interests successfully with a valid topic ID
+
+curl -X PUT http://localhost:3001/api/account/interests \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MzJiODdiNy0xZDc4LTQzYTMtYThlYS04NzZkYTlkYzU0ODUiLCJlbWFpbCI6ImFkYTJ1cGRhdGVkQGV4YW1wbGUuY29tIiwicm9sZSI6IkxhYk1lbWJlciIsImlhdCI6MTc3Njk3NjIxNSwiZXhwIjoxNzc3MDYyNjE1fQ.zD_YVERRmlFcp7VssjU8RK0DnFGHHk3sB8wHrJFU-BQ" \
+  -d '{
+    "topicIds": ["84413bd6-9cde-4e94-a56c-16bcd49fcdf5"]
+  }'
+
+Expected:
+
+* Interests updated successfully
+
+10. Reject invalid topic IDs
+
+curl -X PUT http://localhost:3001/api/account/interests \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MzJiODdiNy0xZDc4LTQzYTMtYThlYS04NzZkYTlkYzU0ODUiLCJlbWFpbCI6ImFkYTJ1cGRhdGVkQGV4YW1wbGUuY29tIiwicm9sZSI6IkxhYk1lbWJlciIsImlhdCI6MTc3Njk3NjIxNSwiZXhwIjoxNzc3MDYyNjE1fQ.zD_YVERRmlFcp7VssjU8RK0DnFGHHk3sB8wHrJFU-BQ" \
+  -d '{
+    "topicIds": ["not-a-real-id"]
+  }'
+
+Expected:
+
+* One or more topicIds are invalid
+
+11. Safe default topics are seeded
+
+cd ~/Team8/backend
+npx ts-node src/seed.ts
+
+Expected:
+
+* database is not destructively reset
+* default topics exist
+* repeated seed runs do not create duplicate topics
+
+Verified Result
+
+The backend implementation for issue #9 is functioning as expected:
+
+* profile update works for full name and email
+* updated email can still be used for login
+* duplicate email validation works
+* topic list retrieval works
+* interests update works with valid topic IDs
+* invalid topic IDs are rejected
+* seeded topic defaults are available for frontend selection
+

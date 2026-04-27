@@ -1,10 +1,13 @@
 import { Request, Response } from 'express';
+import { In } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { LabMember } from '../entities/LabMember';
 import { PasswordResetToken } from '../entities/PasswordResetToken';
-import { ApprovalStatus, User } from '../entities/User';
+import { Topic } from '../entities/Topic';
+import { ApprovalStatus, User, UserRole } from '../entities/User';
 import {
   accountSecurityPolicy,
+  clearLoginLockout,
   createPasswordResetToken,
   hashPasswordResetToken,
   hashPassword,
@@ -13,6 +16,8 @@ import {
   registerSuccessfulLogin,
   verifyPassword,
 } from '../services/accountSecurity';
+import { generateAuthToken } from '../services/tokenService';
+import type { AuthenticatedRequest } from '../types/auth';
 
 export class AccountController {
   static async signUp(req: Request, res: Response) {
@@ -51,6 +56,7 @@ export class AccountController {
       failedLoginWindowStartedAt: null,
       lockedUntil: null,
       lastLoginAt: null,
+      otherInterests: [],
     });
 
     let savedMember: LabMember;
@@ -111,17 +117,67 @@ export class AccountController {
 
     return res.status(200).json({
       message: 'Login successful',
+      token: generateAuthToken(savedUser),
       user: AccountController.serializeAccount(savedUser),
     });
   }
   static async logout(req: Request, res: Response) {
     return res.status(200).json({ message: 'Logout successful' });
   }
-  static async changePassword(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async changePassword(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+    const { currentPassword, newPassword, confirmNewPassword } = req.body ?? {};
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (
+      typeof currentPassword !== 'string' ||
+      typeof newPassword !== 'string' ||
+      typeof confirmNewPassword !== 'string' ||
+      !currentPassword ||
+      !newPassword ||
+      !confirmNewPassword
+    ) {
+      return res
+        .status(400)
+        .json({ message: 'currentPassword, newPassword, and confirmNewPassword are required' });
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      return res.status(400).json({ message: 'New passwords do not match' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const user = await userRepo.findOne({ where: { id: authenticatedUser.id } });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const currentPasswordMatches = await verifyPassword(currentPassword, user.passwordHash);
+
+    if (!currentPasswordMatches) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+
+    const newPasswordMatchesCurrent = await verifyPassword(newPassword, user.passwordHash);
+
+    if (newPasswordMatchesCurrent) {
+      return res.status(400).json({ message: 'New password must be different from current password' });
+    }
+
+    user.passwordHash = await hashPassword(newPassword);
+    clearLoginLockout(user);
+
+    await userRepo.save(user);
+
+    return res.status(200).json({ message: 'Password changed successfully' });
   }
   static async sendPasswordReset(req: Request, res: Response) {
     const { email } = req.body ?? {};
+    let rawResetToken: string | null = null;
 
     if (typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({ message: 'email is required' });
@@ -134,6 +190,7 @@ export class AccountController {
 
     if (user) {
       const resetToken = createPasswordResetToken();
+      rawResetToken = resetToken;
       const token = tokenRepo.create({
         tokenHash: hashPasswordResetToken(resetToken),
         expiresAt: new Date(Date.now() + accountSecurityPolicy.passwordResetTokenTtlMs),
@@ -144,7 +201,7 @@ export class AccountController {
       await tokenRepo.save(token);
     }
 
-    return AccountController.passwordResetRequestAccepted(res);
+    return AccountController.passwordResetRequestAccepted(res, rawResetToken);
   }
   static async resetPassword(req: Request, res: Response) {
     const { token, newPassword } = req.body ?? {};
@@ -172,16 +229,244 @@ export class AccountController {
 
     return res.status(200).json({ message: 'Password reset successful' });
   }
-  static async updateProfile(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async getProfile(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const user = await userRepo.findOne({
+      where: { id: authenticatedUser.id },
+      relations: { interests: true },
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    return res.status(200).json({
+      user: AccountController.serializeAccount(user, { includeInterests: true }),
+    });
   }
-  static async setInterests(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async getPendingSignUps(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!AccountController.isCoordinatorOrAdmin(authenticatedUser)) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const pendingUsers = await userRepo.find({
+      where: { approvalStatus: ApprovalStatus.Pending },
+      order: { createdAt: 'ASC' },
+    });
+
+    return res.status(200).json({
+      users: pendingUsers.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        approvalStatus: user.approvalStatus,
+      })),
+    });
+  }
+  static async getReviewedSignUps(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!AccountController.isCoordinatorOrAdmin(authenticatedUser)) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const reviewedUsers = await userRepo.find({
+      where: [
+        { approvalStatus: ApprovalStatus.Approved, role: UserRole.LabMember },
+        { approvalStatus: ApprovalStatus.Rejected, role: UserRole.LabMember },
+      ],
+      order: { approvalReviewedAt: 'DESC' },
+    });
+
+    return res.status(200).json({
+      users: reviewedUsers.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        approvalStatus: user.approvalStatus,
+        approvalReviewedAt: user.approvalReviewedAt,
+        approvalNote: user.approvalNote,
+      })),
+    });
+  }
+  static async getLabMembers(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const approvedUsers = await userRepo.find({
+      where: { approvalStatus: ApprovalStatus.Approved },
+      order: { name: 'ASC' },
+    });
+
+    return res.status(200).json({
+      users: approvedUsers.map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      })),
+    });
+  }
+  static async updateProfile(req: AuthenticatedRequest, res: Response) {
+    const { name, email } = req.body ?? {};
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ message: 'name is required' });
+    }
+
+    if (typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ message: 'email is required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await userRepo.findOne({ where: { id: authenticatedUser.id } });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (normalizedEmail !== user.email) {
+      const existingUser = await userRepo.findOne({ where: { email: normalizedEmail } });
+
+      if (existingUser && existingUser.id !== user.id) {
+        return res.status(409).json({ message: 'Email is already in use' });
+      }
+    }
+
+    user.name = name.trim();
+    user.email = normalizedEmail;
+
+    try {
+      const savedUser = await userRepo.save(user);
+
+      return res.status(200).json({
+        message: 'Profile updated successfully',
+        user: AccountController.serializeAccount(savedUser),
+      });
+    } catch (error) {
+      if (AccountController.isUniqueConstraintError(error)) {
+        return res.status(409).json({ message: 'Email is already in use' });
+      }
+
+      throw error;
+    }
+  }
+  static async setInterests(req: AuthenticatedRequest, res: Response) {
+    const { topicIds, otherInterests } = req.body ?? {};
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!Array.isArray(topicIds) || !topicIds.every(topicId => typeof topicId === 'string' && topicId.trim())) {
+      return res.status(400).json({ message: 'topicIds must be an array of strings' });
+    }
+
+    if (
+      otherInterests !== undefined &&
+      !Array.isArray(otherInterests)
+    ) {
+      return res.status(400).json({ message: 'otherInterests must be an array of strings' });
+    }
+
+    const normalizedTopicIds = [...new Set(topicIds.map(topicId => topicId.trim()))];
+    const normalizedOtherInterests = Array.isArray(otherInterests)
+      ? [...new Set(
+          otherInterests.map(otherInterest =>
+            typeof otherInterest === 'string' ? otherInterest.trim() : '',
+          ),
+        )].filter(Boolean)
+      : [];
+
+    if (
+      Array.isArray(otherInterests) &&
+      otherInterests.some(otherInterest => typeof otherInterest !== 'string' || !otherInterest.trim())
+    ) {
+      return res.status(400).json({ message: 'otherInterests must be an array of strings' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const topicRepo = AppDataSource.getRepository(Topic);
+    const user = await userRepo.findOne({
+      where: { id: authenticatedUser.id },
+      relations: { interests: true },
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const topics = normalizedTopicIds.length
+      ? await topicRepo.find({
+          where: { id: In(normalizedTopicIds) },
+        })
+      : [];
+
+    if (topics.length !== normalizedTopicIds.length) {
+      return res.status(400).json({ message: 'One or more topicIds are invalid' });
+    }
+
+    const hasOtherTopic = topics.some(topic => topic.name === 'Other');
+
+    if (hasOtherTopic && normalizedOtherInterests.length === 0) {
+      return res.status(400).json({ message: 'otherInterests is required when Other is selected' });
+    }
+
+    user.interests = topics;
+    user.otherInterests = hasOtherTopic ? normalizedOtherInterests : [];
+
+    const savedUser = await userRepo.save(user);
+
+    return res.status(200).json({
+      message: 'Interests updated successfully',
+      user: AccountController.serializeAccount(savedUser, { includeInterests: true }),
+    });
   }
   static async setBlackoutPeriods(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
-  static async approveSignUp(req: Request, res: Response) {
+  static async approveSignUp(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!AccountController.isCoordinatorOrAdmin(authenticatedUser)) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
     const id = AccountController.parseRouteId(req.params.id);
 
     if (!id) {
@@ -212,7 +497,17 @@ export class AccountController {
       user: AccountController.serializeAccount(savedMember),
     });
   }
-  static async rejectSignUp(req: Request, res: Response) {
+  static async rejectSignUp(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!AccountController.isCoordinatorOrAdmin(authenticatedUser)) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
     const id = AccountController.parseRouteId(req.params.id);
 
     if (!id) {
@@ -262,8 +557,12 @@ export class AccountController {
     return trimmedId ? trimmedId : null;
   }
 
-  private static serializeAccount(member: User) {
-    return {
+  private static isCoordinatorOrAdmin(user: User) {
+    return user.role === UserRole.Coordinator || user.role === UserRole.Admin;
+  }
+
+  private static serializeAccount(member: User, options: { includeInterests?: boolean } = {}) {
+    const account = {
       id: member.id,
       name: member.name,
       email: member.email,
@@ -273,17 +572,37 @@ export class AccountController {
       approvalNote: member.approvalNote,
       createdAt: member.createdAt,
       updatedAt: member.updatedAt,
+      otherInterests: member.otherInterests ?? [],
     };
+
+    if (options.includeInterests) {
+      return {
+        ...account,
+        interests: (member.interests ?? []).map(topic => ({
+          id: topic.id,
+          name: topic.name,
+        })),
+      };
+    }
+
+    return account;
   }
 
   private static authenticationFailed(res: Response) {
     return res.status(401).json({ message: 'Invalid email or password' });
   }
 
-  private static passwordResetRequestAccepted(res: Response) {
-    return res.status(200).json({
+  private static passwordResetRequestAccepted(res: Response, resetToken: string | null = null) {
+    const responseBody: { message: string; resetToken?: string } = {
       message: 'If an account exists for that email, a password reset link will be sent',
-    });
+    };
+
+    if (process.env.NODE_ENV !== 'production' && resetToken) {
+      console.log(`[password-reset] Development reset token: ${resetToken}`);
+      responseBody.resetToken = resetToken;
+    }
+
+    return res.status(200).json(responseBody);
   }
 
   private static isUniqueConstraintError(error: unknown): boolean {

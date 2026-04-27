@@ -1,49 +1,95 @@
 import 'reflect-metadata';
 import { AppDataSource } from './data-source';
-import { LabMember } from './entities/LabMember';
 import { Coordinator } from './entities/Coordinator';
+import { Lab } from './entities/Lab';
+import { LabMember } from './entities/LabMember';
 import { Paper, PaperStatus } from './entities/Paper';
 import { Round, RoundStatus } from './entities/Round';
 import { Assignment, AssignmentStatus } from './entities/Assignment';
-import { ApprovalStatus } from './entities/User';
+import { Topic } from './entities/Topic';
+import { ApprovalStatus, User } from './entities/User';
 import { hashPassword } from './services/accountSecurity';
 
-async function seed() {
-    await AppDataSource.initialize();
-    await AppDataSource.synchronize(true); // Drops all tables and cleanly recreates them
-    console.log('✅ DB Connected and Reset for Seeding');
+const DEFAULT_TOPIC_NAMES = [
+  'Machine Learning',
+  'Deep Learning',
+  'Natural Language Processing',
+  'Computer Vision',
+  'Data Mining',
+  'Software Engineering',
+  'Human-Computer Interaction',
+  'Distributed Systems',
+  'Security',
+  'Databases',
+  'Other',
+];
 
-    const memberRepo = AppDataSource.getRepository(LabMember);
-    const paperRepo = AppDataSource.getRepository(Paper);
-    const assignRepo = AppDataSource.getRepository(Assignment);
+export async function runSeed(options: { reset?: boolean } = {}) {
+  const { reset = false } = options;
 
-    // 2. Create standard users mimicking Mock Data Context
-    const user1 = Object.assign(new Coordinator(), {
-        name: 'Semih User',
-        email: 'semih@builder.app',
-        passwordHash: await hashPassword('123'),
-        approvalStatus: ApprovalStatus.Approved,
-        approvalReviewedAt: new Date(),
-    });
-    await memberRepo.save(user1);
+  await AppDataSource.initialize();
 
-    const user2 = Object.assign(new LabMember(), {
-        name: 'Emily Chen',
-        email: 'emily@builder.app',
-        passwordHash: await hashPassword('123'),
-        approvalStatus: ApprovalStatus.Approved,
-        approvalReviewedAt: new Date(),
-    });
-    await memberRepo.save(user2);
+  if (reset) {
+    await AppDataSource.synchronize(true);
+    console.log('✅ DB Reset and Ready for Seeding');
+  } else {
+    console.log('✅ DB Connected and Ready for Safe Seeding');
+  }
 
-    // 3. Create Papers
-    const p1 = Object.assign(new Paper(), {
-        title: 'Deep Learning for BILSEN Automation',
-        abstractText: 'Exploring autonomous LLMs for paper review grading.',
-        creationTime: new Date(),
-        targetVenue: 'CS319 Symposium',
-        status: PaperStatus.HumanReview,
-        coordinator: user1,
+  const userRepo = AppDataSource.getRepository<User>('User');
+  const topicRepo = AppDataSource.getRepository(Topic);
+  const labRepo = AppDataSource.getRepository(Lab);
+  const paperRepo = AppDataSource.getRepository(Paper);
+  const roundRepo = AppDataSource.getRepository(Round);
+  const assignRepo = AppDataSource.getRepository(Assignment);
+
+  await ensureDefaultTopics(topicRepo);
+
+  // Coordinator
+  const coordinator = await ensureUser(userRepo, {
+    create: () => Object.assign(new Coordinator(), {
+      name: 'Eray Tüzün',
+      email: 'eraytuzun@cs.bilkent.edu.tr',
+    }),
+    password: '123',
+  }) as Coordinator;
+
+  // Lab
+  let lab = await labRepo.findOne({ where: { name: 'BILSEN Lab' }, relations: ['coordinator', 'members'] });
+  if (!lab) {
+    lab = labRepo.create({ name: 'BILSEN Lab', description: 'Test lab for development' });
+    lab.coordinator = coordinator;
+    lab.members = [coordinator];
+    await labRepo.save(lab);
+    console.log('✅ Lab created');
+  }
+
+  // Reviewer (LabMember) — email receives the test invitation
+  const reviewer = await ensureUser(userRepo, {
+    create: () => Object.assign(new LabMember(), {
+      name: 'Test Reviewer',
+      email: 'bilkentcs319@gmail.com',
+    }),
+    password: '123',
+  });
+
+  // Add reviewer to lab if not already a member
+  const labWithMembers = await labRepo.findOne({ where: { id: lab.id }, relations: ['members'] });
+  if (labWithMembers && !labWithMembers.members.find(m => m.id === reviewer.id)) {
+    labWithMembers.members.push(reviewer);
+    await labRepo.save(labWithMembers);
+    console.log('✅ Reviewer added to lab');
+  }
+
+  // Paper
+  let paper = await paperRepo.findOne({ where: { title: 'Test Paper for Review' }, relations: ['coordinators', 'labs', 'authors'] });
+  if (!paper) {
+    paper = paperRepo.create({
+      title: 'Test Paper for Review',
+      abstractText: 'This is a test paper for development purposes.',
+      creationTime: new Date(),
+      targetVenue: 'ICSE 2026',
+      status: PaperStatus.HumanReview,
     });
     await paperRepo.save(p1);
 
@@ -54,67 +100,82 @@ async function seed() {
         targetVenue: 'Frontend Conf 2026',
         status: PaperStatus.Draft,
         coordinator: user1,
+    paper.coordinators = [coordinator];
+    paper.labs = [lab];
+    paper.authors = [];
+    await paperRepo.save(paper);
+    console.log('✅ Paper created');
+  }
+
+  // Round
+  let round = await roundRepo.findOne({ where: { paper: { id: paper.id }, roundNumber: 1 } });
+  if (!round) {
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + 14);
+    round = roundRepo.create({
+      paper,
+      roundNumber: 1,
+      deadline,
+      status: RoundStatus.Open,
     });
-    await paperRepo.save(p2);
+    await roundRepo.save(round);
+    console.log('✅ Round created');
+  }
 
-    // The coordinator is also an author on every paper in BILSEN.
-    // user1 (coordinator) is linked as author of both papers.
-    // user2 is linked as author of p2 as well.
-    user1.writtenPapers = [p1, p2];
-    await memberRepo.save(user1);
-
-    user2.writtenPapers = [p2];
-    await memberRepo.save(user2);
-
-    // 4. Create Rounds & Assignments
-    const roundRepo = AppDataSource.getRepository(Round);
-
-    const r1 = Object.assign(new Round(), {
-        paper: p1,
-        roundNumber: 1,
-        deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 days
-        status: RoundStatus.Open,
-        startedAt: new Date()
+  // Assignment (Invited)
+  const existingAssignment = await assignRepo.findOne({ where: { round: { id: round.id }, reviewer: { id: reviewer.id } } });
+  if (!existingAssignment) {
+    const assignment = assignRepo.create({
+      round,
+      reviewer,
+      status: AssignmentStatus.Invited,
+      deadline: round.deadline,
     });
-    await roundRepo.save(r1);
+    await assignRepo.save(assignment);
+    console.log('✅ Assignment created (Invited)');
+  }
 
-    const r2 = Object.assign(new Round(), {
-        paper: p2,
-        roundNumber: 1,
-        deadline: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // +14 days
-        status: RoundStatus.Open,
-        startedAt: new Date()
-    });
-    await roundRepo.save(r2);
+  console.log(`\n🌱 Seed complete!`);
+  console.log(`   Coordinator — email: eraytuzun@cs.bilkent.edu.tr  password: 123`);
+  console.log(`   Reviewer    — email: bilkentcs319@gmail.com        password: 123`);
+  console.log(`   Round ID    — ${round.id}`);
 
-    const a1 = Object.assign(new Assignment(), {
-        round: r1,
-        reviewer: user1,
-        status: AssignmentStatus.Invited,
-        invitedAt: new Date()
-    });
-    await assignRepo.save(a1);
-
-    const a2 = Object.assign(new Assignment(), {
-        round: r1,
-        reviewer: user2,
-        status: AssignmentStatus.Accepted,
-        invitedAt: new Date(),
-        acceptedAt: new Date()
-    });
-    await assignRepo.save(a2);
-
-    const a3 = Object.assign(new Assignment(), {
-        round: r2,
-        reviewer: user1,
-        status: AssignmentStatus.Declined,
-        invitedAt: new Date(),
-        declineReason: 'Conflict of interest.'
-    });
-    await assignRepo.save(a3);
-
-    console.log(`✅ successfully seeded database! user.id='${user1.id}'`);
-    await AppDataSource.destroy();
+  await AppDataSource.destroy();
 }
 
-seed().catch(err => console.error(err));
+async function ensureDefaultTopics(topicRepo: ReturnType<typeof AppDataSource.getRepository<Topic>>) {
+  for (const topicName of DEFAULT_TOPIC_NAMES) {
+    const existing = await topicRepo.findOne({ where: { name: topicName } });
+    if (!existing) {
+      await topicRepo.save(topicRepo.create({ name: topicName }));
+    }
+  }
+}
+
+async function ensureUser(
+  userRepo: ReturnType<typeof AppDataSource.getRepository<User>>,
+  options: { create: () => User; password: string },
+): Promise<User> {
+  const draft = options.create();
+  const email = draft.email.trim().toLowerCase();
+  const existing = await userRepo.findOne({ where: { email } });
+  if (existing) return existing;
+
+  draft.email = email;
+  draft.passwordHash = await hashPassword(options.password);
+  draft.approvalStatus = ApprovalStatus.Approved;
+  draft.approvalReviewedAt = new Date();
+  draft.approvalNote = null;
+  draft.failedLogins = 0;
+  draft.failedLoginWindowStartedAt = null;
+  draft.lockedUntil = null;
+  draft.lastLoginAt = null;
+  return userRepo.save(draft);
+}
+
+if (require.main === module) {
+  runSeed().catch(err => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}

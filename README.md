@@ -27,6 +27,10 @@ A full-stack system for managing academic paper reviews, featuring AI-assisted r
 cd backend
 npm install
 
+# Setup backend environment variables
+cp .env.example .env
+# Important: Open backend/.env and ensure JWT_SECRET is set
+
 # Install frontend dependencies
 cd ../frontend
 npm install

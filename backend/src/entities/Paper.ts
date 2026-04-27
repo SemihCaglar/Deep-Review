@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, JoinTable, OneToMany } from 'typeorm';
 import type { Coordinator } from './Coordinator';
 import type { Topic } from './Topic';
 import type { Round } from './Round';
@@ -44,8 +44,9 @@ export class Paper {
   @ManyToMany('User', 'writtenPapers')
   authors: User[];
 
-  @ManyToOne('Coordinator', 'coordinatedPapers')
-  coordinator: Coordinator;
+  @ManyToMany('Coordinator', 'coordinatedPapers')
+  @JoinTable()
+  coordinators: Coordinator[];
 
   @ManyToMany('Topic')
   @JoinTable()

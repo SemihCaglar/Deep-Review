@@ -1,9 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, JoinColumn, Unique, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, OneToMany, JoinColumn, Unique, CreateDateColumn } from 'typeorm';
 import type { Round } from './Round';
 import type { Summary } from './Summary';
 import type { Rating } from './Rating';
 import type { Extension } from './Extension';
 import type { User } from './User';
+import type { DeclineRequest } from './DeclineRequest';
 
 export enum AssignmentStatus {
   Invited = 'Invited',
@@ -11,7 +12,8 @@ export enum AssignmentStatus {
   Declined = 'Declined',
   Overdue = 'Overdue',
   Completed = 'Completed',
-  Reassigned = 'Reassigned'
+  Reassigned = 'Reassigned',
+  Cancelled = 'Cancelled'
 }
 
 @Entity()
@@ -57,4 +59,7 @@ export class Assignment {
 
   @OneToOne('Rating', 'assignment', { nullable: true })
   rating: Rating;
+
+  @OneToMany('DeclineRequest', 'assignment')
+  declineRequests: DeclineRequest[];
 }
