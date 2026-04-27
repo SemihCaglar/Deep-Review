@@ -32,6 +32,8 @@
 - A pending extension does not require changing `Assignment.status`; the assignment can remain `Accepted` while one or more extension requests are pending.
 - When a coordinator approves an extension, the approved deadline should update the corresponding `Assignment.deadline`.
 - Changing an individual assignment deadline must not modify the parent `Round.deadline`.
+- Later Issue #27-28 workflow decisions intentionally use `Assignment.status = PendingExtension` while a request is waiting for coordinator action; that newer workflow note takes precedence over this model-only assumption.
+- Creating an extension request should be atomic: the `Assignment`, `Extension`, and compatibility `ReviewerResponse` updates should be committed together or rolled back together.
 
 ## Feedback assumptions
 - `ReviewFeedback` stores submitted feedback/rating details for an `Assignment`.

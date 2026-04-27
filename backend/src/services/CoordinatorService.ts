@@ -54,7 +54,6 @@ export class CoordinatorService {
       if (!isApproved) {
         assignment.acceptedAt = assignment.acceptedAt ?? new Date();
         assignment.declineReason = null;
-        assignment.acceptedAt = assignment.acceptedAt ?? new Date();
       }
 
       const savedAssignment = await manager.getRepository(Assignment).save(assignment);

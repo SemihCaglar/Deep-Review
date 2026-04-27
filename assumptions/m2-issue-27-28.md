@@ -19,6 +19,7 @@
 - Reviewer extension requests must include a non-empty reason.
 - Each extension request is stored as a separate `Extension` row linked to one `Assignment`.
 - The current reviewer-specific working deadline is represented by `Assignment.deadline`. In requirement wording, this acts as the assignment's "current deadline".
+- Creating a reviewer extension request is atomic: the assignment state, extension row, and compatibility response mirror are saved inside one transaction.
 
 ## Coordinator deadline decision assumptions
 - The reviewer may propose a deadline through the extension request, but the final approved extension deadline is chosen by the coordinator.
@@ -42,10 +43,12 @@
 - Coordinator processing actions are lab-scoped.
 - The acting user must be the coordinator of the same `Lab` that owns the assignment through the paper-lab relationship.
 - A non-coordinator user in the same lab is not allowed to process decline or extension requests.
+- Reviewer actions derive the reviewer id only from the authenticated user or explicit `userId`; `coordinatorId` is parsed only by coordinator controllers.
 
 ## API and compatibility assumptions
 - Canonical coordinator-processing endpoints live under `/assignments/:id/process-decline` and `/assignments/:id/process-extension`.
 - Compatibility routes under `/responses/...` may delegate to the same coordinator-processing logic, but they do not change the source-of-truth model.
+- Compatibility coordinator-processing routes under `/responses/...` are legacy aliases and should use the same `CoordinatorService` policy as the canonical assignment routes.
 - The current schema uses UUID identifiers, so `extensionId` is treated as a string in the backend implementation.
 
 ## Documentation precedence
