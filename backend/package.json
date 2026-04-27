@@ -13,12 +13,12 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^18.19.130"
   },
   "dependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/jsonwebtoken": "^9.0.10",
     "@types/nodemailer": "^8.0.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",

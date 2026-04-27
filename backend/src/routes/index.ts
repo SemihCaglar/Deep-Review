@@ -57,7 +57,7 @@ router.delete('/assignments/:id', authenticateRequest, AssignmentController.canc
 router.put('/assignments/:id/deadline', authenticateRequest, AssignmentController.updateAssignmentDeadline);
 
 // ==== PAPER ROUTES ====
-router.post('/papers', PaperController.registerPaper);
+router.post('/papers', authenticateRequest, PaperController.registerPaper);
 router.put('/papers/:id/topics', PaperController.setTopics);
 router.post('/papers/:id/manuscript', PaperController.uploadManuscript);
 router.post('/papers/:id/parents', PaperController.linkParentPapers);

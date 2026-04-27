@@ -199,6 +199,22 @@ export function rejectSignupRequest(id: string) {
   });
 }
 
+export type RegisterPaperPayload = {
+  title: string;
+  abstractText: string;
+  targetVenue: string;
+  topics: string[];
+  authors?: string[];
+  overleafLink?: string;
+};
+
+export function registerPaperRequest(payload: RegisterPaperPayload) {
+  return apiRequest<{ message: string; paper: any }>('/papers', {
+    method: 'POST',
+    body: payload,
+  });
+}
+
 function buildUrl(path: string) {
   if (/^https?:\/\//.test(path)) {
     return path;

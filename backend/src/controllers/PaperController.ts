@@ -3,16 +3,19 @@ import { AppDataSource } from '../data-source';
 import { Paper } from '../entities/Paper';
 import { PaperService } from '../services/PaperService';
 import { RegisterPaperDto } from '../dtos/PaperDto';
+import { AuthenticatedRequest } from '../types/auth';
 
 export class PaperController {
-  static async registerPaper(req: Request, res: Response) {
+  static async registerPaper(req: AuthenticatedRequest, res: Response) {
     try {
       const dto = req.body as RegisterPaperDto;
-      
-      // We leave authorId undefined for now until your teammate completes JWT.
-      const authorId = undefined; // e.g. req.user?.id
+      const creator = req.user;
 
-      const paper = await PaperService.registerPaper(dto, authorId);
+      if (!creator) {
+          return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      const paper = await PaperService.registerPaper(dto, creator);
 
       return res.status(201).json({
         message: 'Paper successfully saved as Draft',
