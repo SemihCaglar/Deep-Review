@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn, ManyToMany, JoinTable, OneToMany } from 'typeorm';
 import type { Coordinator } from './Coordinator';
 import type { Paper } from './Paper';
+import type { ReviewerResponse } from './ReviewerResponse';
 import type { User } from './User';
 
 @Entity()
@@ -25,6 +26,9 @@ export class Lab {
   @ManyToMany('User', 'labs')
   @JoinTable()
   members: User[];
+
+  @OneToMany('ReviewerResponse', 'lab')
+  reviewerResponses: ReviewerResponse[];
 
   @CreateDateColumn({ type: 'datetime' })
   createdAt: Date;

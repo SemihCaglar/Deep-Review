@@ -1,14 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, OneToMany, JoinColumn, CreateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToOne, OneToMany, CreateDateColumn } from 'typeorm';
 import type { Round } from './Round';
 import type { Summary } from './Summary';
 import type { Rating } from './Rating';
 import type { Extension } from './Extension';
 import type { User } from './User';
 import type { DeclineRequest } from './DeclineRequest';
+import type { ReviewFeedback } from './ReviewFeedback';
+import type { ReviewerResponse } from './ReviewerResponse';
 
 export enum AssignmentStatus {
   Invited = 'Invited',
   Accepted = 'Accepted',
+  PendingExtension = 'PendingExtension',
+  PendingDecline = 'PendingDecline',
   Declined = 'Declined',
   Overdue = 'Overdue',
   Completed = 'Completed',
@@ -60,6 +64,12 @@ export class Assignment {
 
   @OneToOne('Rating', 'assignment', { nullable: true })
   rating: Rating;
+
+  @OneToOne('ReviewFeedback', 'assignment', { nullable: true })
+  feedback: ReviewFeedback | null;
+
+  @OneToOne('ReviewerResponse', 'assignment', { nullable: true })
+  response: ReviewerResponse | null;
 
   @OneToMany('DeclineRequest', 'assignment')
   declineRequests: DeclineRequest[];
