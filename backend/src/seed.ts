@@ -109,10 +109,11 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       creationTime: new Date(),
       targetVenue: 'ICSE 2026',
       status: PaperStatus.HumanReview,
+      coordinators: [coordinator],
+      labs: [lab],
+      authors: [],
     });
-    paper.coordinators = [coordinator];
-    paper.labs = [lab];
-    paper.authors = [];
+
     await paperRepo.save(paper);
     console.log('✅ Paper created');
   }

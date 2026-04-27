@@ -3,10 +3,26 @@ import { AppDataSource } from '../data-source';
 import { Paper } from '../entities/Paper';
 import { UserRole } from '../entities/User';
 import type { AuthenticatedRequest } from '../types/auth';
+import { PaperService } from '../services/PaperService';
+import { RegisterPaperDto } from '../dtos/PaperDto';
 
 export class PaperController {
   static async registerPaper(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    try {
+      const dto = req.body as RegisterPaperDto;
+      
+      // We leave authorId undefined for now until your teammate completes JWT.
+      const authorId = undefined; // e.g. req.user?.id
+
+      const paper = await PaperService.registerPaper(dto, authorId);
+
+      return res.status(201).json({
+        message: 'Paper successfully saved as Draft',
+        paper
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    }
   }
   static async setTopics(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });

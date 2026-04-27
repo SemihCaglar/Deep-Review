@@ -7,7 +7,6 @@ import type { Lab } from './Lab';
 
 export enum PaperStatus {
   Draft = 'Draft',
-  Registered = 'Registered',
   HumanReview = 'HumanReview',
   AIReview = 'AIReview',
   Completed = 'Completed',
