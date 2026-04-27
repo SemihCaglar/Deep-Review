@@ -13,6 +13,8 @@ import type { Assignment } from './Assignment';
 import type { BlackoutPeriod } from './BlackoutPeriod';
 import type { EmailNotification } from './EmailNotification';
 import type { Paper } from './Paper';
+import type { ReviewFeedback } from './ReviewFeedback';
+import type { ReviewerResponse } from './ReviewerResponse';
 import type { Topic } from './Topic';
 import type { Lab } from './Lab';
 
@@ -93,6 +95,12 @@ export abstract class User {
 
   @OneToMany('Assignment', 'reviewer')
   assignments: Assignment[];
+
+  @OneToMany('ReviewerResponse', 'reviewer')
+  reviewerResponses: ReviewerResponse[];
+
+  @OneToMany('ReviewFeedback', 'author')
+  reviewFeedbacks: ReviewFeedback[];
 
   @OneToMany('BlackoutPeriod', 'member', { cascade: true })
   blackoutPeriods: BlackoutPeriod[];
