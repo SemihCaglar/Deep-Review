@@ -91,6 +91,15 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       targetVenue: 'ICSE 2026',
       status: PaperStatus.HumanReview,
     });
+    await paperRepo.save(p1);
+
+    const p2 = Object.assign(new Paper(), {
+        title: 'React Next.js Component Scaling',
+        abstractText: 'A comprehensive review of monorepos.',
+        creationTime: new Date(),
+        targetVenue: 'Frontend Conf 2026',
+        status: PaperStatus.Draft,
+        coordinator: user1,
     paper.coordinators = [coordinator];
     paper.labs = [lab];
     paper.authors = [];
