@@ -51,6 +51,7 @@ router.get('/ai/checklist', AIReviewController.getChecklist);
 router.post('/ai/validate', AIReviewController.validateAIOutput);
 
 // ==== ASSIGNMENT ROUTES ====
+router.get('/assignments/my', authenticateRequest, AssignmentController.getMyAssignments);
 router.post('/assignments', authenticateRequest, AssignmentController.assignReviewers);
 router.post('/assignments/invite', authenticateRequest, AssignmentController.sendInvitations);
 router.post('/assignments/remind', authenticateRequest, AssignmentController.sendReminders);
@@ -60,6 +61,7 @@ router.patch('/assignments/:id/process-decline', authenticateRequest, Coordinato
 router.patch('/assignments/:id/process-extension', authenticateRequest, CoordinatorController.processExtensionRequest);
 
 // ==== PAPER ROUTES ====
+router.get('/papers/my-coordinated', authenticateRequest, PaperController.getMyCoordinatedPapers);
 router.post('/papers', PaperController.registerPaper);
 router.put('/papers/:id/topics', PaperController.setTopics);
 router.post('/papers/:id/manuscript', PaperController.uploadManuscript);
@@ -87,7 +89,6 @@ router.post('/responses/:id/extension-request', authenticateRequest, ReviewerRes
 router.post('/responses/:id/process-decline', authenticateRequest, ReviewerResponseController.processDeclineRequest);
 router.post('/responses/:id/process-extension', authenticateRequest, ReviewerResponseController.processExtensionRequest);
 router.post('/responses/invitation', authenticateRequest, ReviewerResponseController.respondToInvitation);
-router.post('/responses/decline', authenticateRequest, ReviewerResponseController.requestDecline);
 router.post('/responses/extension', authenticateRequest, ReviewerResponseController.requestDeadlineExtension);
 // Legacy aliases for clients that still submit assignmentId/responseId in the body.
 router.post('/responses/process-decline', authenticateRequest, ReviewerResponseController.processDeclineRequest);
@@ -96,9 +97,10 @@ router.post('/responses/summary', authenticateRequest, ReviewerResponseControlle
 router.post('/responses/complete', authenticateRequest, ReviewerResponseController.completeReview);
 
 // ==== ROUND ROUTES ====
+router.get('/papers/:id/rounds', authenticateRequest, RoundController.getRoundsWithAssignments);
 router.post('/rounds', RoundController.createReviewRound);
 router.put('/rounds/:id/deadline', RoundController.editRoundDeadline);
-router.get('/rounds/:id/suggest', RoundController.suggestReviewers);
+router.get('/rounds/:id/suggest', authenticateRequest, RoundController.suggestReviewers);
 router.post('/rounds/:id/propose', RoundController.addProposeReviewer);
 router.get('/rounds/:id/propose', RoundController.getProposeReviewers);
 router.get('/rounds/:id/status', RoundController.trackReviewStatus);

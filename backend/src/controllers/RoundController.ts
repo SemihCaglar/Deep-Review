@@ -4,6 +4,9 @@ import { Round, RoundStatus } from '../entities/Round';
 import { Paper } from '../entities/Paper';
 import { User, UserRole } from '../entities/User';
 import { AssignmentStatus } from '../entities/Assignment';
+import { DeclineRequestStatus } from '../entities/DeclineRequest';
+import { ExtensionStatus } from '../entities/Extension';
+import type { AuthenticatedRequest } from '../types/auth';
 
 export class RoundController {
   static async createReviewRound(req: Request, res: Response) {
@@ -95,12 +98,14 @@ export class RoundController {
       const round = await roundRepo.findOne({
         where: { id: id as string },
         relations: [
-          'paper', 
-          'paper.authors', 
-          'paper.labs', 
-          'paper.rounds', 
-          'paper.rounds.assignments', 
-          'paper.rounds.assignments.reviewer'
+          'paper',
+          'paper.authors',
+          'paper.labs',
+          'paper.rounds',
+          'paper.rounds.assignments',
+          'paper.rounds.assignments.reviewer',
+          'assignments',
+          'assignments.reviewer',
         ]
       });
 
@@ -118,7 +123,8 @@ export class RoundController {
       let suggestions = [];
 
       for (const user of candidates) {
-        if (user.role === UserRole.Admin) continue;
+        // Admins and Coordinators cannot be reviewers
+        if (user.role === UserRole.Admin || user.role === UserRole.Coordinator) continue;
 
         // Enforce Intra-Lab boundaries
         const userLabIds = user.labs?.map(l => l.id) || [];
@@ -128,7 +134,13 @@ export class RoundController {
         // Hard COI: Author
         if (authorIds.includes(user.id)) continue;
 
-        // Rule #8: Submitted in previous round
+        // Already has an active (non-Cancelled) assignment in the current round
+        const hasActiveAssignment = round.assignments?.some(
+          a => a.reviewer.id === user.id && a.status !== AssignmentStatus.Cancelled
+        );
+        if (hasActiveAssignment) continue;
+
+        // Rule #8: Completed a review in a previous round → permanently ineligible for this paper
         let hasSubmittedPrior = false;
         let didNotSubmitPrior = false;
 
@@ -229,6 +241,59 @@ export class RoundController {
       return res.status(500).json({ message: 'Internal server error' });
     }
   }
+  static async getRoundsWithAssignments(req: AuthenticatedRequest, res: Response) {
+    try {
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      }
+
+      const paperId = req.params.id as string;
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id: paperId },
+        relations: ['coordinators'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
+      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const rounds = await roundRepo.find({
+        where: { paper: { id: paperId } },
+        relations: [
+          'assignments',
+          'assignments.reviewer',
+          'assignments.declineRequests',
+          'assignments.extensions',
+        ],
+        order: { roundNumber: 'ASC' },
+      });
+
+      const formatted = rounds.map(round => ({
+        id: round.id,
+        roundNumber: round.roundNumber,
+        deadline: round.deadline,
+        status: round.status,
+        assignments: (round.assignments ?? []).map(a => ({
+          id: a.id,
+          status: a.status,
+          deadline: a.deadline,
+          invitationSent: a.invitationSent,
+          reviewer: { id: a.reviewer.id, name: a.reviewer.name, email: a.reviewer.email },
+          pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
+          pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
+        })),
+      }));
+
+      return res.status(200).json(formatted);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
   static async trackReviewStatus(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
