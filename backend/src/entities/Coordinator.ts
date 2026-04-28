@@ -1,4 +1,4 @@
-import { ChildEntity, OneToMany, OneToOne } from 'typeorm';
+import { ChildEntity, ManyToMany, OneToOne } from 'typeorm';
 import { User, UserRole } from './User';
 import type { Paper } from './Paper';
 import type { Lab } from './Lab';
@@ -10,7 +10,7 @@ export class Coordinator extends User {
     this.role = UserRole.Coordinator;
   }
 
-  @OneToMany('Paper', 'coordinator')
+  @ManyToMany('Paper', 'coordinators')
   coordinatedPapers: Paper[];
 
   @OneToOne('Lab', 'coordinator')

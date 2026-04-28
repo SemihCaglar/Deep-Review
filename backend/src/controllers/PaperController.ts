@@ -7,6 +7,8 @@ import { UserRole } from '../entities/User';
 import { LocalAdmin } from '../entities/LocalAdmin';
 import type { AuthenticatedRequest } from '../types/auth';
 import { In } from 'typeorm';
+import { PaperService } from '../services/PaperService';
+import { RegisterPaperDto } from '../dtos/PaperDto';
 
 /** Safely extracts a single string from a query param (which Express types as string | string[]). */
 function queryString(value: unknown): string | undefined {
@@ -17,7 +19,21 @@ function queryString(value: unknown): string | undefined {
 
 export class PaperController {
   static async registerPaper(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    try {
+      const dto = req.body as RegisterPaperDto;
+      
+      // We leave authorId undefined for now until your teammate completes JWT.
+      const authorId = undefined; // e.g. req.user?.id
+
+      const paper = await PaperService.registerPaper(dto, authorId);
+
+      return res.status(201).json({
+        message: 'Paper successfully saved as Draft',
+        paper
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message || 'Internal Server Error' });
+    }
   }
   static async setTopics(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
@@ -64,7 +80,7 @@ export class PaperController {
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
       // Access control: direct coordinator, lab coordinator, or author only
-      const isExplicitCoordinator = paper.coordinator?.id === userId;
+      const isExplicitCoordinator = paper.coordinators?.some(c => c.id === userId) ?? false;
       const isLabCoordinator = paper.labs?.some(lab => lab.coordinator?.id === userId) ?? false;
       const isAuthor = paper.authors?.some(a => a.id === userId) ?? false;
       if (!isExplicitCoordinator && !isLabCoordinator && !isAuthor) {
@@ -139,7 +155,7 @@ export class PaperController {
 
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isExplicitCoordinator = paper.coordinator?.id === userId;
+      const isExplicitCoordinator = paper.coordinators?.some(c => c.id === userId) ?? false;
       const isLabCoordinator = paper.labs?.some(lab => lab.coordinator?.id === userId) ?? false;
       const isAuthor = paper.authors?.some(a => a.id === userId) ?? false;
       const isReviewer =
@@ -179,11 +195,11 @@ export class PaperController {
                 submittedAt: assignment.reviewSummary.submittedAt,
               }
               : null,
-            extension: assignment.extension
+            extension: assignment.extensions?.[0]
               ? {
-                requestedDeadline: assignment.extension.requestedDeadline,
-                approvedDeadline: assignment.extension.approvedDeadline,
-                status: assignment.extension.status,
+                requestedDeadline: assignment.extensions[0].requestedDeadline,
+                approvedDeadline: assignment.extensions[0].approvedDeadline,
+                status: assignment.extensions[0].status,
               }
               : null,
             rating: assignment.rating
@@ -231,7 +247,7 @@ export class PaperController {
         creationTime: p.creationTime,
         topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
         authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name })),
-        coordinatorId: p.coordinator?.id ?? null,
+        coordinatorId: p.coordinators?.[0]?.id ?? null,
         latestRoundNumber: p.rounds?.length
           ? Math.max(...p.rounds.map(r => r.roundNumber))
           : null,
@@ -347,6 +363,31 @@ export class PaperController {
       return res.status(200).json(result);
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
+    }
+  }
+  static async getMyCoordinatedPapers(req: AuthenticatedRequest, res: Response) {
+    try {
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      }
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const papers = await paperRepo.find({
+        where: { coordinators: { id: coordinator.id } },
+        relations: ['coordinators', 'labs'],
+      });
+
+      return res.status(200).json(papers.map(p => ({
+        id: p.id,
+        title: p.title,
+        status: p.status,
+        targetVenue: p.targetVenue,
+        abstractText: p.abstractText,
+      })));
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
     }
   }
 

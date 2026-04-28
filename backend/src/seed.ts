@@ -4,10 +4,13 @@ import { IsNull } from 'typeorm';
 import { Coordinator } from './entities/Coordinator';
 import { LocalAdmin } from './entities/LocalAdmin';
 import { GlobalAdmin } from './entities/GlobalAdmin';
-import { Topic } from './entities/Topic';
 import { Lab } from './entities/Lab';
-import { ApprovalStatus, User, UserRole } from './entities/User';
 import { LabMember } from './entities/LabMember';
+import { Paper, PaperStatus } from './entities/Paper';
+import { Round, RoundStatus } from './entities/Round';
+import { Assignment, AssignmentStatus } from './entities/Assignment';
+import { Topic } from './entities/Topic';
+import { ApprovalStatus, User, UserRole } from './entities/User';
 import { SystemPolicy, PolicyKey } from './entities/SystemPolicy';
 import { Template, TemplateName } from './entities/Template';
 import { hashPassword } from './services/accountSecurity';
@@ -33,7 +36,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
 
   if (reset) {
     await AppDataSource.synchronize(true);
-    console.log('✅ DB Connected, Reset, and Ready for Seeding');
+    console.log('✅ DB Reset and Ready for Seeding');
   } else {
     console.log('✅ DB Connected and Ready for Safe Seeding');
   }
@@ -43,11 +46,14 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   const labRepo = AppDataSource.getRepository(Lab);
   const policyRepo = AppDataSource.getRepository(SystemPolicy);
   const templateRepo = AppDataSource.getRepository(Template);
+  const paperRepo = AppDataSource.getRepository(Paper);
+  const roundRepo = AppDataSource.getRepository(Round);
+  const assignRepo = AppDataSource.getRepository(Assignment);
 
   // 1. Topics
   const allTopics = await ensureDefaultTopics(topicRepo);
 
-  // 2. Admin User
+  // 2. Global Admin
   const admin = await ensureUser(userRepo, {
     create: () => {
       const u = new GlobalAdmin();
@@ -60,15 +66,14 @@ export async function runSeed(options: { reset?: boolean } = {}) {
 
   // 3. Coordinator
   const coordinator = await ensureUser(userRepo, {
-    create: () =>
-      Object.assign(new Coordinator(), {
-        name: 'Eray Tüzün',
-        email: 'eraytuzun@cs.bilkent.edu.tr',
-      }),
+    create: () => Object.assign(new Coordinator(), {
+      name: 'Eray Tüzün',
+      email: 'eraytuzun@cs.bilkent.edu.tr',
+    }),
     password: '123',
   }) as Coordinator;
 
-  // 4. Lab
+  // 4. Lab (BILSEN/CS319 Combined)
   const lab = await ensureLab(labRepo, {
     name: 'CS319 Lab',
     description: 'Bilkent CS319 course project lab.',
@@ -93,13 +98,98 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   lab.localAdmin = localAdmin;
   await labRepo.save(lab);
 
-  // 5. System Policies
+  // 5. System Policies & Templates
   await ensureDefaultPolicies(policyRepo);
-
-  // 6. Default Templates
   await ensureDefaultTemplates(templateRepo);
 
-  console.log(`✅ successfully seeded database! admin.id='${admin.id}', lab.id='${lab.id}'`);
+  // 6. Reviewer 1 (LabMember) — email receives the test invitation
+  const reviewer = await ensureUser(userRepo, {
+    create: () => Object.assign(new LabMember(), {
+      name: 'Test Reviewer',
+      email: 'bilkentcs319@gmail.com',
+    }),
+    password: '123',
+  }) as LabMember;
+  // Reviewer 2 (LabMember) — fresh reviewer for invitation testing
+  const reviewer2 = await ensureUser(userRepo, {
+    create: () => Object.assign(new LabMember(), {
+      name: 'Second Reviewer',
+      email: 'esranurtatoglu24@gmail.com',
+    }),
+    password: '123',
+  });
+
+  // Add both reviewers to lab if not already members
+  const labWithMembers = await labRepo.findOne({ where: { id: lab.id }, relations: ['members'] });
+  if (labWithMembers) {
+    let changed = false;
+    if (!labWithMembers.members.find(m => m.id === reviewer.id)) {
+      labWithMembers.members.push(reviewer);
+      changed = true;
+    }
+    if (!labWithMembers.members.find(m => m.id === reviewer2.id)) {
+      labWithMembers.members.push(reviewer2);
+      changed = true;
+    }
+    if (changed) {
+      await labRepo.save(labWithMembers);
+      console.log('✅ Reviewer(s) added to lab');
+    }
+  }
+
+  // Paper
+  let paper = await paperRepo.findOne({ where: { title: 'Test Paper for Review' }, relations: ['coordinators', 'labs', 'authors'] });
+  if (!paper) {
+    paper = paperRepo.create({
+      title: 'Test Paper for Review',
+      abstractText: 'This is a test paper for development purposes.',
+      creationTime: new Date(),
+      targetVenue: 'ICSE 2026',
+      status: PaperStatus.HumanReview,
+      coordinators: [coordinator],
+      labs: [lab],
+      authors: [],
+    });
+
+    await paperRepo.save(paper);
+    console.log('✅ Paper created');
+  }
+
+  // Round
+  let round = await roundRepo.findOne({ where: { paper: { id: paper.id }, roundNumber: 1 } });
+  if (!round) {
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + 14);
+    round = roundRepo.create({
+      paper,
+      roundNumber: 1,
+      deadline,
+      status: RoundStatus.Open,
+    });
+    await roundRepo.save(round);
+    console.log('✅ Round created');
+  }
+
+  // Assignment for reviewer 1 (Invited)
+  const existingAssignment = await assignRepo.findOne({ where: { round: { id: round.id }, reviewer: { id: reviewer.id } } });
+  if (!existingAssignment) {
+    const assignment = assignRepo.create({
+      round,
+      reviewer,
+      status: AssignmentStatus.Invited,
+      deadline: round.deadline,
+    });
+    await assignRepo.save(assignment);
+    console.log('✅ Assignment 1 created (Invited)');
+  }
+
+  // Reviewer 2 has no pre-created assignment — coordinator assigns via the UI which also sends the invitation email
+
+  console.log(`\n🌱 Seed complete!`);
+  console.log(`   Coordinator — email: eraytuzun@cs.bilkent.edu.tr  password: 123`);
+  console.log(`   Reviewer 1  — email: bilkentcs319@gmail.com        password: 123`);
+  console.log(`   Reviewer 2  — email: esranurtatoglu24@gmail.com    password: 123`);
+  console.log(`   Round ID    — ${round.id}`);
   await AppDataSource.destroy();
 }
 
@@ -117,30 +207,23 @@ async function ensureDefaultTopics(topicRepo: ReturnType<typeof AppDataSource.ge
 
 async function ensureUser(
   userRepo: ReturnType<typeof AppDataSource.getRepository<User>>,
-  options: {
-    create: () => User;
-    password: string;
-  },
+  options: { create: () => User; password: string },
 ): Promise<User> {
-  const draftUser = options.create();
-  const normalizedEmail = draftUser.email.trim().toLowerCase();
-  const existingUser = await userRepo.findOne({ where: { email: normalizedEmail } });
+  const draft = options.create();
+  const email = draft.email.trim().toLowerCase();
+  const existing = await userRepo.findOne({ where: { email } });
+  if (existing) return existing;
 
-  if (existingUser) {
-    return existingUser;
-  }
-
-  draftUser.email = normalizedEmail;
-  draftUser.passwordHash = await hashPassword(options.password);
-  draftUser.approvalStatus = ApprovalStatus.Approved;
-  draftUser.approvalReviewedAt = new Date();
-  draftUser.approvalNote = null;
-  draftUser.failedLogins = 0;
-  draftUser.failedLoginWindowStartedAt = null;
-  draftUser.lockedUntil = null;
-  draftUser.lastLoginAt = null;
-
-  return userRepo.save(draftUser);
+  draft.email = email;
+  draft.passwordHash = await hashPassword(options.password);
+  draft.approvalStatus = ApprovalStatus.Approved;
+  draft.approvalReviewedAt = new Date();
+  draft.approvalNote = null;
+  draft.failedLogins = 0;
+  draft.failedLoginWindowStartedAt = null;
+  draft.lockedUntil = null;
+  draft.lastLoginAt = null;
+  return userRepo.save(draft);
 }
 
 async function ensureLab(
@@ -215,7 +298,8 @@ async function ensureDefaultTemplates(templateRepo: ReturnType<typeof AppDataSou
 }
 
 if (require.main === module) {
-  runSeed().catch(err => {
+  const reset = process.argv.includes('--reset');
+  runSeed({ reset }).catch(err => {
     console.error(err);
     process.exitCode = 1;
   });

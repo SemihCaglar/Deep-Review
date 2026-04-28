@@ -3,6 +3,7 @@ import { AccountController } from '../controllers/AccountController';
 import { AdminController } from '../controllers/AdminController';
 import { AIReviewController } from '../controllers/AIReviewController';
 import { AssignmentController } from '../controllers/AssignmentController';
+import { CoordinatorController } from '../controllers/CoordinatorController';
 import { PaperController } from '../controllers/PaperController';
 import { RatingAnalyticsController } from '../controllers/RatingAnalyticsController';
 import { ReviewerResponseController } from '../controllers/ReviewerResponseController';
@@ -73,13 +74,17 @@ router.get('/ai/checklist', AIReviewController.getChecklist);
 router.post('/ai/validate', AIReviewController.validateAIOutput);
 
 // ==== ASSIGNMENT ROUTES ====
-router.post('/assignments', AssignmentController.assignReviewers);
-router.post('/assignments/invite', AssignmentController.sendInvitations);
-router.post('/assignments/remind', AssignmentController.sendReminders);
-router.delete('/assignments/:id', AssignmentController.cancelAssignment);
-router.put('/assignments/:id/deadline', AssignmentController.updateAssignmentDeadline);
+router.get('/assignments/my', authenticateRequest, AssignmentController.getMyAssignments);
+router.post('/assignments', authenticateRequest, AssignmentController.assignReviewers);
+router.post('/assignments/invite', authenticateRequest, AssignmentController.sendInvitations);
+router.post('/assignments/remind', authenticateRequest, AssignmentController.sendReminders);
+router.delete('/assignments/:id', authenticateRequest, AssignmentController.cancelAssignment);
+router.put('/assignments/:id/deadline', authenticateRequest, AssignmentController.updateAssignmentDeadline);
+router.patch('/assignments/:id/process-decline', authenticateRequest, CoordinatorController.processDeclineRequest);
+router.patch('/assignments/:id/process-extension', authenticateRequest, CoordinatorController.processExtensionRequest);
 
 // ==== PAPER ROUTES ====
+router.get('/papers/my-coordinated', authenticateRequest, PaperController.getMyCoordinatedPapers);
 router.post('/papers', PaperController.registerPaper);
 router.put('/papers/:id/topics', PaperController.setTopics);
 router.post('/papers/:id/manuscript', PaperController.uploadManuscript);
@@ -100,18 +105,25 @@ router.get('/ratings/overall', RatingAnalyticsController.getOverallAnalytics);
 router.get('/ratings/user/:id', RatingAnalyticsController.getUserAnalytics);
 
 // ==== REVIEWER RESPONSE ROUTES ====
-router.post('/responses/invitation', ReviewerResponseController.respondToInvitation);
-router.post('/responses/decline', ReviewerResponseController.requestDecline);
-router.post('/responses/extension', ReviewerResponseController.requestDeadlineExtension);
-router.post('/responses/process-decline', ReviewerResponseController.processDeclineRequest);
-router.post('/responses/process-extension', ReviewerResponseController.processExtensionRequest);
-router.post('/responses/summary', ReviewerResponseController.submitReviewSummary);
-router.post('/responses/complete', ReviewerResponseController.markReviewCompleted);
+router.patch('/responses/:id/accept', authenticateRequest, ReviewerResponseController.acceptInvitation);
+router.post('/responses/:id/decline-request', authenticateRequest, ReviewerResponseController.requestDeclineForAssignment);
+router.post('/responses/:id/extension-request', authenticateRequest, ReviewerResponseController.requestExtensionForAssignment);
+// Legacy aliases for coordinator processing. Prefer the PATCH /assignments/:id/process-* routes above.
+router.post('/responses/:id/process-decline', authenticateRequest, ReviewerResponseController.processDeclineRequest);
+router.post('/responses/:id/process-extension', authenticateRequest, ReviewerResponseController.processExtensionRequest);
+router.post('/responses/invitation', authenticateRequest, ReviewerResponseController.respondToInvitation);
+router.post('/responses/extension', authenticateRequest, ReviewerResponseController.requestDeadlineExtension);
+// Legacy aliases for clients that still submit assignmentId/responseId in the body.
+router.post('/responses/process-decline', authenticateRequest, ReviewerResponseController.processDeclineRequest);
+router.post('/responses/process-extension', authenticateRequest, ReviewerResponseController.processExtensionRequest);
+router.post('/responses/summary', authenticateRequest, ReviewerResponseController.submitReviewSummary);
+router.post('/responses/complete', authenticateRequest, ReviewerResponseController.completeReview);
 
 // ==== ROUND ROUTES ====
+router.get('/papers/:id/rounds', authenticateRequest, RoundController.getRoundsWithAssignments);
 router.post('/rounds', RoundController.createReviewRound);
 router.put('/rounds/:id/deadline', RoundController.editRoundDeadline);
-router.get('/rounds/:id/suggest', RoundController.suggestReviewers);
+router.get('/rounds/:id/suggest', authenticateRequest, RoundController.suggestReviewers);
 router.post('/rounds/:id/propose', RoundController.addProposeReviewer);
 router.get('/rounds/:id/propose', RoundController.getProposeReviewers);
 router.get('/rounds/:id/status', RoundController.trackReviewStatus);

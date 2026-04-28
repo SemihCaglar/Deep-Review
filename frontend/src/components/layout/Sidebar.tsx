@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { Home, FileText, CheckCircle, UserCircle2, LogOut, PlusSquare, UserCheck, Users, Shield } from 'lucide-react';
+import { Home, FileText, CheckCircle, UserCircle2, LogOut, PlusSquare, UserCheck, Users, Shield, ClipboardList } from 'lucide-react';
 
 export default function Sidebar() {
     const { user, logout } = useUser();
@@ -28,9 +28,10 @@ export default function Sidebar() {
         ];
 
         if (!user.isCoordinator) {
-            base.push({ name: 'My Assigned Reviews', href: '/papers?filter=reviews', icon: CheckCircle });
+            base.push({ name: 'My Assigned Reviews', href: '/my-reviews', icon: CheckCircle });
         } else {
             base.push({ name: 'All Papers (System)', href: '/papers', icon: FileText });
+            base.push({ name: 'Round Management', href: '/rounds', icon: ClipboardList });
             base.push({ name: 'Register Paper', href: '/register', icon: PlusSquare });
         }
 
@@ -75,14 +76,16 @@ export default function Sidebar() {
                         isActive = pathname === '/pending-approvals';
                     } else if (item.href === '/papers?filter=authored') {
                         isActive = pathname === '/papers' && authoredFilter === 'authored';
-                    } else if (item.href === '/papers?filter=reviews') {
-                        isActive = pathname === '/papers' && authoredFilter === 'reviews';
+                    } else if (item.href === '/my-reviews') {
+                        isActive = pathname === '/my-reviews';
                     } else if (item.href === '/papers') {
                         isActive = pathname === '/papers' && !authoredFilter;
                     } else if (item.href === '/register') {
                         isActive = pathname === '/register';
                     } else if (item.href === '/admin') {
                         isActive = pathname === '/admin' || pathname.startsWith('/admin/');
+                    } else if (item.href === '/rounds') {
+                        isActive = pathname === '/rounds' || pathname.startsWith('/rounds/');
                     }
 
                     const Icon = item.icon;

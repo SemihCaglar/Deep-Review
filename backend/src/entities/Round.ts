@@ -4,6 +4,7 @@ import type { Assignment } from './Assignment';
 import type { ChecklistItem } from './ChecklistItem';
 import type { AIReviewReport } from './AIReviewReport';
 import type { User } from './User';
+import type { ReviewerResponse } from './ReviewerResponse';
 
 export enum RoundStatus {
   Open = 'Open',
@@ -49,6 +50,9 @@ export class Round {
 
   @OneToMany('Assignment', 'round')
   assignments: Assignment[];
+
+  @OneToMany('ReviewerResponse', 'reviewRound')
+  reviewerResponses: ReviewerResponse[];
 
   @OneToMany('ChecklistItem', 'round')
   checklistItems: ChecklistItem[];
