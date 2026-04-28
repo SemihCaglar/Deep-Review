@@ -215,6 +215,28 @@ export function registerPaperRequest(payload: RegisterPaperPayload) {
   });
 }
 
+export function getPaperByIdRequest(id: string) {
+  return apiRequest<any>(`/papers/${id}`);
+}
+
+export function getAllPapersRequest() {
+  return apiRequest<any[]>('/papers/all');
+}
+
+export function updatePaperAbstractRequest(id: string, abstract: string) {
+  return apiRequest<any>(`/papers/${id}/abstract`, {
+    method: 'PUT',
+    body: { abstract },
+  });
+}
+
+export function updatePaperTopicsRequest(id: string, topics: string[]) {
+  return apiRequest<any>(`/papers/${id}/topics-update`, {
+    method: 'PUT',
+    body: { topics },
+  });
+}
+
 function buildUrl(path: string) {
   if (/^https?:\/\//.test(path)) {
     return path;

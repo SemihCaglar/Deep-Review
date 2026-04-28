@@ -25,8 +25,29 @@ export class PaperController {
       return res.status(500).json({ error: e.message || 'Internal Server Error' });
     }
   }
-  static async setTopics(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async getPaperById(req: Request<{ id: string }>, res: Response) {
+    try {
+        const { id } = req.params;
+        if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+        const paper = await PaperService.getPaperById(id);
+        if (!paper) {
+            return res.status(404).json({ message: 'Paper not found' });
+        }
+        res.status(200).json(paper);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+  }
+  static async setTopics(req: Request<{ id: string }>, res: Response) {
+    try {
+        const { id } = req.params;
+        const { topics } = req.body;
+        if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+        const paper = await PaperService.updateTopics(id, topics);
+        res.status(200).json(paper);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
   }
   static async uploadManuscript(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
@@ -34,11 +55,27 @@ export class PaperController {
   static async linkParentPapers(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
-  static async updateAbstract(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async updateAbstract(req: Request<{ id: string }>, res: Response) {
+    try {
+        const { id } = req.params;
+        const { abstract } = req.body;
+        if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+        const paper = await PaperService.updateAbstract(id, abstract);
+        res.status(200).json(paper);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
   }
-  static async updateTopics(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async updateTopics(req: Request<{ id: string }>, res: Response) {
+    try {
+        const { id } = req.params;
+        const { topics } = req.body;
+        if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+        const paper = await PaperService.updateTopics(id, topics);
+        res.status(200).json(paper);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
   }
   static async getPaperStatus(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });

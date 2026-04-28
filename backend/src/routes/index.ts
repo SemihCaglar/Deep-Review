@@ -60,19 +60,21 @@ router.patch('/assignments/:id/process-decline', authenticateRequest, Coordinato
 router.patch('/assignments/:id/process-extension', authenticateRequest, CoordinatorController.processExtensionRequest);
 
 // ==== PAPER ROUTES ====
-router.post('/papers', authenticateRequest, PaperController.registerPaper);
-router.put('/papers/:id/topics', PaperController.setTopics);
-router.post('/papers/:id/manuscript', PaperController.uploadManuscript);
-router.post('/papers/:id/parents', PaperController.linkParentPapers);
-router.put('/papers/:id/abstract', PaperController.updateAbstract);
-router.put('/papers/:id/topics-update', PaperController.updateTopics);
-router.get('/papers/:id/status', PaperController.getPaperStatus);
-router.get('/papers/:id/history', PaperController.getPaperHistory);
+router.get('/papers/all', authenticateRequest, PaperController.getAllPapers);
 router.get('/papers/my-written', PaperController.getMyWrittenPapers);
 router.get('/papers/my-reviewed', PaperController.getMyReviewedPapers);
 router.get('/papers/my-current-reviewed', PaperController.getMyCurrentReviewedPapers);
-router.get('/papers/all', PaperController.getAllPapers);
+router.post('/papers', authenticateRequest, PaperController.registerPaper);
+
+router.get('/papers/:id', authenticateRequest, PaperController.getPaperById);
+router.get('/papers/:id/status', PaperController.getPaperStatus);
+router.get('/papers/:id/history', PaperController.getPaperHistory);
+router.put('/papers/:id/topics', PaperController.setTopics);
+router.put('/papers/:id/topics-update', PaperController.updateTopics);
+router.put('/papers/:id/abstract', PaperController.updateAbstract);
 router.put('/papers/:id/status', PaperController.updatePaperStatus);
+router.post('/papers/:id/manuscript', PaperController.uploadManuscript);
+router.post('/papers/:id/parents', PaperController.linkParentPapers);
 
 // ==== RATING ANALYTICS ROUTES ====
 router.post('/ratings', RatingAnalyticsController.rateReviewer);

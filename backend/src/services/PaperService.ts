@@ -9,6 +9,14 @@ import { Coordinator } from '../entities/Coordinator';
 import { Lab } from '../entities/Lab';
 
 export class PaperService {
+  static async getPaperById(id: string): Promise<Paper | null> {
+    const paperRepo = AppDataSource.getRepository(Paper);
+    return await paperRepo.findOne({ 
+      where: { id }, 
+      relations: ['topics', 'authors', 'coordinators', 'labs'] 
+    });
+  }
+
   /**
    * Registers a new paper and saves it as a Draft.
    */
@@ -69,6 +77,31 @@ export class PaperService {
     }
 
     // Save and return
+    return await paperRepo.save(paper);
+  }
+
+  static async updateAbstract(paperId: string, newAbstract: string): Promise<Paper> {
+    const paperRepo = AppDataSource.getRepository(Paper);
+    const paper = await paperRepo.findOne({ where: { id: paperId } });
+    if (!paper) throw new Error('Paper not found');
+
+    paper.abstractText = newAbstract;
+    return await paperRepo.save(paper);
+  }
+
+  static async updateTopics(paperId: string, topicIds: string[]): Promise<Paper> {
+    const paperRepo = AppDataSource.getRepository(Paper);
+    const topicRepo = AppDataSource.getRepository(Topic);
+
+    const paper = await paperRepo.findOne({ where: { id: paperId }, relations: ['topics'] });
+    if (!paper) throw new Error('Paper not found');
+
+    if (topicIds && topicIds.length > 0) {
+      paper.topics = await topicRepo.find({ where: { id: In(topicIds) } });
+    } else {
+      paper.topics = [];
+    }
+
     return await paperRepo.save(paper);
   }
 }
