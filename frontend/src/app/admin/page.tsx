@@ -1,0 +1,742 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useUser } from '@/components/context/UserContext';
+import { 
+  Users, 
+  Settings, 
+  FileText, 
+  Shield, 
+  Activity, 
+  Plus, 
+  Lock, 
+  Unlock, 
+  Trash2, 
+  Mail, 
+  Globe,
+  PlusSquare,
+  Search,
+  Filter,
+  CheckCircle,
+  XCircle,
+  ArrowRight
+} from 'lucide-react';
+import { apiRequest } from '@/lib/api';
+
+type Tab = 'users' | 'labs' | 'topics' | 'templates' | 'policies' | 'logs' | 'members' | 'emails';
+
+export default function AdminPage() {
+  const { user } = useUser();
+  const [activeTab, setActiveTab] = useState<Tab>(user.isGlobalAdmin ? 'users' : 'members');
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchData();
+  }, [activeTab]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      let endpoint = '';
+      switch (activeTab) {
+        case 'users': endpoint = '/admin/users'; break;
+        case 'labs': endpoint = '/admin/labs'; break;
+        case 'topics': endpoint = '/admin/labs'; break; // We list labs to pick one for global admin, but local admin? Actually we'll change TopicsTab to just use their lab
+        case 'templates': endpoint = '/admin/templates'; break;
+        case 'policies': endpoint = '/admin/policies'; break;
+        case 'logs': endpoint = '/admin/logs'; break;
+        case 'members': endpoint = '/admin/pending-signups'; break;
+        case 'emails': endpoint = ''; break; // Emails are fetched with the profile or we don't need to fetch if we have them, wait! We need to get LocalAdmin profile.
+      }
+      if (endpoint) {
+        const result = await apiRequest<any>(endpoint);
+        setData(result);
+      } else if (activeTab === 'emails') {
+        const result = await apiRequest<any>('/admin/notifications');
+        setData(result);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!user.isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
+        <Shield className="w-16 h-16 text-red-500/20 mb-4" />
+        <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
+        <p className="text-slate-400">You do not have administrative privileges to view this page.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
+            <Shield className="w-8 h-8 text-blue-400" />
+            Admin Dashboard
+          </h1>
+          <p className="text-slate-400 mt-1">System-wide management and monitoring.</p>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex overflow-x-auto pb-2 gap-2 border-b border-white/5">
+        {(user.isGlobalAdmin ? [
+          { id: 'users', label: 'Users', icon: Users },
+          { id: 'labs', label: 'Labs', icon: Globe },
+          { id: 'topics', label: 'Topics', icon: CheckCircle },
+          { id: 'templates', label: 'Email Templates', icon: Mail },
+          { id: 'policies', label: 'System Policies', icon: Settings },
+          { id: 'logs', label: 'Audit Logs', icon: Activity },
+        ] : user.isLocalAdmin ? [
+          { id: 'members', label: 'Lab Members', icon: Users },
+          { id: 'topics', label: 'Lab Topics', icon: CheckCircle },
+          { id: 'policies', label: 'Lab Policies', icon: Settings },
+          { id: 'emails', label: 'Notifications', icon: Mail },
+        ] : []).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as Tab)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+              activeTab === tab.id
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center gap-3">
+          <XCircle className="w-5 h-5" />
+          <p>{error}</p>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center min-h-[40vh]">
+          <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+        </div>
+      ) : (
+        <div className="grid gap-6">
+          {activeTab === 'users' && <UsersTab users={data} refresh={fetchData} />}
+          {activeTab === 'labs' && <LabsTab labs={data} refresh={fetchData} />}
+          {activeTab === 'topics' && <TopicsTab labs={data} isLocalAdmin={!!user.isLocalAdmin} />}
+          {activeTab === 'templates' && <TemplatesTab templates={data} refresh={fetchData} />}
+          {activeTab === 'policies' && <PoliciesTab policies={data} refresh={fetchData} />}
+          {activeTab === 'logs' && <LogsTab logs={data} />}
+          {activeTab === 'members' && <MembersTab members={data} refresh={fetchData} />}
+          {activeTab === 'emails' && <EmailsTab data={data} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MembersTab({ members, refresh }: { members: any[]; refresh: () => void }) {
+  const handleApprove = async (id: string) => {
+    try {
+      await apiRequest(`/admin/approve-signup/${id}`, { method: 'POST' });
+      refresh();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const handleRemove = async (userId: string, labId: string) => {
+    if (!confirm('Remove user from lab?')) return;
+    try {
+      await apiRequest(`/admin/remove-member`, { method: 'POST', body: { userId, labId } });
+      refresh(); // Actually the members list is just pending signups, but maybe we should list both?
+    } catch (err: any) { alert(err.message); }
+  };
+
+  return (
+    <div className="glass rounded-2xl border border-white/10 p-6">
+      <h2 className="text-lg font-semibold text-white mb-4">Pending Lab Signups</h2>
+      <div className="space-y-2">
+        {members?.map((m: any) => (
+          <div key={m.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
+            <div>
+              <p className="text-white font-medium">{m.name}</p>
+              <p className="text-slate-400 text-sm">{m.email}</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => handleApprove(m.id)} className="px-4 py-2 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg text-sm transition-colors">Approve</button>
+            </div>
+          </div>
+        ))}
+        {(!members || members.length === 0) && <p className="text-slate-400 italic">No pending signups.</p>}
+      </div>
+    </div>
+  );
+}
+
+function EmailsTab({ data }: { data: any }) {
+  const [emails, setEmails] = useState<string[]>([]);
+  const [newEmail, setNewEmail] = useState('');
+
+  useEffect(() => {
+    if (data?.emails) {
+      setEmails(data.emails);
+    }
+  }, [data]);
+
+  const handleSave = async () => {
+    try {
+      await apiRequest('/admin/notifications', { method: 'PUT', body: { emails } });
+      alert('Saved successfully');
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const removeEmail = (index: number) => {
+    setEmails(emails.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="glass rounded-2xl border border-white/10 p-6 max-w-xl">
+      <h2 className="text-lg font-semibold text-white mb-2">Notification Emails</h2>
+      <p className="text-sm text-slate-400 mb-6">These emails will receive alerts and notifications for this lab.</p>
+      
+      <div className="space-y-4 mb-6">
+        {emails.map((email, i) => (
+          <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
+            <span className="text-white">{email}</span>
+            <button onClick={() => removeEmail(i)} className="p-2 text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-2 mb-6">
+        <input 
+          type="email" 
+          value={newEmail} 
+          onChange={(e) => setNewEmail(e.target.value)}
+          placeholder="Add email address..."
+          className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500"
+        />
+        <button 
+          onClick={() => { if (newEmail) setEmails([...emails, newEmail]); setNewEmail(''); }}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm transition-colors"
+        >
+          Add
+        </button>
+      </div>
+
+      <button onClick={handleSave} className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-medium rounded-xl transition-colors">
+        Save Changes
+      </button>
+    </div>
+  );
+}
+
+function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
+  const handleLock = async (id: string, isLocked: boolean) => {
+    try {
+      await apiRequest(`/admin/users/${id}/${isLocked ? 'unlock' : 'lock'}`, { method: 'POST' });
+      refresh();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+    try {
+      await apiRequest(`/admin/users/${id}`, { method: 'DELETE' });
+      refresh();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  return (
+    <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+      <div className="p-6 border-b border-white/5 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-white">System Users</h2>
+        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors">
+          <PlusSquare className="w-4 h-4" />
+          Create User
+        </button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-white/5">
+              <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">User</th>
+              <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Role</th>
+              <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {users?.map((u: any) => (
+              <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-blue-400 font-bold border border-white/10">
+                      {u.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-white">{u.name}</div>
+                      <div className="text-xs text-slate-500">{u.email}</div>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    u.role === 'Admin' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                    u.role === 'Coordinator' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                    'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                  }`}>
+                    {u.role}
+                  </span>
+                </td>
+                <td className="px-6 py-4">
+                  {u.lockedUntil ? (
+                    <span className="flex items-center gap-1.5 text-red-400 text-xs">
+                      <Lock className="w-3 h-3" /> Locked
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-green-400 text-xs">
+                      <CheckCircle className="w-3 h-3" /> Active
+                    </span>
+                  )}
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleLock(u.id, !!u.lockedUntil)}
+                      className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                      title={u.lockedUntil ? "Unlock" : "Lock"}
+                    >
+                      {u.lockedUntil ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(u.id)}
+                      className="p-2 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
+  const [assigningLabId, setAssigningLabId] = useState<string | null>(null);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newLabName, setNewLabName] = useState('');
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const users = await apiRequest<any[]>('/admin/users');
+      setAllUsers(users.filter(u => u.role === 'Coordinator'));
+    } catch (err) {}
+  };
+
+  const handleCreate = async () => {
+    if (!newLabName.trim()) return;
+    try {
+      await apiRequest('/admin/labs', { method: 'POST', body: { name: newLabName } });
+      setNewLabName('');
+      setIsCreating(false);
+      refresh();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this lab?')) return;
+    try {
+      await apiRequest(`/admin/labs/${id}`, { method: 'DELETE' });
+      refresh();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const handleAssign = async (coordinatorId: string) => {
+    if (!assigningLabId) return;
+    try {
+      await apiRequest('/admin/labs/assign-coordinator', { 
+        method: 'POST', 
+        body: { labId: assigningLabId, coordinatorId } 
+      });
+      setAssigningLabId(null);
+      refresh();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  return (
+    <div className="space-y-6">
+      {assigningLabId && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass rounded-2xl border border-white/10 p-6 max-w-md w-full animate-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-semibold text-white mb-4">Assign Coordinator</h3>
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+              {allUsers.map(u => (
+                <button
+                  key={u.id}
+                  onClick={() => handleAssign(u.id)}
+                  className="w-full p-3 rounded-xl bg-white/5 hover:bg-blue-600/20 text-left border border-white/5 hover:border-blue-500/50 transition-all flex items-center justify-between group"
+                >
+                  <span className="text-sm text-slate-200">{u.name}</span>
+                  <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400" />
+                </button>
+              ))}
+              {allUsers.length === 0 && <p className="text-slate-500 italic text-center py-4">No coordinators found.</p>}
+            </div>
+            <button 
+              onClick={() => setAssigningLabId(null)}
+              className="w-full mt-6 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="glass rounded-2xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center p-8 text-center hover:border-blue-500/50 transition-all group">
+          {!isCreating ? (
+            <>
+              <div className="w-12 h-12 rounded-full bg-blue-600/10 text-blue-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                <Plus className="w-6 h-6" />
+              </div>
+              <h3 className="text-white font-semibold mb-2">Create New Lab</h3>
+              <p className="text-sm text-slate-500 mb-6">Set up a new isolated research environment.</p>
+              <button 
+                onClick={() => setIsCreating(true)}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors"
+              >
+                Get Started
+              </button>
+            </>
+          ) : (
+            <div className="w-full space-y-4">
+              <input 
+                type="text" 
+                placeholder="Enter lab name..." 
+                value={newLabName}
+                onChange={(e) => setNewLabName(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button 
+                  onClick={handleCreate}
+                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors"
+                >
+                  Create
+                </button>
+                <button 
+                  onClick={() => setIsCreating(false)}
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {labs?.map((lab: any) => (
+          <div key={lab.id} className="glass rounded-2xl border border-white/10 p-6 hover:shadow-xl hover:shadow-blue-600/5 transition-all group">
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-blue-600/10 text-blue-400 flex items-center justify-center">
+                <Globe className="w-6 h-6" />
+              </div>
+              <button 
+                onClick={() => handleDelete(lab.id)}
+                className="p-2 rounded-lg hover:bg-red-500/10 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+            <h3 className="text-white font-semibold text-lg">{lab.name}</h3>
+            <p className="text-sm text-slate-500 mt-1 line-clamp-2">{lab.description || 'No description provided.'}</p>
+            
+            <div className="mt-6 pt-6 border-t border-white/5">
+              <div className="flex items-center justify-between text-xs mb-3">
+                <span className="text-slate-500 uppercase tracking-wider font-bold">Coordinator</span>
+                {lab.coordinator ? (
+                  <span className="text-blue-400 font-medium">{lab.coordinator.name}</span>
+                ) : (
+                  <span className="text-red-400/70 font-medium italic">Unassigned</span>
+                )}
+              </div>
+              <button 
+                onClick={() => setAssigningLabId(lab.id)}
+                className="w-full py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {lab.coordinator ? 'Change Coordinator' : 'Assign Coordinator'}
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TopicsTab({ labs, isLocalAdmin }: { labs: any[], isLocalAdmin?: boolean }) {
+  const [selectedLabId, setSelectedLabId] = useState(labs?.[0]?.id || '');
+  const [topics, setTopics] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [newTopicName, setNewTopicName] = useState('');
+
+  useEffect(() => {
+    if (selectedLabId) fetchTopics();
+  }, [selectedLabId]);
+
+  const fetchTopics = async () => {
+    setLoading(true);
+    try {
+      const result = await apiRequest<any[]>(`/labs/${selectedLabId}/topics`);
+      setTopics(result);
+    } catch (err) { alert('Failed to fetch topics'); }
+    finally { setLoading(false); }
+  };
+
+  const handleAdd = async () => {
+    if (!newTopicName.trim()) return;
+    try {
+      await apiRequest(`/labs/${selectedLabId}/topics`, { method: 'POST', body: { name: newTopicName } });
+      setNewTopicName('');
+      fetchTopics();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  const handleRemove = async (topicId: string) => {
+    try {
+      await apiRequest(`/labs/${selectedLabId}/topics/${topicId}`, { method: 'DELETE' });
+      fetchTopics();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  return (
+    <div className="glass rounded-2xl border border-white/10 p-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Lab Topics</h2>
+          <p className="text-sm text-slate-500">Manage research interests for specific labs.</p>
+        </div>
+        <select 
+          value={selectedLabId} 
+          onChange={(e) => setSelectedLabId(e.target.value)}
+          className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {labs?.map(lab => (
+            <option key={lab.id} value={lab.id}>{lab.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex gap-2 mb-6">
+        <input 
+          type="text" 
+          placeholder="New topic name..." 
+          value={newTopicName}
+          onChange={(e) => setNewTopicName(e.target.value)}
+          className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none"
+        />
+        <button 
+          onClick={handleAdd}
+          className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" /> Add
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="py-12 flex justify-center"><Activity className="w-6 h-6 text-blue-500 animate-spin" /></div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {topics.map(t => (
+            <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-sm text-slate-300">
+              {t.name}
+              <button 
+                onClick={() => handleRemove(t.id)}
+                className="p-1 rounded-full hover:bg-red-500/20 text-slate-500 hover:text-red-400 transition-colors"
+              >
+                <XCircle className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+          {topics.length === 0 && <p className="text-slate-500 italic py-4">No topics found for this lab.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TemplatesTab({ templates, refresh }: { templates: any[]; refresh: () => void }) {
+  const [editing, setEditing] = useState<any>(null);
+
+  const handleUpdate = async () => {
+    try {
+      await apiRequest(`/admin/templates/${editing.id}`, { method: 'PUT', body: editing });
+      setEditing(null);
+      refresh();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  return (
+    <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+      <div className="p-6 border-b border-white/5"><h2 className="text-lg font-semibold text-white">Email Templates</h2></div>
+      <div className="divide-y divide-white/5">
+        {templates?.map((t: any) => (
+          <div key={t.id} className="p-6">
+            {editing?.id === t.id ? (
+              <div className="space-y-4">
+                <input 
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white"
+                  value={editing.subject}
+                  onChange={(e) => setEditing({...editing, subject: e.target.value})}
+                />
+                <textarea 
+                  className="w-full h-32 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white"
+                  value={editing.body}
+                  onChange={(e) => setEditing({...editing, body: e.target.value})}
+                />
+                <div className="flex gap-2">
+                  <button onClick={handleUpdate} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium">Save</button>
+                  <button onClick={() => setEditing(null)} className="px-4 py-2 bg-white/5 text-slate-300 rounded-xl text-sm font-medium">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start justify-between group">
+                <div>
+                  <h3 className="text-white font-medium mb-1">{t.name}</h3>
+                  <p className="text-xs text-slate-500 mb-2">Subject: {t.subject}</p>
+                  <p className="text-sm text-slate-400 line-clamp-2">{t.body}</p>
+                </div>
+                <button 
+                  onClick={() => setEditing(t)}
+                  className="p-2 rounded-lg hover:bg-blue-600/10 text-slate-500 hover:text-blue-400 transition-colors"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PoliciesTab({ policies, refresh }: { policies: any[]; refresh: () => void }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+
+  const handleUpdate = async (id: string) => {
+    try {
+      await apiRequest(`/admin/policies/${id}`, { method: 'PUT', body: { value: editingValue } });
+      setEditingId(null);
+      refresh();
+    } catch (err: any) { alert(err.message); }
+  };
+
+  return (
+    <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+      <div className="p-6 border-b border-white/5"><h2 className="text-lg font-semibold text-white">System Policies</h2></div>
+      <div className="divide-y divide-white/5">
+        {policies?.map((p: any) => (
+          <div key={p.id} className="p-6 flex items-center justify-between">
+            <div>
+              <h3 className="text-white font-medium mb-1">{p.key}</h3>
+              <p className="text-xs text-slate-500">{p.lab ? `Lab: ${p.lab.name}` : 'Global Default'}</p>
+            </div>
+            {editingId === p.id ? (
+              <div className="flex gap-2">
+                <input 
+                  className="bg-white/5 border border-white/10 rounded-xl px-4 py-1 text-white text-sm"
+                  value={editingValue}
+                  onChange={(e) => setEditingValue(e.target.value)}
+                  autoFocus
+                />
+                <button onClick={() => handleUpdate(p.id)} className="p-2 text-blue-400 hover:text-blue-300"><Plus className="w-4 h-4" /></button>
+                <button onClick={() => setEditingId(null)} className="p-2 text-slate-500 hover:text-slate-400"><XCircle className="w-4 h-4" /></button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4">
+                <span className="text-blue-400 font-mono bg-blue-400/5 px-2 py-1 rounded border border-blue-400/20">{p.value}</span>
+                <button 
+                  onClick={() => { setEditingId(p.id); setEditingValue(p.value); }}
+                  className="p-2 rounded-lg hover:bg-white/5 text-slate-500 hover:text-white"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LogsTab({ logs }: { logs: any[] }) {
+  return (
+    <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+      <div className="p-6 border-b border-white/5 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-white">Audit Logs</h2>
+        <span className="text-xs text-slate-500 uppercase tracking-wider">Latest 200 Actions</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-white/5">
+              <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Time</th>
+              <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Actor</th>
+              <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Action</th>
+              <th className="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Details</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {logs?.map((log: any) => (
+              <tr key={log.id} className="hover:bg-white/[0.02] transition-colors">
+                <td className="px-6 py-4 text-xs text-slate-500 whitespace-nowrap">
+                  {new Date(log.createdAt).toLocaleString()}
+                </td>
+                <td className="px-6 py-4">
+                  <div className="text-sm font-medium text-white">{log.actor?.name || 'System'}</div>
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">{log.actor?.role || 'Service'}</div>
+                </td>
+                <td className="px-6 py-4">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    log.action?.includes('DELETE') ? 'bg-red-500/10 text-red-400' :
+                    log.action?.includes('CREATE') ? 'bg-green-500/10 text-green-400' :
+                    'bg-blue-500/10 text-blue-400'
+                  }`}>
+                    {log.action?.replace(/_/g, ' ') || 'UNKNOWN'}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-sm text-slate-400">
+                  {log.details || `${log.entityType || 'Entity'} (${log.entityId?.slice(0, 8) || 'N/A'}...)`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

@@ -5,6 +5,8 @@ import {
   JoinTable,
   ManyToMany,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
   PrimaryGeneratedColumn,
   TableInheritance,
   UpdateDateColumn,
@@ -19,7 +21,8 @@ import type { Lab } from './Lab';
 export enum UserRole {
   LabMember = 'LabMember',
   Coordinator = 'Coordinator',
-  Admin = 'Admin',
+  LocalAdmin = 'LocalAdmin',
+  GlobalAdmin = 'GlobalAdmin',
 }
 
 export enum ApprovalStatus {
@@ -102,4 +105,8 @@ export abstract class User {
 
   @ManyToMany('Lab', 'members')
   labs: Lab[];
+
+  @ManyToOne('Lab')
+  @JoinColumn()
+  requestedLab: Lab | null;
 }

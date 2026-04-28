@@ -4,6 +4,7 @@ import { Paper } from '../entities/Paper';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { RoundStatus } from '../entities/Round';
 import { UserRole } from '../entities/User';
+import { LocalAdmin } from '../entities/LocalAdmin';
 import type { AuthenticatedRequest } from '../types/auth';
 import { In } from 'typeorm';
 
@@ -146,7 +147,7 @@ export class PaperController {
           r.assignments?.some(a => a.reviewer?.id === userId)
         ) ?? false;
 
-      const isAdmin = authReq.user.role === UserRole.Admin;
+      const isAdmin = authReq.user.role === UserRole.GlobalAdmin || authReq.user.role === UserRole.LocalAdmin;
       const isCoordinator = authReq.user.role === UserRole.Coordinator;
 
       if (!isExplicitCoordinator && !isLabCoordinator && !isAuthor && !isReviewer && !isAdmin && !isCoordinator) {
@@ -351,10 +352,39 @@ export class PaperController {
 
   static async getAllPapers(req: Request, res: Response) {
     try {
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+
+      if (authReq.user.role === UserRole.GlobalAdmin) {
+        return res.status(403).json({ message: 'Global Admins cannot view papers' });
+      }
+
       const repo = AppDataSource.getRepository(Paper);
-      const papers = await repo.find({ relations: ['authors'] });
-      const mapMockShape = papers.map(p => ({ ...p, authors: p.authors ? p.authors.map(a => a.id) : [] }));
-      res.status(200).json(mapMockShape);
+      let papers: Paper[];
+
+      if (authReq.user.role === UserRole.LocalAdmin) {
+        // Find papers for the lab managed by this LocalAdmin
+        const la = await AppDataSource.getRepository(LocalAdmin).findOne({ 
+          where: { id: authReq.user.id }, 
+          relations: ['lab'] 
+        });
+        if (!la?.lab) return res.status(200).json([]);
+        
+        papers = await repo.find({
+          where: { labs: { id: la.lab.id } },
+          relations: ['authors', 'labs']
+        });
+      } else if (authReq.user.role === UserRole.Coordinator) {
+        // Already handled elsewhere or filter by lab coordinator?
+        // For now, allow all if coordinator, but ideally filter by lab.
+        papers = await repo.find({ relations: ['authors'] });
+      } else {
+        // Standard users shouldn't really hit this global endpoint
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const result = papers.map(p => ({ ...p, authors: p.authors ? p.authors.map(a => a.id) : [] }));
+      res.status(200).json(result);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

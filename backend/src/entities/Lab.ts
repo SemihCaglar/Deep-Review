@@ -5,6 +5,7 @@ import type { User } from './User';
 import type { AuditLog } from './AuditLog';
 import type { SystemPolicy } from './SystemPolicy';
 import type { Template } from './Template';
+import type { Topic } from './Topic';
 
 @Entity()
 export class Lab {
@@ -21,6 +22,10 @@ export class Lab {
   @JoinColumn()
   coordinator: Coordinator;
 
+  @OneToOne('LocalAdmin', 'lab')
+  @JoinColumn()
+  localAdmin: any; // Using any to avoid circular import issues if needed, or typed properly
+
   @ManyToMany('Paper', 'labs')
   @JoinTable()
   papers: Paper[];
@@ -28,6 +33,10 @@ export class Lab {
   @ManyToMany('User', 'labs')
   @JoinTable()
   members: User[];
+
+  @ManyToMany('Topic', 'labs')
+  @JoinTable()
+  topics: Topic[];
 
   @OneToMany('AuditLog', 'lab')
   auditLogs: AuditLog[];

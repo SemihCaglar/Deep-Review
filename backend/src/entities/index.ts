@@ -2,7 +2,8 @@
 export { User, UserRole, ApprovalStatus } from './User';
 export { LabMember } from './LabMember';
 export { Coordinator } from './Coordinator';
-export { Admin } from './Admin';
+export { GlobalAdmin } from './GlobalAdmin';
+export { LocalAdmin } from './LocalAdmin';
 export { Lab } from './Lab';
 
 // Paper and academic content

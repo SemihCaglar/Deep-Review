@@ -64,6 +64,12 @@ export type LabMembersResponse = {
   users: LabMember[];
 };
 
+export type Lab = {
+  id: string;
+  name: string;
+  description: string;
+};
+
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
 };
@@ -102,13 +108,14 @@ export function loginRequest(email: string, password: string) {
   });
 }
 
-export function signupRequest(name: string, email: string, password: string) {
+export function signupRequest(name: string, email: string, password: string, labId?: string) {
   return apiRequest<AccountUserResponse>('/account/signup', {
     method: 'POST',
     body: {
       name,
       email,
       password,
+      labId,
     },
   });
 }
@@ -197,6 +204,10 @@ export function rejectSignupRequest(id: string) {
   return apiRequest<AccountUserResponse>(`/account/reject/${id}`, {
     method: 'POST',
   });
+}
+
+export function getLabsRequest() {
+  return apiRequest<Lab[]>('/labs');
 }
 
 function buildUrl(path: string) {

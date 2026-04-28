@@ -9,7 +9,7 @@ import { ReviewerResponseController } from '../controllers/ReviewerResponseContr
 import { RoundController } from '../controllers/RoundController';
 import { SearchController } from '../controllers/SearchController';
 import { TopicController } from '../controllers/TopicController';
-import { authenticateRequest } from '../middleware/auth';
+import { authenticateRequest, requireAdmin } from '../middleware/auth';
 
 const router = Router();
 
@@ -29,17 +29,40 @@ router.put('/account/interests', authenticateRequest, AccountController.setInter
 router.put('/account/blackout-periods', authenticateRequest, AccountController.setBlackoutPeriods);
 router.post('/account/approve/:id', authenticateRequest, AccountController.approveSignUp);
 router.post('/account/reject/:id', authenticateRequest, AccountController.rejectSignUp);
+router.get('/labs', AccountController.getAllLabs);
 
-// ==== ADMIN ROUTES ====
-router.post('/admin/users', AdminController.createUser);
-router.put('/admin/users/:id/role', AdminController.updateUserRole);
-router.post('/admin/users/:id/lock', AdminController.lockUserAccount);
-router.post('/admin/users/:id/unlock', AdminController.unlockUserAccount);
-router.delete('/admin/users/:id', AdminController.deleteUser);
-router.post('/admin/topics', AdminController.createTopic);
-router.put('/admin/topics/:id', AdminController.updateTopic);
-router.delete('/admin/topics/:id', AdminController.deleteTopic);
-router.get('/admin/logs', AdminController.getSystemLogs);
+// ==== ADMIN & MANAGEMENT ROUTES ====
+router.get('/admin/users', authenticateRequest, requireAdmin, AdminController.getAllUsers);
+router.post('/admin/users', authenticateRequest, requireAdmin, AdminController.createUser);
+router.post('/admin/users/:id/lock', authenticateRequest, requireAdmin, AdminController.lockUserAccount);
+router.post('/admin/users/:id/unlock', authenticateRequest, requireAdmin, AdminController.unlockUserAccount);
+router.delete('/admin/users/:id', authenticateRequest, requireAdmin, AdminController.deleteUser);
+
+router.get('/admin/labs', authenticateRequest, requireAdmin, AdminController.getAllLabs);
+router.post('/admin/labs', authenticateRequest, requireAdmin, AdminController.createLab);
+router.delete('/admin/labs/:id', authenticateRequest, requireAdmin, AdminController.deleteLab);
+router.post('/admin/labs/coordinator', authenticateRequest, requireAdmin, AdminController.assignCoordinator);
+
+router.get('/admin/policies', authenticateRequest, requireAdmin, AdminController.getPolicies);
+router.put('/admin/policies/:id', authenticateRequest, requireAdmin, AdminController.updatePolicy);
+
+router.get('/admin/templates', authenticateRequest, requireAdmin, AdminController.getTemplates);
+router.put('/admin/templates/:id', authenticateRequest, requireAdmin, AdminController.updateTemplate);
+
+router.get('/admin/logs', authenticateRequest, requireAdmin, AdminController.getSystemLogs);
+
+// ==== LOCAL ADMIN ROUTES ====
+router.get('/admin/pending-signups', authenticateRequest, requireAdmin, AdminController.getPendingLabSignups);
+router.post('/admin/approve-signup/:id', authenticateRequest, requireAdmin, AdminController.approveLabSignup);
+router.post('/admin/remove-member', authenticateRequest, requireAdmin, AdminController.removeUserFromLab);
+router.get('/admin/notifications', authenticateRequest, requireAdmin, AdminController.getNotificationEmails);
+router.put('/admin/notifications', authenticateRequest, requireAdmin, AdminController.updateNotificationEmails);
+
+// ==== LAB-SPECIFIC TOPIC ROUTES ====
+router.get('/labs/:labId/topics', authenticateRequest, TopicController.getLabTopics);
+router.post('/labs/:labId/topics', authenticateRequest, TopicController.addTopicToLab);
+router.put('/labs/:labId/topics/:topicId', authenticateRequest, TopicController.updateTopicInLab);
+router.delete('/labs/:labId/topics/:topicId', authenticateRequest, TopicController.removeTopicFromLab);
 
 // ==== AI REVIEW ROUTES ====
 router.post('/ai/review', AIReviewController.runAIReview);

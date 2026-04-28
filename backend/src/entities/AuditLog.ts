@@ -62,13 +62,13 @@ export class AuditLog {
   /**
    * The name of the entity that was affected (e.g., 'User', 'Paper', 'Round').
    */
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   entityType: string | null;
 
   /**
    * The UUID of the specific entity that was affected.
    */
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   entityId: string | null;
 
   /**

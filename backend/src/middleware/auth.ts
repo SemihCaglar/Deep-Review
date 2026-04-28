@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
-import { ApprovalStatus, User } from '../entities/User';
+import { ApprovalStatus, User, UserRole } from '../entities/User';
 import { isAccountLocked } from '../services/accountSecurity';
 import { verifyAuthToken } from '../services/tokenService';
 import type { AuthenticatedRequest } from '../types/auth';
@@ -39,6 +39,18 @@ export async function authenticateRequest(
   }
 
   req.user = user;
+
+  return next();
+}
+
+export function requireAdmin(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!req.user || (req.user.role !== UserRole.GlobalAdmin && req.user.role !== UserRole.LocalAdmin)) {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
 
   return next();
 }
