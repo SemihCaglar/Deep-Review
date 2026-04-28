@@ -5,9 +5,11 @@ import { LabMember } from '../entities/LabMember';
 import { PasswordResetToken } from '../entities/PasswordResetToken';
 import { Topic } from '../entities/Topic';
 import { ApprovalStatus, User, UserRole } from '../entities/User';
+import { Lab } from '../entities/Lab';
 import {
   accountSecurityPolicy,
   clearLoginLockout,
+
   createPasswordResetToken,
   hashPasswordResetToken,
   hashPassword,
@@ -21,7 +23,7 @@ import type { AuthenticatedRequest } from '../types/auth';
 
 export class AccountController {
   static async signUp(req: Request, res: Response) {
-    const { name, email, password } = req.body ?? {};
+    const { name, email, password, labId } = req.body ?? {};
 
     if (
       typeof name !== 'string' ||
@@ -45,6 +47,12 @@ export class AccountController {
       return res.status(409).json({ message: 'Email is already in use' });
     }
 
+    let requestedLab = null;
+    if (labId) {
+      const labRepo = AppDataSource.getRepository(Lab);
+      requestedLab = await labRepo.findOne({ where: { id: labId } });
+    }
+
     const member = memberRepo.create({
       name: name.trim(),
       email: normalizedEmail,
@@ -57,6 +65,7 @@ export class AccountController {
       lockedUntil: null,
       lastLoginAt: null,
       otherInterests: [],
+      requestedLab,
     });
 
     let savedMember: LabMember;
@@ -85,7 +94,10 @@ export class AccountController {
 
     const userRepo = AppDataSource.getRepository<User>('User');
     const normalizedEmail = email.trim().toLowerCase();
-    const user = await userRepo.findOne({ where: { email: normalizedEmail } });
+    const user = await userRepo.findOne({ 
+      where: { email: normalizedEmail },
+      relations: ['labs']
+    });
 
     if (!user) {
       return AccountController.authenticationFailed(res);
@@ -174,6 +186,11 @@ export class AccountController {
     await userRepo.save(user);
 
     return res.status(200).json({ message: 'Password changed successfully' });
+  }
+  static async getAllLabs(req: Request, res: Response) {
+    const labRepo = AppDataSource.getRepository(Lab);
+    const labs = await labRepo.find({ select: ['id', 'name', 'description'] });
+    return res.status(200).json(labs);
   }
   static async sendPasswordReset(req: Request, res: Response) {
     const { email } = req.body ?? {};
@@ -558,10 +575,15 @@ export class AccountController {
   }
 
   private static isCoordinatorOrAdmin(user: User) {
-    return user.role === UserRole.Coordinator || user.role === UserRole.Admin;
+    return user.role === UserRole.Coordinator || user.role === UserRole.GlobalAdmin || user.role === UserRole.LocalAdmin;
   }
 
   private static serializeAccount(member: User, options: { includeInterests?: boolean } = {}) {
+    const labs = member.labs || [];
+    // If it's a coordinator, we should also include their managed lab if not already there
+    // But since labs is ManyToMany and lab is OneToOne on Coordinator, 
+    // we assume the seeder/logic keeps them in sync if needed, or we just map both.
+    
     const account = {
       id: member.id,
       name: member.name,
@@ -573,6 +595,7 @@ export class AccountController {
       createdAt: member.createdAt,
       updatedAt: member.updatedAt,
       otherInterests: member.otherInterests ?? [],
+      labs: labs.map(l => ({ id: l.id, name: l.name })),
     };
 
     if (options.includeInterests) {

@@ -124,7 +124,7 @@ export class RoundController {
 
       for (const user of candidates) {
         // Admins and Coordinators cannot be reviewers
-        if (user.role === UserRole.Admin || user.role === UserRole.Coordinator) continue;
+        if (user.role === UserRole.GlobalAdmin || user.role === UserRole.LocalAdmin || user.role === UserRole.Coordinator) continue;
 
         // Enforce Intra-Lab boundaries
         const userLabIds = user.labs?.map(l => l.id) || [];

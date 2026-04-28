@@ -78,7 +78,11 @@ function readAuthUserFromStorage(): User | null {
             id: parsedUser.id,
             name: parsedUser.name,
             email: parsedUser.email,
-            isCoordinator: parsedUser.role === 'Coordinator' || parsedUser.role === 'Admin',
+            isCoordinator: parsedUser.role === 'Coordinator' || parsedUser.role === 'GlobalAdmin',
+            isAdmin: parsedUser.role === 'GlobalAdmin' || parsedUser.role === 'LocalAdmin',
+            isGlobalAdmin: parsedUser.role === 'GlobalAdmin',
+            isLocalAdmin: parsedUser.role === 'LocalAdmin',
+            labs: parsedUser.labs || [],
         };
     } catch (e) {
         console.error('Failed to parse auth user from localStorage', e);

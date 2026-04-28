@@ -1,13 +1,18 @@
 import 'reflect-metadata';
 import { AppDataSource } from './data-source';
+import { IsNull } from 'typeorm';
 import { Coordinator } from './entities/Coordinator';
+import { LocalAdmin } from './entities/LocalAdmin';
+import { GlobalAdmin } from './entities/GlobalAdmin';
 import { Lab } from './entities/Lab';
 import { LabMember } from './entities/LabMember';
 import { Paper, PaperStatus } from './entities/Paper';
 import { Round, RoundStatus } from './entities/Round';
 import { Assignment, AssignmentStatus } from './entities/Assignment';
 import { Topic } from './entities/Topic';
-import { ApprovalStatus, User } from './entities/User';
+import { ApprovalStatus, User, UserRole } from './entities/User';
+import { SystemPolicy, PolicyKey } from './entities/SystemPolicy';
+import { Template, TemplateName } from './entities/Template';
 import { hashPassword } from './services/accountSecurity';
 
 const DEFAULT_TOPIC_NAMES = [
@@ -39,13 +44,27 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   const userRepo = AppDataSource.getRepository<User>('User');
   const topicRepo = AppDataSource.getRepository(Topic);
   const labRepo = AppDataSource.getRepository(Lab);
+  const policyRepo = AppDataSource.getRepository(SystemPolicy);
+  const templateRepo = AppDataSource.getRepository(Template);
   const paperRepo = AppDataSource.getRepository(Paper);
   const roundRepo = AppDataSource.getRepository(Round);
   const assignRepo = AppDataSource.getRepository(Assignment);
 
-  await ensureDefaultTopics(topicRepo);
+  // 1. Topics
+  const allTopics = await ensureDefaultTopics(topicRepo);
 
-  // Coordinator
+  // 2. Global Admin
+  const admin = await ensureUser(userRepo, {
+    create: () => {
+      const u = new GlobalAdmin();
+      u.email = 'admin@bilsen.app';
+      u.name = 'Global Administrator';
+      return u;
+    },
+    password: 'admin123',
+  });
+
+  // 3. Coordinator
   const coordinator = await ensureUser(userRepo, {
     create: () => Object.assign(new Coordinator(), {
       name: 'Eray Tüzün',
@@ -54,25 +73,43 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     password: '123',
   }) as Coordinator;
 
-  // Lab
-  let lab = await labRepo.findOne({ where: { name: 'BILSEN Lab' }, relations: ['coordinator', 'members'] });
-  if (!lab) {
-    lab = labRepo.create({ name: 'BILSEN Lab', description: 'Test lab for development' });
-    lab.coordinator = coordinator;
-    lab.members = [coordinator];
-    await labRepo.save(lab);
-    console.log('✅ Lab created');
-  }
+  // 4. Lab (BILSEN/CS319 Combined)
+  const lab = await ensureLab(labRepo, {
+    name: 'CS319 Lab',
+    description: 'Bilkent CS319 course project lab.',
+    coordinator,
+    members: [coordinator],
+    topics: allTopics.slice(0, 5),
+  });
 
-  // Reviewer 1 (LabMember) — email receives the test invitation
+  const localAdmin = await ensureUser(userRepo, {
+    create: () => {
+      const u = new LocalAdmin();
+      u.email = 'localadmin@cs319.bilkent.edu.tr';
+      u.name = 'CS319 Local Admin';
+      return u;
+    },
+    password: '123',
+  });
+  (localAdmin as LocalAdmin).notificationEmails = ['coordinator@cs319.bilkent.edu.tr', 'office@cs319.bilkent.edu.tr'];
+  (localAdmin as LocalAdmin).lab = lab;
+  await userRepo.save(localAdmin);
+
+  lab.localAdmin = localAdmin;
+  await labRepo.save(lab);
+
+  // 5. System Policies & Templates
+  await ensureDefaultPolicies(policyRepo);
+  await ensureDefaultTemplates(templateRepo);
+
+  // 6. Reviewer 1 (LabMember) — email receives the test invitation
   const reviewer = await ensureUser(userRepo, {
     create: () => Object.assign(new LabMember(), {
       name: 'Test Reviewer',
       email: 'bilkentcs319@gmail.com',
     }),
     password: '123',
-  });
-
+  }) as LabMember;
   // Reviewer 2 (LabMember) — fresh reviewer for invitation testing
   const reviewer2 = await ensureUser(userRepo, {
     create: () => Object.assign(new LabMember(), {
@@ -153,17 +190,19 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   console.log(`   Reviewer 1  — email: bilkentcs319@gmail.com        password: 123`);
   console.log(`   Reviewer 2  — email: esranurtatoglu24@gmail.com    password: 123`);
   console.log(`   Round ID    — ${round.id}`);
-
   await AppDataSource.destroy();
 }
 
 async function ensureDefaultTopics(topicRepo: ReturnType<typeof AppDataSource.getRepository<Topic>>) {
+  const topics: Topic[] = [];
   for (const topicName of DEFAULT_TOPIC_NAMES) {
-    const existing = await topicRepo.findOne({ where: { name: topicName } });
-    if (!existing) {
-      await topicRepo.save(topicRepo.create({ name: topicName }));
+    let topic = await topicRepo.findOne({ where: { name: topicName } });
+    if (!topic) {
+      topic = await topicRepo.save(topicRepo.create({ name: topicName }));
     }
+    topics.push(topic);
   }
+  return topics;
 }
 
 async function ensureUser(
@@ -185,6 +224,77 @@ async function ensureUser(
   draft.lockedUntil = null;
   draft.lastLoginAt = null;
   return userRepo.save(draft);
+}
+
+async function ensureLab(
+  labRepo: ReturnType<typeof AppDataSource.getRepository<Lab>>,
+  options: {
+    name: string;
+    description: string;
+    coordinator: Coordinator;
+    members: User[];
+    topics: Topic[];
+  },
+): Promise<Lab> {
+  let lab = await labRepo.findOne({ where: { name: options.name }, relations: ['coordinator', 'topics', 'members'] });
+  if (!lab) {
+    lab = labRepo.create({
+      name: options.name,
+      description: options.description,
+      coordinator: options.coordinator,
+      members: options.members,
+      topics: options.topics,
+    });
+    await labRepo.save(lab);
+  }
+  return lab;
+}
+
+async function ensureDefaultPolicies(policyRepo: ReturnType<typeof AppDataSource.getRepository<SystemPolicy>>) {
+  const defaults = [
+    { key: PolicyKey.MAX_FAILED_LOGINS, value: '5' },
+    { key: PolicyKey.ACCOUNT_LOCK_MINS, value: '15' },
+    { key: PolicyKey.PASSWORD_RESET_TOKEN_EXP_MINS, value: '60' },
+  ];
+
+  for (const item of defaults) {
+    const existing = await policyRepo.findOne({ 
+      where: { 
+        key: item.key, 
+        lab: IsNull() 
+      } as any 
+    });
+    if (!existing) {
+      await policyRepo.save(policyRepo.create({ key: item.key, value: item.value, lab: null }));
+    }
+  }
+}
+
+async function ensureDefaultTemplates(templateRepo: ReturnType<typeof AppDataSource.getRepository<Template>>) {
+  const defaults = [
+    {
+      name: TemplateName.REVIEW_INVITATION,
+      subject: 'Review Invitation: {{paperTitle}}',
+      body: 'Dear {{userName}}, you are invited to review "{{paperTitle}}".',
+    },
+    {
+      name: TemplateName.ACCOUNT_APPROVED,
+      subject: 'Account Approved',
+      body: 'Hello {{userName}}, your account has been approved.',
+    },
+  ];
+
+  for (const item of defaults) {
+    const existing = await templateRepo.findOne({ 
+      where: { 
+        name: item.name, 
+        lab: IsNull() 
+      } as any 
+    });
+    if (!existing) {
+      await templateRepo.save(templateRepo.create({ ...item, lab: null }));
+    }
+  }
 }
 
 if (require.main === module) {

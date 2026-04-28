@@ -6,6 +6,7 @@
   "scripts": {
     "start": "ts-node src/index.ts",
     "dev": "ts-node src/index.ts",
+    "seed": "ts-node src/seed.ts",
     "test": "jest --runInBand --forceExit"
   },
   "jest": {
@@ -57,6 +58,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/nodemailer": "^8.0.0",
     "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^8.0.6",

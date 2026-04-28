@@ -45,7 +45,7 @@ export class AssignmentController {
 
         const reviewer = await userRepo.findOne({ where: { id: rId } });
         if (!reviewer) continue;
-        if (reviewer.role === UserRole.Coordinator || reviewer.role === UserRole.Admin) continue;
+        if (reviewer.role === UserRole.Coordinator || reviewer.role === UserRole.GlobalAdmin || reviewer.role === UserRole.LocalAdmin) continue;
 
         // Skip if any active (non-Cancelled) assignment already exists for this reviewer on this round
         const activeExists = await assignRepo.findOne({

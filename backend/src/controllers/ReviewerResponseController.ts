@@ -66,7 +66,7 @@ export class ReviewerResponseController {
 
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
-        where: { id: req.params.id },
+        where: { id: String(req.params.id) },
         relations: ['reviewer'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
@@ -98,7 +98,7 @@ export class ReviewerResponseController {
 
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
-        where: { id: req.params.id },
+        where: { id: String(req.params.id) },
         relations: ['reviewer'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
@@ -333,7 +333,7 @@ export class ReviewerResponseController {
       }
 
       const assignRepo = AppDataSource.getRepository(Assignment);
-      const assignment = await assignRepo.findOne({ where: { id }, relations: ['reviewer'] });
+      const assignment = await assignRepo.findOne({ where: { id: String(id) }, relations: ['reviewer'] });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
@@ -361,7 +361,7 @@ export class ReviewerResponseController {
 
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
-        where: { id: assignmentId },
+        where: { id: String(assignmentId) },
         relations: ['reviewer'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
