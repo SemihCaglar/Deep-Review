@@ -216,7 +216,71 @@ export type Paper = {
   topics?: TopicOption[];
   authors?: LabMember[];
   coordinators?: LabMember[];
-  history?: any[];
+  history?: unknown[];
+};
+
+export type AuthoredPaper = Paper & {
+  creationTime?: string;
+  latestRoundNumber?: number | null;
+  latestRoundStatus?: string | null;
+  latestRoundDeadline?: string | null;
+  completedAssignments?: number;
+  totalAssignments?: number;
+};
+
+export type PaperHistoryDeclineRequest = {
+  id: string;
+  reason: string;
+  status: string;
+  requestedAt: string;
+};
+
+export type PaperHistoryExtension = {
+  id: string;
+  reason: string;
+  requestedDeadline: string;
+  approvedDeadline: string | null;
+  requestedAt: string;
+  status: string;
+};
+
+export type PaperHistoryAssignment = {
+  assignmentId: string;
+  reviewerId: string | null;
+  reviewerName: string | null;
+  reviewerEmail: string | null;
+  status: string;
+  deadline: string | null;
+  invitedAt: string;
+  acceptedAt: string | null;
+  submittedAt: string | null;
+  declineReason: string | null;
+  declineRequests: PaperHistoryDeclineRequest[];
+  extensions: PaperHistoryExtension[];
+};
+
+export type PaperHistoryRound = {
+  id: string;
+  roundNumber: number;
+  roundStatus: string;
+  deadline: string;
+  startedAt: string | null;
+  closedAt: string | null;
+  assignments: PaperHistoryAssignment[];
+  artifacts: {
+    checklistItems: { id: string; description: string; isChecked: boolean }[];
+    aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
+  };
+};
+
+export type PaperHistory = {
+  id: string;
+  title: string;
+  status: string;
+  targetVenue: string;
+  overleafLink?: string | null;
+  authors: LabMember[];
+  rounds: PaperHistoryRound[];
 };
 
 export type RegisterPaperPayload = {
@@ -241,6 +305,14 @@ export function getPaperByIdRequest(id: string) {
 
 export function getAllPapersRequest() {
   return apiRequest<Paper[]>('/papers/all');
+}
+
+export function getMyWrittenPapersRequest() {
+  return apiRequest<AuthoredPaper[]>('/papers/my-written');
+}
+
+export function getPaperHistoryRequest(id: string) {
+  return apiRequest<PaperHistory>(`/papers/${id}/history`);
 }
 
 export function updatePaperAbstractRequest(id: string, abstract: string) {

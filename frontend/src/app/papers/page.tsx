@@ -4,22 +4,24 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { ChevronRight, FileText, Search, Loader2 } from 'lucide-react';
-import { getAllPapersRequest } from '@/lib/api';
+import { ChevronRight, FileText, Search, Loader2, Clock, CheckCircle2 } from 'lucide-react';
+import { AuthoredPaper, getAllPapersRequest, getMyWrittenPapersRequest, TopicOption } from '@/lib/api';
 
 export default function PapersList() {
     const { user } = useUser();
     const searchParams = useSearchParams();
     const filter = searchParams.get('filter');
 
-    const [allPapers, setAllPapers] = useState<any[]>([]);
+    const [allPapers, setAllPapers] = useState<AuthoredPaper[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchPapers = async () => {
             try {
-                const data = await getAllPapersRequest();
-                setAllPapers(data);
+                const data = filter === 'authored'
+                    ? await getMyWrittenPapersRequest()
+                    : await getAllPapersRequest();
+                setAllPapers(data as AuthoredPaper[]);
             } catch (err) {
                 console.error('Failed to fetch papers:', err);
                 setAllPapers([]);
@@ -28,11 +30,11 @@ export default function PapersList() {
             }
         };
         fetchPapers();
-    }, []);
+    }, [filter]);
 
     const getPapers = () => {
         if (filter === 'authored') {
-            return allPapers.filter(p => p.authors && p.authors.includes(user.id));
+            return allPapers;
         }
         if (filter === 'reviews') {
             // Currently displays all assignment contexts until Round relations are mapped
@@ -60,11 +62,22 @@ export default function PapersList() {
         switch (status) {
             case 'Draft': return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
             case 'In Review': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+            case 'HumanReview': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+            case 'AIReview': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+            case 'Completed': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Accepted': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Archived': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
             default: return 'bg-white/10 text-slate-300 border-white/20';
         }
     };
+
+    const formatDate = (value?: string | null) => {
+        if (!value) return 'No deadline';
+        return new Date(value).toLocaleDateString();
+    };
+
+    const getTopicLabel = (topic: TopicOption | string) => typeof topic === 'string' ? topic : topic.name;
+    const getTopicKey = (topic: TopicOption | string) => typeof topic === 'string' ? topic : topic.id;
 
     return (
         <div className="max-w-6xl mx-auto py-4 animate-in fade-in duration-500">
@@ -121,15 +134,33 @@ export default function PapersList() {
                                             </span>
                                         </div>
                                         <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-3">
-                                            {paper.abstractText || paper.abstract}
+                                            {paper.abstractText}
                                         </p>
                                         <div className="flex items-center gap-2">
-                                            {(paper.topics || []).map((topic: any) => (
-                                                <span key={topic.id || topic} className="px-2 py-1 rounded bg-white/5 text-slate-400 text-[10px] font-medium uppercase tracking-wider">
-                                                    {topic.name || topic}
+                                            {(paper.topics || []).map((topic) => (
+                                                <span key={getTopicKey(topic)} className="px-2 py-1 rounded bg-white/5 text-slate-400 text-[10px] font-medium uppercase tracking-wider">
+                                                    {getTopicLabel(topic)}
                                                 </span>
                                             ))}
                                         </div>
+                                        {filter === 'authored' && (
+                                            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                                                <span className="inline-flex items-center gap-1.5">
+                                                    <Clock className="w-3.5 h-3.5" />
+                                                    {paper.latestRoundNumber ? `Round ${paper.latestRoundNumber}` : 'No rounds yet'}
+                                                </span>
+                                                {paper.latestRoundStatus && (
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                        {paper.latestRoundStatus}
+                                                    </span>
+                                                )}
+                                                <span>Deadline: {formatDate(paper.latestRoundDeadline)}</span>
+                                                {typeof paper.totalAssignments === 'number' && (
+                                                    <span>{paper.completedAssignments || 0}/{paper.totalAssignments} reviews completed</span>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="shrink-0 flex items-center justify-center h-12 w-12 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all">
                                         <ChevronRight className="w-6 h-6" />

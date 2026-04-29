@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import {
   CoordinatedPaper,
@@ -26,6 +27,8 @@ function statusColor(status: string) {
   switch (status) {
     case 'Invited':    return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
     case 'Accepted':   return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    case 'PendingDecline': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+    case 'PendingExtension': return 'bg-sky-500/10 text-sky-400 border-sky-500/20';
     case 'Declined':   return 'bg-red-500/10 text-red-400 border-red-500/20';
     case 'Completed':  return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
     case 'Cancelled':  return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
@@ -38,7 +41,11 @@ function statusColor(status: string) {
 function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${statusColor(status)}`}>
-      {status}
+      {status === 'PendingDecline'
+        ? 'Decline Requested'
+        : status === 'PendingExtension'
+          ? 'Extension Requested'
+          : status}
     </span>
   );
 }
@@ -100,7 +107,7 @@ function AssignmentRow({
       setShowExtApprove(false);
     });
 
-  const isCancelable = ['Invited', 'Accepted'].includes(assignment.status);
+  const isCancelable = !['Cancelled', 'Declined', 'Completed'].includes(assignment.status);
 
   return (
     <div className="space-y-3">
@@ -126,7 +133,7 @@ function AssignmentRow({
           {assignment.invitationSent && (
             <div className="flex items-center gap-1 text-xs text-emerald-500">
               <Mail className="w-3.5 h-3.5" />
-              Invited
+              Invitation sent
             </div>
           )}
         </div>
@@ -190,7 +197,7 @@ function AssignmentRow({
               <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
               <div>
                 <p className="text-xs font-semibold text-amber-400 mb-0.5">Decline Request Pending</p>
-                <p className="text-xs text-slate-400">"{assignment.pendingDeclineRequest.reason}"</p>
+                <p className="text-xs text-slate-400">{assignment.pendingDeclineRequest.reason}</p>
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
@@ -224,7 +231,7 @@ function AssignmentRow({
                 <p className="text-xs text-slate-400">
                   Requested: {formatDate(assignment.pendingExtensionRequest.requestedDeadline)}
                 </p>
-                <p className="text-xs text-slate-500 mt-0.5">"{assignment.pendingExtensionRequest.reason}"</p>
+                <p className="text-xs text-slate-500 mt-0.5">{assignment.pendingExtensionRequest.reason}</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
@@ -310,7 +317,11 @@ function RoundCard({ round, onRefresh }: { round: RoundWithAssignments; onRefres
   const toggleSelect = (id: string) =>
     setSelectedIds(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
 
@@ -469,6 +480,7 @@ function RoundCard({ round, onRefresh }: { round: RoundWithAssignments; onRefres
 
 export default function RoundsPage() {
   const { user } = useUser();
+  const searchParams = useSearchParams();
   const [papers, setPapers] = useState<CoordinatedPaper[]>([]);
   const [selectedPaperId, setSelectedPaperId] = useState<string | null>(null);
   const [rounds, setRounds] = useState<RoundWithAssignments[]>([]);
@@ -499,6 +511,16 @@ export default function RoundsPage() {
     setRounds([]);
     loadRounds(paperId);
   };
+
+  useEffect(() => {
+    const paperId = searchParams.get('paper');
+    if (!paperId || loadingPapers || selectedPaperId === paperId) return;
+    if (!papers.some(paper => paper.id === paperId)) return;
+
+    setSelectedPaperId(paperId);
+    setRounds([]);
+    loadRounds(paperId);
+  }, [loadRounds, loadingPapers, papers, searchParams, selectedPaperId]);
 
   const handleRefresh = () => {
     if (selectedPaperId) loadRounds(selectedPaperId);

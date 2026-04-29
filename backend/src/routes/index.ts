@@ -85,6 +85,10 @@ router.patch('/assignments/:id/process-extension', authenticateRequest, Coordina
 
 // ==== PAPER ROUTES ====
 router.get('/papers/my-coordinated', authenticateRequest, PaperController.getMyCoordinatedPapers);
+router.get('/papers/my-written', authenticateRequest, PaperController.getMyWrittenPapers);
+router.get('/papers/my-reviewed', authenticateRequest, PaperController.getMyReviewedPapers);
+router.get('/papers/my-current-reviewed', authenticateRequest, PaperController.getMyCurrentReviewedPapers);
+router.get('/papers/all', authenticateRequest, PaperController.getAllPapers);
 router.post('/papers', authenticateRequest, PaperController.registerPaper);
 
 router.get('/papers/:id', authenticateRequest, PaperController.getPaperById);
@@ -97,11 +101,6 @@ router.put('/papers/:id/abstract', authenticateRequest, PaperController.updateAb
 router.put('/papers/:id/status', authenticateRequest, PaperController.updatePaperStatus);
 router.post('/papers/:id/manuscript', authenticateRequest, PaperController.uploadManuscript);
 router.post('/papers/:id/parents', authenticateRequest, PaperController.linkParentPapers);
-
-router.get('/papers/my-written', authenticateRequest, PaperController.getMyWrittenPapers);
-router.get('/papers/my-reviewed', authenticateRequest, PaperController.getMyReviewedPapers);
-router.get('/papers/my-current-reviewed', authenticateRequest, PaperController.getMyCurrentReviewedPapers);
-router.get('/papers/all', authenticateRequest, PaperController.getAllPapers);
 
 // ==== RATING ANALYTICS ROUTES ====
 router.post('/ratings', authenticateRequest, RatingAnalyticsController.rateReviewer);

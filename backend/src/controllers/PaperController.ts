@@ -172,12 +172,12 @@ export class PaperController {
   }
 
   /**
-   * GET /papers/:id/history?userId=<uuid>
+   * GET /papers/:id/history
    *
    * Returns the full round-by-round review history for a specific paper.
-   * Response depth: rounds + assignments (reviewer info, summary, extension, rating).
-   * Excludes checklist items and AI review reports (available via dedicated endpoints).
-   * Access: coordinator of the paper OR any of its authors.
+   * Response depth: rounds + assignments, plus optional review artifacts.
+   * Excludes reviewer ratings and review summaries from the author-facing history.
+   * Access: coordinators can view every paper; lab members can view papers they authored.
    */
   static async getPaperHistory(req: Request, res: Response) {
     try {
@@ -193,13 +193,14 @@ export class PaperController {
         where: { id: paperId },
         relations: [
           'authors',
-          'coordinator',
+          'coordinators',
           'rounds',
           'rounds.assignments',
           'rounds.assignments.reviewer',
-          'rounds.assignments.reviewSummary',
-          'rounds.assignments.extension',
-          'rounds.assignments.rating',
+          'rounds.assignments.extensions',
+          'rounds.assignments.declineRequests',
+          'rounds.checklistItems',
+          'rounds.aiReviewReports',
           'labs',
           'labs.coordinator',
         ],
@@ -207,18 +208,10 @@ export class PaperController {
 
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isExplicitCoordinator = paper.coordinators?.some(c => c.id === userId) ?? false;
-      const isLabCoordinator = paper.labs?.some(lab => lab.coordinator?.id === userId) ?? false;
       const isAuthor = paper.authors?.some(a => a.id === userId) ?? false;
-      const isReviewer =
-        paper.rounds?.some(r =>
-          r.assignments?.some(a => a.reviewer?.id === userId)
-        ) ?? false;
-
-      const isAdmin = authReq.user.role === UserRole.GlobalAdmin || authReq.user.role === UserRole.LocalAdmin;
       const isCoordinator = authReq.user.role === UserRole.Coordinator;
 
-      if (!isExplicitCoordinator && !isLabCoordinator && !isAuthor && !isReviewer && !isAdmin && !isCoordinator) {
+      if (!isCoordinator && !isAuthor) {
         return res.status(403).json({ message: 'Forbidden' });
       }
 
@@ -226,42 +219,59 @@ export class PaperController {
         .slice()
         .sort((a, b) => a.roundNumber - b.roundNumber)
         .map(round => ({
+          id: round.id,
           roundNumber: round.roundNumber,
           roundStatus: round.status,
           deadline: round.deadline,
           startedAt: round.startedAt,
           closedAt: round.closedAt,
-          assignments: (round.assignments ?? []).map(assignment => ({
+          assignments: (round.assignments ?? [])
+            .slice()
+            .sort((a, b) => a.invitedAt.getTime() - b.invitedAt.getTime())
+            .map(assignment => ({
             assignmentId: assignment.id,
             reviewerId: assignment.reviewer?.id ?? null,
             reviewerName: assignment.reviewer?.name ?? null,
+            reviewerEmail: assignment.reviewer?.email ?? null,
             status: assignment.status,
             deadline: assignment.deadline,
             invitedAt: assignment.invitedAt,
             acceptedAt: assignment.acceptedAt,
             submittedAt: assignment.submittedAt,
             declineReason: assignment.declineReason,
-            summary: assignment.reviewSummary
-              ? {
-                text: assignment.reviewSummary.text,
-                submittedAt: assignment.reviewSummary.submittedAt,
-              }
-              : null,
-            extension: assignment.extensions?.[0]
-              ? {
-                requestedDeadline: assignment.extensions[0].requestedDeadline,
-                approvedDeadline: assignment.extensions[0].approvedDeadline,
-                status: assignment.extensions[0].status,
-              }
-              : null,
-            rating: assignment.rating
-              ? {
-                qualityScore: assignment.rating.qualityScore,
-                quantityScore: assignment.rating.quantityScore,
-                timeScore: assignment.rating.timeScore,
-              }
-              : null,
+            declineRequests: (assignment.declineRequests ?? [])
+              .slice()
+              .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+              .map(request => ({
+                id: request.id,
+                reason: request.reason,
+                status: request.status,
+                requestedAt: request.requestedAt,
+              })),
+            extensions: (assignment.extensions ?? [])
+              .slice()
+              .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+              .map(extension => ({
+                id: extension.id,
+                reason: extension.reason,
+                requestedDeadline: extension.requestedDeadline,
+                approvedDeadline: extension.approvedDeadline,
+                requestedAt: extension.requestedAt,
+                status: extension.status,
+              })),
           })),
+          artifacts: {
+            checklistItems: (round.checklistItems ?? []).map(item => ({
+              id: item.id,
+              description: item.description,
+              isChecked: item.isChecked,
+            })),
+            aiReviewReports: (round.aiReviewReports ?? []).map(report => ({
+              id: report.id,
+              generatedReportUrl: report.generatedReportUrl,
+              annotatedPdfUrl: report.annotatedPdfUrl,
+            })),
+          },
         }));
 
       return res.status(200).json({
@@ -269,6 +279,12 @@ export class PaperController {
         title: paper.title,
         status: paper.status,
         targetVenue: paper.targetVenue,
+        overleafLink: paper.overleafLink,
+        authors: (paper.authors ?? []).map(author => ({
+          id: author.id,
+          name: author.name,
+          email: author.email,
+        })),
         rounds,
       });
     } catch (e: any) {
@@ -288,7 +304,7 @@ export class PaperController {
 
       const papers = await AppDataSource.getRepository(Paper).find({
         where: { authors: { id: authReq.user.id } },
-        relations: ['authors', 'topics', 'coordinator', 'rounds'],
+        relations: ['authors', 'topics', 'coordinators', 'rounds', 'rounds.assignments'],
       });
 
       const result = papers.map(p => ({
@@ -296,13 +312,29 @@ export class PaperController {
         title: p.title,
         status: p.status,
         targetVenue: p.targetVenue,
+        abstractText: p.abstractText,
+        overleafLink: p.overleafLink,
         creationTime: p.creationTime,
         topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
-        authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name })),
+        authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name, email: a.email })),
         coordinatorId: p.coordinators?.[0]?.id ?? null,
         latestRoundNumber: p.rounds?.length
           ? Math.max(...p.rounds.map(r => r.roundNumber))
           : null,
+        latestRoundStatus: p.rounds?.length
+          ? p.rounds.slice().sort((a, b) => b.roundNumber - a.roundNumber)[0].status
+          : null,
+        latestRoundDeadline: p.rounds?.length
+          ? p.rounds.slice().sort((a, b) => b.roundNumber - a.roundNumber)[0].deadline
+          : null,
+        completedAssignments: (p.rounds ?? []).reduce(
+          (count, round) => count + (round.assignments ?? []).filter(a => a.status === AssignmentStatus.Completed).length,
+          0,
+        ),
+        totalAssignments: (p.rounds ?? []).reduce(
+          (count, round) => count + (round.assignments ?? []).length,
+          0,
+        ),
       }));
 
       return res.status(200).json(result);

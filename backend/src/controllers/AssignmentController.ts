@@ -137,7 +137,10 @@ export class AssignmentController {
 
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignments = await assignRepo.find({
-        where: { reviewer: { id: user.id } },
+        where: {
+          reviewer: { id: user.id },
+          status: Not(AssignmentStatus.Cancelled),
+        },
         relations: ['round', 'round.paper', 'declineRequests', 'extensions'],
         order: { invitedAt: 'DESC' },
       });
@@ -184,7 +187,7 @@ export class AssignmentController {
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
         where: { id },
-        relations: ['round', 'round.paper', 'round.paper.coordinators'],
+        relations: ['round', 'round.paper', 'round.paper.coordinators', 'declineRequests', 'extensions'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
 
@@ -192,7 +195,25 @@ export class AssignmentController {
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
       assignment.status = AssignmentStatus.Cancelled;
+      const declinedRequestsToSave = assignment.declineRequests?.filter(request => request.status === DeclineRequestStatus.Pending) ?? [];
+      declinedRequestsToSave.forEach(request => {
+        if (request.status === DeclineRequestStatus.Pending) {
+          request.status = DeclineRequestStatus.Rejected;
+        }
+      });
+      const extensionsToSave = assignment.extensions?.filter(request => request.status === ExtensionStatus.Pending) ?? [];
+      extensionsToSave.forEach(request => {
+        if (request.status === ExtensionStatus.Pending) {
+          request.status = ExtensionStatus.Rejected;
+        }
+      });
       await assignRepo.save(assignment);
+      if (declinedRequestsToSave.length > 0) {
+        await AppDataSource.getRepository('DeclineRequest').save(declinedRequestsToSave);
+      }
+      if (extensionsToSave.length > 0) {
+        await AppDataSource.getRepository('Extension').save(extensionsToSave);
+      }
 
       return res.status(200).json({ message: 'Assignment cancelled', id: assignment.id });
     } catch (err) {
