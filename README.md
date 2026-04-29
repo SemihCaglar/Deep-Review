@@ -70,3 +70,12 @@ npm run dev
 - **SQLite Persistence:** No external database setup required.
 - **Transparent API Proxy:** Seamless cross-origin fetching.
 - **Team-Ready:** Comprehensive `.gitignore` and `README` for collaborative development.
+
+---
+
+## ⚙️ Configuration and Email Templates
+
+The system supports configurable email templates and global system policies.
+Detailed placeholder and policy key references are documented in [`docs/configuration.md`](docs/configuration.md).
+
+

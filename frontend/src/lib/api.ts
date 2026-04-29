@@ -64,6 +64,12 @@ export type LabMembersResponse = {
   users: LabMember[];
 };
 
+export type Lab = {
+  id: string;
+  name: string;
+  description: string;
+};
+
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
 };
@@ -102,13 +108,14 @@ export function loginRequest(email: string, password: string) {
   });
 }
 
-export function signupRequest(name: string, email: string, password: string) {
+export function signupRequest(name: string, email: string, password: string, labId?: string) {
   return apiRequest<AccountUserResponse>('/account/signup', {
     method: 'POST',
     body: {
       name,
       email,
       password,
+      labId,
     },
   });
 }
@@ -247,6 +254,147 @@ export function updatePaperTopicsRequest(id: string, topics: string[]) {
   return apiRequest<Paper>(`/papers/${id}/topics-update`, {
     method: 'PUT',
     body: { topics },
+  });
+}
+
+export function getLabsRequest() {
+  return apiRequest<Lab[]>('/labs');
+}
+
+// ==== ROUND MANAGEMENT TYPES ====
+
+export type CoordinatedPaper = {
+  id: string;
+  title: string;
+  status: string;
+  targetVenue: string;
+  abstractText: string;
+};
+
+export type PendingDeclineRequest = {
+  id: string;
+  reason: string;
+  requestedAt: string;
+};
+
+export type PendingExtensionRequest = {
+  id: string;
+  reason: string;
+  requestedDeadline: string;
+  requestedAt: string;
+};
+
+export type RoundAssignment = {
+  id: string;
+  status: string;
+  deadline: string | null;
+  invitationSent: boolean;
+  reviewer: { id: string; name: string; email: string };
+  pendingDeclineRequest: PendingDeclineRequest | null;
+  pendingExtensionRequest: PendingExtensionRequest | null;
+};
+
+export type RoundWithAssignments = {
+  id: string;
+  roundNumber: number;
+  deadline: string;
+  status: 'Open' | 'Closed';
+  assignments: RoundAssignment[];
+};
+
+export type MyAssignment = {
+  id: string;
+  status: string;
+  deadline: string | null;
+  invitationSent: boolean;
+  round: { id: string; roundNumber: number; deadline: string };
+  paper: { id: string; title: string; targetVenue: string; abstractText: string };
+  pendingDeclineRequest: PendingDeclineRequest | null;
+  pendingExtensionRequest: PendingExtensionRequest | null;
+};
+
+export type SuggestedReviewer = {
+  user: { id: string; name: string; email: string; role: string };
+  reasons: string[];
+};
+
+// ==== ROUND MANAGEMENT API FUNCTIONS ====
+
+export function getMyAssignmentsRequest() {
+  return apiRequest<MyAssignment[]>('/assignments/my');
+}
+
+export function respondToInvitationRequest(assignmentId: string, response: 'accept' | 'decline', reason?: string) {
+  return apiRequest<{ message: string }>('/responses/invitation', {
+    method: 'POST',
+    body: { assignmentId, response, ...(reason ? { reason } : {}) },
+  });
+}
+
+export function requestExtensionRequest(assignmentId: string, reason: string, requestedDeadline: string) {
+  return apiRequest<{ message: string; extensionId: string }>('/responses/extension', {
+    method: 'POST',
+    body: { assignmentId, reason, requestedDeadline },
+  });
+}
+
+export function completeReviewRequest(assignmentId: string, summary?: string) {
+  return apiRequest<{ message: string; id: string; status: string }>('/responses/complete', {
+    method: 'POST',
+    body: { assignmentId, ...(summary ? { summary } : {}) },
+  });
+}
+
+export function getMyCoordinatedPapersRequest() {
+  return apiRequest<CoordinatedPaper[]>('/papers/my-coordinated');
+}
+
+export function getPaperRoundsRequest(paperId: string) {
+  return apiRequest<RoundWithAssignments[]>(`/papers/${paperId}/rounds`);
+}
+
+export function getSuggestedReviewersRequest(roundId: string) {
+  return apiRequest<SuggestedReviewer[]>(`/rounds/${roundId}/suggest`);
+}
+
+export function assignReviewersRequest(roundId: string, reviewerIds: string[], deadline?: string) {
+  return apiRequest<{ id: string; reviewerId: string; status: string; deadline: string }[]>('/assignments', {
+    method: 'POST',
+    body: { roundId, reviewerIds, ...(deadline ? { deadline } : {}) },
+  });
+}
+
+export function sendInvitationsRequest(roundId: string) {
+  return apiRequest<{ message: string }>('/assignments/invite', {
+    method: 'POST',
+    body: { roundId },
+  });
+}
+
+export function cancelAssignmentRequest(assignmentId: string) {
+  return apiRequest<{ message: string }>(`/assignments/${assignmentId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function updateAssignmentDeadlineRequest(assignmentId: string, deadline: string) {
+  return apiRequest<{ id: string; deadline: string }>(`/assignments/${assignmentId}/deadline`, {
+    method: 'PUT',
+    body: { deadline },
+  });
+}
+
+export function processDeclineRequestApi(declineRequestId: string, decision: 'approve' | 'reject') {
+  return apiRequest<{ message: string; assignmentStatus: string }>('/responses/process-decline', {
+    method: 'POST',
+    body: { declineRequestId, decision },
+  });
+}
+
+export function processExtensionRequestApi(extensionId: string, decision: 'approve' | 'reject', approvedDeadline?: string) {
+  return apiRequest<{ message: string; assignmentDeadline: string }>('/responses/process-extension', {
+    method: 'POST',
+    body: { extensionId, decision, ...(approvedDeadline ? { approvedDeadline } : {}) },
   });
 }
 

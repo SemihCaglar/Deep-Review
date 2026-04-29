@@ -3,16 +3,24 @@
 import React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, UserPlus } from 'lucide-react';
-import { ApiError, signupRequest } from '@/lib/api';
+import { ApiError, signupRequest, getLabsRequest, type Lab } from '@/lib/api';
 
 export default function SignupPage() {
   const [name, setName] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [labId, setLabId] = React.useState('');
+  const [labs, setLabs] = React.useState<Lab[]>([]);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [successMessage, setSuccessMessage] = React.useState('');
   const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    getLabsRequest()
+      .then(setLabs)
+      .catch(err => console.error('Failed to load labs:', err));
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -27,12 +35,13 @@ export default function SignupPage() {
     setIsSubmitting(true);
 
     try {
-      await signupRequest(name, email, password);
+      await signupRequest(name, email, password, labId || undefined);
       setSuccessMessage('Your account request has been submitted and is pending coordinator approval.');
       setName('');
       setEmail('');
       setPassword('');
       setConfirmPassword('');
+      setLabId('');
     } catch (caughtError) {
       setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to submit signup request.');
     } finally {
@@ -123,6 +132,26 @@ export default function SignupPage() {
               disabled={isSubmitting}
               required
             />
+          </div>
+
+          <div>
+            <label htmlFor="labId" className="block text-sm font-medium text-slate-300 mb-2">
+              Select Lab (Optional for Admins)
+            </label>
+            <select
+              id="labId"
+              value={labId}
+              onChange={event => setLabId(event.target.value)}
+              className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+              disabled={isSubmitting || labs.length === 0}
+            >
+              <option value="">-- No Lab Selected --</option>
+              {labs.map(lab => (
+                <option key={lab.id} value={lab.id}>
+                  {lab.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {successMessage ? (
