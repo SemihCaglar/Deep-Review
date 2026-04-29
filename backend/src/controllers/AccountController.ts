@@ -9,7 +9,6 @@ import { Lab } from '../entities/Lab';
 import {
   accountSecurityPolicy,
   clearLoginLockout,
-
   createPasswordResetToken,
   hashPasswordResetToken,
   hashPassword,
@@ -18,6 +17,7 @@ import {
   registerSuccessfulLogin,
   verifyPassword,
 } from '../services/accountSecurity';
+import { sendEmail } from '../services/emailService';
 import { generateAuthToken } from '../services/tokenService';
 import type { AuthenticatedRequest } from '../types/auth';
 
@@ -194,7 +194,6 @@ export class AccountController {
   }
   static async sendPasswordReset(req: Request, res: Response) {
     const { email } = req.body ?? {};
-    let rawResetToken: string | null = null;
 
     if (typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({ message: 'email is required' });
@@ -206,19 +205,34 @@ export class AccountController {
     const user = await userRepo.findOne({ where: { email: normalizedEmail } });
 
     if (user) {
-      const resetToken = createPasswordResetToken();
-      rawResetToken = resetToken;
+      const rawResetToken = createPasswordResetToken();
       const token = tokenRepo.create({
-        tokenHash: hashPasswordResetToken(resetToken),
+        tokenHash: hashPasswordResetToken(rawResetToken),
         expiresAt: new Date(Date.now() + accountSecurityPolicy.passwordResetTokenTtlMs),
         usedAt: null,
         user,
       });
 
       await tokenRepo.save(token);
+
+      const frontendBaseUrl = process.env.FRONTEND_BASE_URL?.replace(/\/$/, '');
+
+      if (frontendBaseUrl) {
+        const resetLink = `${frontendBaseUrl}/reset-password?token=${rawResetToken}`;
+        const subject = 'Reset your BILSEN password';
+        const body =
+          `Hello ${user.name},\n\n` +
+          `We received a request to reset your BILSEN password.\n\n` +
+          `Reset your password using this link:\n${resetLink}\n\n` +
+          `If you did not request this change, you can safely ignore this email.`;
+
+        await sendEmail(user, subject, body);
+      } else {
+        console.error('[password-reset] FRONTEND_BASE_URL is not configured; reset email was not sent.');
+      }
     }
 
-    return AccountController.passwordResetRequestAccepted(res, rawResetToken);
+    return AccountController.passwordResetRequestAccepted(res);
   }
   static async resetPassword(req: Request, res: Response) {
     const { token, newPassword } = req.body ?? {};
@@ -615,17 +629,10 @@ export class AccountController {
     return res.status(401).json({ message: 'Invalid email or password' });
   }
 
-  private static passwordResetRequestAccepted(res: Response, resetToken: string | null = null) {
-    const responseBody: { message: string; resetToken?: string } = {
+  private static passwordResetRequestAccepted(res: Response) {
+    return res.status(200).json({
       message: 'If an account exists for that email, a password reset link will be sent',
-    };
-
-    if (process.env.NODE_ENV !== 'production' && resetToken) {
-      console.log(`[password-reset] Development reset token: ${resetToken}`);
-      responseBody.resetToken = resetToken;
-    }
-
-    return res.status(200).json(responseBody);
+    });
   }
 
   private static isUniqueConstraintError(error: unknown): boolean {
