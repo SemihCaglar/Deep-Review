@@ -215,6 +215,7 @@ export type PaperAuthor = {
 export type Paper = {
   id: string;
   title: string;
+  abstract?: string;
   abstractText?: string;
   creationTime?: string;
   targetVenue?: string;

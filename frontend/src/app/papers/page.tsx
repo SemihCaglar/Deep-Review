@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { ChevronRight, FileText, Search, Loader2, Clock, CheckCircle2 } from 'lucide-react';
-import { AuthoredPaper, getAllPapersRequest, getMyWrittenPapersRequest, TopicOption } from '@/lib/api';
+import { AuthoredPaper, getAllPapersRequest, getMyWrittenPapersRequest, PaperAuthor, TopicOption } from '@/lib/api';
 
 export default function PapersList() {
     const { user } = useUser();
@@ -32,14 +32,21 @@ export default function PapersList() {
         fetchPapers();
     }, [filter]);
 
+    const currentUserId = String(user.id || '');
+    const isAuthoredByCurrentUser = (paper: AuthoredPaper) =>
+        Boolean(currentUserId && paper.authors?.some((author: PaperAuthor) => author.id === currentUserId));
+    const getAuthorName = (author: PaperAuthor) => author.name;
+    const getPaperAbstract = (paper: AuthoredPaper) =>
+        paper.abstractText || paper.abstract || '';
+
     const getPapers = () => {
         if (filter === 'authored') {
-            return allPapers.filter(p => p.authors?.some((a: any) => a.id === user.id));
+            return allPapers.filter(isAuthoredByCurrentUser);
         }
         if (filter === 'reviews') {
             // Currently displays all assignment contexts until Round relations are mapped
             // We explicitly exclude authored papers from the reviews list
-            return allPapers.filter(p => !p.authors?.some((a: any) => a.id === user.id)); 
+            return allPapers.filter(p => !isAuthoredByCurrentUser(p)); 
         }
         // Default system view (only accessible via sidebar if Coordinator)
         return allPapers;
@@ -135,10 +142,10 @@ export default function PapersList() {
                                             </span>
                                         </div>
                                         <p className="text-sm text-slate-400 line-clamp-1 leading-relaxed mb-1">
-                                            <span className="font-semibold text-slate-300">Authors:</span> {paper.authors?.map((a: any) => typeof a === 'object' ? a.name : a).join(', ') || 'Unknown'}
+                                            <span className="font-semibold text-slate-300">Authors:</span> {paper.authors?.map(getAuthorName).join(', ') || 'Unknown'}
                                         </p>
                                         <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-3">
-                                            {paper.abstractText}
+                                            {getPaperAbstract(paper)}
                                         </p>
                                         <div className="flex items-center gap-2">
                                             {(paper.topics || []).map((topic) => (
