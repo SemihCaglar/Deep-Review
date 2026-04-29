@@ -28,9 +28,6 @@ export class Paper {
   @Column()
   creationTime: Date;
 
-  @Column()
-  targetVenue: string;
-
   @Column({
     type: 'simple-enum',
     enum: PaperStatus,
@@ -43,6 +40,9 @@ export class Paper {
 
   @ManyToMany('User', 'writtenPapers')
   authors: User[];
+
+  @Column({ type: 'simple-json', nullable: true })
+  authorOrder: string[];
 
   @ManyToMany('Coordinator', 'coordinatedPapers')
   @JoinTable()

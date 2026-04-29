@@ -24,11 +24,11 @@ export class PaperController {
       const creator = req.user;
 
       if (!creator) {
-          return res.status(401).json({ message: 'Authentication required' });
+        return res.status(401).json({ message: 'Authentication required' });
       }
 
-      if (!dto.title || !dto.abstractText || !dto.targetVenue || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
-          return res.status(400).json({ message: 'Missing required fields' });
+      if (!dto.title || !dto.abstractText || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
+        return res.status(400).json({ message: 'Missing required fields' });
       }
 
       const paper = await PaperService.registerPaper(dto, creator);
@@ -38,34 +38,37 @@ export class PaperController {
         paper
       });
     } catch (e: any) {
+      if (e.message && e.message.includes('invalid')) {
+        return res.status(400).json({ error: e.message });
+      }
       return res.status(500).json({ error: e.message || 'Internal Server Error' });
     }
   }
   static async getPaperById(req: Request<{ id: string }>, res: Response) {
     try {
-        const { id } = req.params;
-        if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-        const paper = await PaperService.getPaperById(id);
-        if (!paper) {
-            return res.status(404).json({ message: 'Paper not found' });
-        }
-        res.status(200).json(paper);
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      const paper = await PaperService.getPaperById(id);
+      if (!paper) {
+        return res.status(404).json({ message: 'Paper not found' });
+      }
+      res.status(200).json(paper);
     } catch (e: any) {
-        res.status(500).json({ error: e.message });
+      res.status(500).json({ error: e.message });
     }
   }
   static async setTopics(req: Request<{ id: string }>, res: Response) {
     try {
-        const { id } = req.params;
-        const { topics } = req.body;
-        if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-        const paper = await PaperService.updateTopics(id, topics);
-        res.status(200).json(paper);
+      const { id } = req.params;
+      const { topics } = req.body;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      const paper = await PaperService.updateTopics(id, topics);
+      res.status(200).json(paper);
     } catch (e: any) {
-        if (e.message === 'Paper not found') {
-            return res.status(404).json({ message: e.message });
-        }
-        res.status(500).json({ error: e.message });
+      if (e.message === 'Paper not found') {
+        return res.status(404).json({ message: e.message });
+      }
+      res.status(500).json({ error: e.message });
     }
   }
   static async uploadManuscript(req: Request, res: Response) {
@@ -76,30 +79,30 @@ export class PaperController {
   }
   static async updateAbstract(req: Request<{ id: string }>, res: Response) {
     try {
-        const { id } = req.params;
-        const { abstract } = req.body;
-        if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-        const paper = await PaperService.updateAbstract(id, abstract);
-        res.status(200).json(paper);
+      const { id } = req.params;
+      const { abstract } = req.body;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      const paper = await PaperService.updateAbstract(id, abstract);
+      res.status(200).json(paper);
     } catch (e: any) {
-        if (e.message === 'Paper not found') {
-            return res.status(404).json({ message: e.message });
-        }
-        res.status(500).json({ error: e.message });
+      if (e.message === 'Paper not found') {
+        return res.status(404).json({ message: e.message });
+      }
+      res.status(500).json({ error: e.message });
     }
   }
   static async updateTopics(req: Request<{ id: string }>, res: Response) {
     try {
-        const { id } = req.params;
-        const { topics } = req.body;
-        if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-        const paper = await PaperService.updateTopics(id, topics);
-        res.status(200).json(paper);
+      const { id } = req.params;
+      const { topics } = req.body;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      const paper = await PaperService.updateTopics(id, topics);
+      res.status(200).json(paper);
     } catch (e: any) {
-        if (e.message === 'Paper not found') {
-            return res.status(404).json({ message: e.message });
-        }
-        res.status(500).json({ error: e.message });
+      if (e.message === 'Paper not found') {
+        return res.status(404).json({ message: e.message });
+      }
+      res.status(500).json({ error: e.message });
     }
   }
 
@@ -163,7 +166,6 @@ export class PaperController {
         id: paper.id,
         title: paper.title,
         status: paper.status,
-        targetVenue: paper.targetVenue,
         latestRound: latestRoundSummary,
       });
     } catch (e: any) {
@@ -215,6 +217,10 @@ export class PaperController {
         return res.status(403).json({ message: 'Forbidden' });
       }
 
+      const latestRound = (paper.rounds ?? [])
+        .slice()
+        .sort((a, b) => b.roundNumber - a.roundNumber)[0] ?? null;
+
       const rounds = (paper.rounds ?? [])
         .slice()
         .sort((a, b) => a.roundNumber - b.roundNumber)
@@ -224,7 +230,7 @@ export class PaperController {
           roundStatus: round.status,
           deadline: round.deadline,
           startedAt: round.startedAt,
-          closedAt: round.closedAt,
+          completedAt: round.completedAt,
           assignments: (round.assignments ?? [])
             .slice()
             .sort((a, b) => a.invitedAt.getTime() - b.invitedAt.getTime())
@@ -278,7 +284,7 @@ export class PaperController {
         id: paper.id,
         title: paper.title,
         status: paper.status,
-        targetVenue: paper.targetVenue,
+        targetVenue: latestRound?.targetVenue ?? '',
         overleafLink: paper.overleafLink,
         authors: (paper.authors ?? []).map(author => ({
           id: author.id,
@@ -307,35 +313,35 @@ export class PaperController {
         relations: ['authors', 'topics', 'coordinators', 'rounds', 'rounds.assignments'],
       });
 
-      const result = papers.map(p => ({
-        id: p.id,
-        title: p.title,
-        status: p.status,
-        targetVenue: p.targetVenue,
-        abstractText: p.abstractText,
-        overleafLink: p.overleafLink,
-        creationTime: p.creationTime,
-        topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
-        authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name, email: a.email })),
-        coordinatorId: p.coordinators?.[0]?.id ?? null,
-        latestRoundNumber: p.rounds?.length
-          ? Math.max(...p.rounds.map(r => r.roundNumber))
-          : null,
-        latestRoundStatus: p.rounds?.length
-          ? p.rounds.slice().sort((a, b) => b.roundNumber - a.roundNumber)[0].status
-          : null,
-        latestRoundDeadline: p.rounds?.length
-          ? p.rounds.slice().sort((a, b) => b.roundNumber - a.roundNumber)[0].deadline
-          : null,
-        completedAssignments: (p.rounds ?? []).reduce(
-          (count, round) => count + (round.assignments ?? []).filter(a => a.status === AssignmentStatus.Completed).length,
-          0,
-        ),
-        totalAssignments: (p.rounds ?? []).reduce(
-          (count, round) => count + (round.assignments ?? []).length,
-          0,
-        ),
-      }));
+      const result = papers.map(p => {
+        const latestRound = p.rounds?.length
+          ? p.rounds.slice().sort((a, b) => b.roundNumber - a.roundNumber)[0]
+          : null;
+
+        return {
+          id: p.id,
+          title: p.title,
+          status: p.status,
+          targetVenue: latestRound?.targetVenue ?? '',
+          abstractText: p.abstractText,
+          overleafLink: p.overleafLink,
+          creationTime: p.creationTime,
+          topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
+          authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name, email: a.email })),
+          coordinatorId: p.coordinators?.[0]?.id ?? null,
+          latestRoundNumber: latestRound?.roundNumber ?? null,
+          latestRoundStatus: latestRound?.status ?? null,
+          latestRoundDeadline: latestRound?.deadline ?? null,
+          completedAssignments: (p.rounds ?? []).reduce(
+            (count, round) => count + (round.assignments ?? []).filter(a => a.status === AssignmentStatus.Completed).length,
+            0,
+          ),
+          totalAssignments: (p.rounds ?? []).reduce(
+            (count, round) => count + (round.assignments ?? []).length,
+            0,
+          ),
+        };
+      });
 
       return res.status(200).json(result);
     } catch (e: any) {
@@ -390,7 +396,6 @@ export class PaperController {
         paperId: paper.id,
         title: paper.title,
         paperStatus: paper.status,
-        targetVenue: paper.targetVenue,
         topics: (paper.topics ?? []).map(t => ({ id: t.id, name: t.name })),
         latestAssignmentStatus: latestAssignment.status,
         latestRoundNumber: latestAssignment.round?.roundNumber ?? null,
@@ -434,7 +439,6 @@ export class PaperController {
         paperId: a.round.paper?.id ?? null,
         title: a.round.paper?.title ?? null,
         paperStatus: a.round.paper?.status ?? null,
-        targetVenue: a.round.paper?.targetVenue ?? null,
         topics: (a.round.paper?.topics ?? []).map(t => ({ id: t.id, name: t.name })),
         roundNumber: a.round.roundNumber,
         assignmentId: a.id,
@@ -466,9 +470,42 @@ export class PaperController {
         id: p.id,
         title: p.title,
         status: p.status,
-        targetVenue: p.targetVenue,
         abstractText: p.abstractText,
+        overleafLink: p.overleafLink ?? null,
       })));
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async updateOverleafLink(req: AuthenticatedRequest, res: Response) {
+    try {
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      }
+
+      const id = req.params.id as string;
+      const { overleafLink } = req.body;
+      if (typeof overleafLink !== 'string') {
+        return res.status(400).json({ message: 'overleafLink must be a string' });
+      }
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id },
+        relations: ['coordinators'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
+      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+
+      paper.overleafLink = overleafLink || null!;
+      await paperRepo.save(paper);
+
+      return res.status(200).json({ message: 'Overleaf link updated', overleafLink: paper.overleafLink ?? null });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -477,40 +514,43 @@ export class PaperController {
 
   static async getAllPapers(req: Request, res: Response) {
     try {
-      const authReq = req as AuthenticatedRequest;
-      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
-
-      if (authReq.user.role === UserRole.GlobalAdmin) {
-        return res.status(403).json({ message: 'Global Admins cannot view papers' });
-      }
-
       const repo = AppDataSource.getRepository(Paper);
-      let papers: Paper[];
+      const papers = await repo.find({ relations: ['authors', 'topics'] });
 
-      if (authReq.user.role === UserRole.LocalAdmin) {
-        // Find papers for the lab managed by this LocalAdmin
-        const la = await AppDataSource.getRepository(LocalAdmin).findOne({ 
-          where: { id: authReq.user.id }, 
-          relations: ['lab'] 
-        });
-        if (!la?.lab) return res.status(200).json([]);
-        
-        papers = await repo.find({
-          where: { labs: { id: la.lab.id } },
-          relations: ['authors', 'labs']
-        });
-      } else if (authReq.user.role === UserRole.Coordinator) {
-        // Already handled elsewhere or filter by lab coordinator?
-        // For now, allow all if coordinator, but ideally filter by lab.
-        papers = await repo.find({ relations: ['authors'] });
-      } else {
-        // Standard users shouldn't really hit this global endpoint
-        return res.status(403).json({ message: 'Access denied' });
-      }
+      const sortedPapers = papers.map(paper => {
+        if (paper.authorOrder && paper.authors) {
+          const orderMap = new Map(paper.authorOrder.map((id, index) => [id, index]));
+          paper.authors.sort((a, b) => {
+            const orderA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999;
+            const orderB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999;
+            return orderA - orderB;
+          });
+        }
+        return {
+          ...paper,
+          authors: paper.authors?.map(a => ({ id: a.id, name: a.name, email: a.email })) || []
+        };
+      });
 
-      const result = papers.map(p => ({ ...p, authors: p.authors ? p.authors.map(a => a.id) : [] }));
-      res.status(200).json(result);
+      res.status(200).json(sortedPapers);
     } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+  static async updateAuthors(req: Request<{ id: string }>, res: Response) {
+    try {
+      const { id } = req.params;
+      const { authors } = req.body;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      const paper = await PaperService.updateAuthors(id, authors);
+      res.status(200).json(paper);
+    } catch (e: any) {
+      if (e.message === 'Paper not found') {
+        return res.status(404).json({ message: e.message });
+      }
+      if (e.message && e.message.includes('invalid')) {
+        return res.status(400).json({ error: e.message });
+      }
       res.status(500).json({ error: e.message });
     }
   }

@@ -4,9 +4,11 @@ import { AppDataSource } from '../data-source';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { DeclineRequestStatus } from '../entities/DeclineRequest';
 import { ExtensionStatus } from '../entities/Extension';
-import { Round } from '../entities/Round';
+import { Round, RoundStatus } from '../entities/Round';
+import { Paper, PaperStatus } from '../entities/Paper';
 import { UserRole } from '../entities/User';
 import { sendEmail } from '../services/emailService';
+import { CoordinatorService, CoordinatorServiceError } from '../services/CoordinatorService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class AssignmentController {
@@ -47,12 +49,11 @@ export class AssignmentController {
         if (!reviewer) continue;
         if (reviewer.role === UserRole.Coordinator || reviewer.role === UserRole.GlobalAdmin || reviewer.role === UserRole.LocalAdmin) continue;
 
-        // Skip if any active (non-Cancelled) assignment already exists for this reviewer on this round
+        // Skip if ANY assignment already exists for this reviewer on this round
         const activeExists = await assignRepo.findOne({
           where: {
             round: { id: roundId },
             reviewer: { id: rId },
-            status: Not(AssignmentStatus.Cancelled),
           },
         });
         if (activeExists) continue;
@@ -103,8 +104,11 @@ export class AssignmentController {
       const isOwner = round.paper.coordinators?.some(c => c.id === coordinator.id);
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
+      if (round.status !== RoundStatus.Open) {
+        return res.status(400).json({ message: 'Invitations can only be sent for Open rounds. Start the round first.' });
+      }
+
       const assignRepo = AppDataSource.getRepository(Assignment);
-      // Only send to Invited assignments that have not yet received an invitation email
       const pendingInvitations = await assignRepo.find({
         where: { round: { id: roundId }, status: AssignmentStatus.Invited, invitationSent: false },
         relations: ['reviewer'],
@@ -121,6 +125,14 @@ export class AssignmentController {
 
       if (pendingInvitations.length > 0) {
         await assignRepo.save(pendingInvitations);
+      }
+
+      // Transition paper to HumanReview when first invitations are sent
+      const paper = round.paper;
+      if (pendingInvitations.length > 0 && paper.status !== PaperStatus.HumanReview) {
+        const paperRepo = AppDataSource.getRepository(Paper);
+        paper.status = PaperStatus.HumanReview;
+        await paperRepo.save(paper);
       }
 
       return res.status(200).json({ message: `Invitations sent to ${pendingInvitations.length} reviewer(s)` });
@@ -145,6 +157,13 @@ export class AssignmentController {
         order: { invitedAt: 'DESC' },
       });
 
+      const detailsVisible = [
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingDecline,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.Completed,
+        AssignmentStatus.Overdue,
+      ];
       const formatted = assignments.map(a => ({
         id: a.id,
         status: a.status,
@@ -154,12 +173,15 @@ export class AssignmentController {
           id: a.round.id,
           roundNumber: a.round.roundNumber,
           deadline: a.round.deadline,
+          submissionDeadline: a.round.submissionDeadline ?? null,
+          targetVenue: a.round.targetVenue,
+          venueCategory: a.round.venueCategory,
         },
         paper: {
           id: a.round.paper.id,
           title: a.round.paper.title,
-          targetVenue: a.round.paper.targetVenue,
           abstractText: a.round.paper.abstractText,
+          overleafLink: detailsVisible.includes(a.status) ? (a.round.paper.overleafLink ?? null) : null,
         },
         pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
         pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
@@ -167,6 +189,60 @@ export class AssignmentController {
 
       return res.status(200).json(formatted);
     } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async reassignReviewer(req: AuthenticatedRequest, res: Response) {
+    try {
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      }
+
+      const oldAssignmentId = req.params.id as string;
+      const { newReviewerId } = req.body;
+
+      if (!newReviewerId) {
+        return res.status(400).json({ message: 'Missing newReviewerId' });
+      }
+
+      const assignRepo = AppDataSource.getRepository(Assignment);
+      const assignment = await assignRepo.findOne({
+        where: { id: oldAssignmentId },
+        relations: ['round', 'round.paper', 'round.paper.labs'],
+      });
+      if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+
+      const labId = assignment.round.paper.labs?.[0]?.id;
+      if (!labId) {
+        return res.status(400).json({ message: 'Paper has no lab associated' });
+      }
+
+      const newAssignment = await CoordinatorService.reassignReviewer(
+        oldAssignmentId,
+        newReviewerId,
+        { coordinatorId: coordinator.id, labId },
+      );
+
+      // Send the invite email immediately (reassign = cancel + re-invite atomically)
+      if (newAssignment.reviewer) {
+        await sendEmail(
+          newAssignment.reviewer,
+          'You have been invited to review a paper',
+          `Hello ${newAssignment.reviewer.name},\n\nYou have been invited to review a paper. Please log in to accept or decline.\n\nDeadline: ${newAssignment.deadline?.toISOString() ?? 'TBD'}`,
+        );
+        const assignRepo = AppDataSource.getRepository(Assignment);
+        await assignRepo.update(newAssignment.id, { invitationSent: true });
+        newAssignment.invitationSent = true;
+      }
+
+      return res.status(201).json(newAssignment);
+    } catch (err) {
+      if (err instanceof CoordinatorServiceError) {
+        return res.status(err.statusCode).json({ message: err.message });
+      }
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
     }
@@ -215,7 +291,11 @@ export class AssignmentController {
         await AppDataSource.getRepository('Extension').save(extensionsToSave);
       }
 
-      return res.status(200).json({ message: 'Assignment cancelled', id: assignment.id });
+      return res.status(200).json({
+        message: 'Assignment cancelled',
+        id: assignment.id,
+        roundId: assignment.round.id,
+      });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -244,7 +324,18 @@ export class AssignmentController {
       const isOwner = assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
-      assignment.deadline = new Date(deadline);
+      const newDeadline = new Date(deadline);
+      const round = assignment.round;
+      const ceiling = round.venueCategory === 'Conference' && round.submissionDeadline
+        ? round.submissionDeadline
+        : round.deadline;
+
+      if (ceiling && newDeadline.getTime() > ceiling.getTime()) {
+        const label = round.venueCategory === 'Conference' ? 'the submission deadline' : 'the round deadline';
+        return res.status(400).json({ message: `Assignment deadline cannot exceed ${label}` });
+      }
+
+      assignment.deadline = newDeadline;
       await assignRepo.save(assignment);
 
       return res.status(200).json({ id: assignment.id, deadline: assignment.deadline });
