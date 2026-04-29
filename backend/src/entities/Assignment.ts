@@ -5,7 +5,7 @@ import type { Rating } from './Rating';
 import type { Extension } from './Extension';
 import type { User } from './User';
 import type { DeclineRequest } from './DeclineRequest';
-import type { ReviewFeedback } from './ReviewFeedback';
+
 import type { ReviewerResponse } from './ReviewerResponse';
 
 export enum AssignmentStatus {
@@ -65,8 +65,7 @@ export class Assignment {
   @OneToOne('Rating', 'assignment', { nullable: true })
   rating: Rating;
 
-  @OneToOne('ReviewFeedback', 'assignment', { nullable: true })
-  feedback: ReviewFeedback | null;
+
 
   @OneToOne('ReviewerResponse', 'assignment', { nullable: true })
   response: ReviewerResponse | null;
