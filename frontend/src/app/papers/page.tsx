@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { ChevronRight, FileText, Search } from 'lucide-react';
+import { ChevronRight, FileText, Search, Loader2 } from 'lucide-react';
+import { getAllPapersRequest } from '@/lib/api';
 
 export default function PapersList() {
     const { user } = useUser();
@@ -12,12 +13,21 @@ export default function PapersList() {
     const filter = searchParams.get('filter');
 
     const [allPapers, setAllPapers] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetch('/api/papers/all')
-            .then(res => res.json())
-            .then(data => setAllPapers(data || []))
-            .catch(console.error);
+        const fetchPapers = async () => {
+            try {
+                const data = await getAllPapersRequest();
+                setAllPapers(data);
+            } catch (err) {
+                console.error('Failed to fetch papers:', err);
+                setAllPapers([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchPapers();
     }, []);
 
     const getPapers = () => {
@@ -87,42 +97,51 @@ export default function PapersList() {
                 </div>
 
                 <div className="divide-y divide-white/5">
-                    {papers.map((paper) => (
-                        <Link
-                            key={paper.id}
-                            href={`/papers/${paper.id}`}
-                            className="flex items-start gap-4 p-6 hover:bg-white/[0.02] transition-colors group"
-                        >
-                            <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/20 group-hover:bg-blue-500 group-hover:text-white transition-all shadow-lg shadow-transparent group-hover:shadow-blue-500/20">
-                                <FileText className="w-6 h-6" />
-                            </div>
-                            <div className="flex-1 min-w-0 pr-4">
-                                <div className="flex items-center gap-3 mb-1">
-                                    <h3 className="text-lg font-semibold text-white truncate">{paper.title}</h3>
-                                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(paper.status)}`}>
-                                        {paper.status}
-                                    </span>
-                                </div>
-                                <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-3">
-                                    {paper.abstract}
-                                </p>
-                                <div className="flex items-center gap-2">
-                                    {(paper.topics || []).map((topic: string) => (
-                                        <span key={topic} className="px-2 py-1 rounded bg-white/5 text-slate-400 text-[10px] font-medium uppercase tracking-wider">
-                                            {topic}
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="shrink-0 flex items-center justify-center h-12 w-12 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all">
-                                <ChevronRight className="w-6 h-6" />
-                            </div>
-                        </Link>
-                    ))}
-                    {papers.length === 0 && (
-                        <div className="p-12 text-center text-slate-500">
-                            No papers found for this view.
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center py-20 gap-4">
+                            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                            <p className="text-slate-400 animate-pulse">Fetching papers...</p>
                         </div>
+                    ) : (
+                        <>
+                            {papers.map((paper) => (
+                                <Link
+                                    key={paper.id}
+                                    href={`/papers/${paper.id}`}
+                                    className="flex items-start gap-4 p-6 hover:bg-white/[0.02] transition-colors group"
+                                >
+                                    <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/20 group-hover:bg-blue-500 group-hover:text-white transition-all shadow-lg shadow-transparent group-hover:shadow-blue-500/20">
+                                        <FileText className="w-6 h-6" />
+                                    </div>
+                                    <div className="flex-1 min-w-0 pr-4">
+                                        <div className="flex items-center gap-3 mb-1">
+                                            <h3 className="text-lg font-semibold text-white truncate">{paper.title}</h3>
+                                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(paper.status)}`}>
+                                                {paper.status}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-3">
+                                            {paper.abstractText || paper.abstract}
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            {(paper.topics || []).map((topic: any) => (
+                                                <span key={topic.id || topic} className="px-2 py-1 rounded bg-white/5 text-slate-400 text-[10px] font-medium uppercase tracking-wider">
+                                                    {topic.name || topic}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="shrink-0 flex items-center justify-center h-12 w-12 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all">
+                                        <ChevronRight className="w-6 h-6" />
+                                    </div>
+                                </Link>
+                            ))}
+                            {papers.length === 0 && (
+                                <div className="p-12 text-center text-slate-500">
+                                    No papers found for this view.
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </div>

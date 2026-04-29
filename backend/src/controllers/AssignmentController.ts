@@ -47,7 +47,7 @@ export class AssignmentController {
 
         const reviewer = await userRepo.findOne({ where: { id: rId } });
         if (!reviewer) continue;
-        if (reviewer.role === UserRole.Coordinator || reviewer.role === UserRole.Admin) continue;
+        if (reviewer.role === UserRole.Coordinator || reviewer.role === UserRole.GlobalAdmin || reviewer.role === UserRole.LocalAdmin) continue;
 
         // Skip if any active (non-Cancelled) assignment already exists for this reviewer on this round
         const activeExists = await assignRepo.findOne({
@@ -311,26 +311,5 @@ export class AssignmentController {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
     }
-  }
-  static async respondToInvitation(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
-  }
-  static async requestDecline(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
-  }
-  static async requestDeadlineExtension(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
-  }
-  static async processDeclineRequest(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
-  }
-  static async processExtensionRequest(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
-  }
-  static async submitReviewSummary(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
-  }
-  static async markReviewCompleted(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
   }
 }

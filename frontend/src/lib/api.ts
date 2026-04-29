@@ -64,6 +64,12 @@ export type LabMembersResponse = {
   users: LabMember[];
 };
 
+export type Lab = {
+  id: string;
+  name: string;
+  description: string;
+};
+
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
 };
@@ -102,13 +108,14 @@ export function loginRequest(email: string, password: string) {
   });
 }
 
-export function signupRequest(name: string, email: string, password: string) {
+export function signupRequest(name: string, email: string, password: string, labId?: string) {
   return apiRequest<AccountUserResponse>('/account/signup', {
     method: 'POST',
     body: {
       name,
       email,
       password,
+      labId,
     },
   });
 }
@@ -197,6 +204,61 @@ export function rejectSignupRequest(id: string) {
   return apiRequest<AccountUserResponse>(`/account/reject/${id}`, {
     method: 'POST',
   });
+}
+
+export type Paper = {
+  id: string;
+  title: string;
+  abstractText?: string;
+  targetVenue?: string;
+  overleafLink?: string;
+  status: string;
+  topics?: TopicOption[];
+  authors?: LabMember[];
+  coordinators?: LabMember[];
+  history?: any[];
+};
+
+export type RegisterPaperPayload = {
+  title: string;
+  abstractText: string;
+  targetVenue: string;
+  topics: string[];
+  authors?: string[];
+  overleafLink?: string;
+};
+
+export function registerPaperRequest(payload: RegisterPaperPayload) {
+  return apiRequest<{ message: string; paper: Paper }>('/papers', {
+    method: 'POST',
+    body: payload,
+  });
+}
+
+export function getPaperByIdRequest(id: string) {
+  return apiRequest<Paper>(`/papers/${id}`);
+}
+
+export function getAllPapersRequest() {
+  return apiRequest<Paper[]>('/papers/all');
+}
+
+export function updatePaperAbstractRequest(id: string, abstract: string) {
+  return apiRequest<Paper>(`/papers/${id}/abstract`, {
+    method: 'PUT',
+    body: { abstract },
+  });
+}
+
+export function updatePaperTopicsRequest(id: string, topics: string[]) {
+  return apiRequest<Paper>(`/papers/${id}/topics-update`, {
+    method: 'PUT',
+    body: { topics },
+  });
+}
+
+export function getLabsRequest() {
+  return apiRequest<Lab[]>('/labs');
 }
 
 // ==== ROUND MANAGEMENT TYPES ====

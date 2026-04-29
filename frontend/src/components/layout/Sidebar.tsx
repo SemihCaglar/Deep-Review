@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { Home, FileText, CheckCircle, UserCircle2, LogOut, PlusSquare, UserCheck, Users, ClipboardList } from 'lucide-react';
+import { Home, FileText, CheckCircle, UserCircle2, LogOut, PlusSquare, UserCheck, Users, Shield, ClipboardList } from 'lucide-react';
 
 export default function Sidebar() {
     const { user, logout } = useUser();
@@ -23,7 +23,8 @@ export default function Sidebar() {
             { name: 'My Profile', href: '/profile', icon: UserCircle2 },
             { name: 'Lab Members', href: '/lab-members', icon: Users },
             ...(user.isCoordinator ? [{ name: 'Pending Approvals', href: '/pending-approvals', icon: UserCheck }] : []),
-            { name: 'My Authored Papers', href: '/papers?filter=authored', icon: FileText }
+            { name: 'My Authored Papers', href: '/papers?filter=authored', icon: FileText },
+            ...(user.isAdmin ? [{ name: 'Admin Dashboard', href: '/admin', icon: Shield }] : []),
         ];
 
         if (!user.isCoordinator) {
@@ -53,7 +54,9 @@ export default function Sidebar() {
                     </div>
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-200 truncate">{user.name}</p>
-                        <p className="text-xs text-slate-500 truncate">{user.isCoordinator ? 'Coordinator' : 'Standard User'}</p>
+                        <p className="text-xs text-slate-500 truncate">
+                            {user.isGlobalAdmin ? 'Global Admin' : user.isLocalAdmin ? 'Local Admin' : user.isCoordinator ? 'Coordinator' : 'Standard User'}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -79,6 +82,8 @@ export default function Sidebar() {
                         isActive = pathname === '/papers' && !authoredFilter;
                     } else if (item.href === '/register') {
                         isActive = pathname === '/register';
+                    } else if (item.href === '/admin') {
+                        isActive = pathname === '/admin' || pathname.startsWith('/admin/');
                     } else if (item.href === '/rounds') {
                         isActive = pathname === '/rounds' || pathname.startsWith('/rounds/');
                     }

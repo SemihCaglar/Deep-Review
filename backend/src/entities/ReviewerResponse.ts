@@ -11,7 +11,7 @@ import {
 } from 'typeorm';
 import type { Assignment } from './Assignment';
 import type { Lab } from './Lab';
-import type { ReviewFeedback } from './ReviewFeedback';
+
 import type { Round } from './Round';
 import type { User } from './User';
 
@@ -64,6 +64,5 @@ export class ReviewerResponse {
   @ManyToOne('Lab', 'reviewerResponses', { nullable: true, onDelete: 'SET NULL' })
   lab: Lab | null;
 
-  @OneToOne('ReviewFeedback', 'reviewerResponse', { nullable: true })
-  feedback: ReviewFeedback | null;
+
 }

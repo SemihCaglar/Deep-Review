@@ -1,14 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { MOCK_PAPERS, MOCK_ASSIGNMENTS, MOCK_USERS, MOCK_ROUNDS } from '@/lib/mockData';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink } from 'lucide-react';
+import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2 } from 'lucide-react';
+import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, TopicOption } from '@/lib/api';
 
 export default function PaperDetails({ params }: { params: { id: string } }) {
     const { user } = useUser();
+    const [paper, setPaper] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [availableTopics, setAvailableTopics] = useState<TopicOption[]>([]);
+    
     const [isArchiving, setIsArchiving] = useState(false);
     const [isStartingRound, setIsStartingRound] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
@@ -28,19 +33,52 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [isSendingReminder, setIsSendingReminder] = useState(false);
     const [reminderSent, setReminderSent] = useState(false);
 
-    // Rating state
-    const [ratingScores, setRatingScores] = useState<Record<string, { quantity: number, quality: number, timelines: number }>>({});
+    const [localAbstract, setLocalAbstract] = useState('');
+    const [localTopics, setLocalTopics] = useState<string[]>([]); // These will be IDs
+    const [localDeadline, setLocalDeadline] = useState('');
+    const [localHistory, setLocalHistory] = useState<any[]>([]);
 
-    const paper = MOCK_PAPERS.find(p => p.id === params.id);
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [paperData, topicsData] = await Promise.all([
+                    getPaperByIdRequest(params.id),
+                    getTopicsRequest()
+                ]);
+                setPaper(paperData);
+                setLocalAbstract(paperData.abstractText || '');
+                setLocalTopics(paperData.topics?.map((t: any) => t.id) || []);
+                setAvailableTopics(topicsData);
+
+                // Set initial deadline from mock data if it matches
+                const activeRound = MOCK_ROUNDS.find(r => r.paperId === paperData.id && r.status === 'Open');
+                if (activeRound) {
+                    setLocalDeadline(activeRound.deadline || '');
+                }
+                setLocalHistory(paperData.history || []);
+            } catch (err) {
+                console.error('Failed to fetch paper details', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [params.id]);
+
+    if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                <p className="text-slate-400 animate-pulse">Loading paper details...</p>
+            </div>
+        );
+    }
 
     if (!paper) {
         return notFound();
     }
 
-    const [localAbstract, setLocalAbstract] = useState(paper.abstract);
-    const [localTopics, setLocalTopics] = useState(paper.topics);
-
-    const isAuthor = paper.authors.includes(user.id);
+    const isAuthor = paper.authors?.some((a: any) => a.id === user.id);
     const canViewHistory = user.isCoordinator || isAuthor;
     const canEditAbstract = user.isCoordinator || isAuthor;
 
@@ -48,7 +86,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
     // Get assignments for this paper
     const activeRound = MOCK_ROUNDS.find(r => r.paperId === paper.id && r.status === 'Open');
-    const [localDeadline, setLocalDeadline] = useState(activeRound?.deadline || '');
     const assignments = activeRound ? MOCK_ASSIGNMENTS.filter(a => a.roundId === activeRound.id) : [];
     const myAssignment = activeRound ? assignments.find(a => a.reviewerId === user.id) : null;
 
@@ -105,9 +142,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     );
     const effectivePaperStatus = isRoundComplete && currentStatus === 'In Review' ? 'Review Done' : currentStatus;
 
-    // Local dynamic history to show changes without refreshing mockData
-    const [localHistory, setLocalHistory] = useState(paper.history || []);
-
     const handleSubmitReview = () => {
         setIsSubmittingReview(true);
         setTimeout(() => {
@@ -136,6 +170,36 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }, 800);
     };
 
+    const handleSaveAbstract = async () => {
+        try {
+            await updatePaperAbstractRequest(paper.id, localAbstract);
+            setPaper({ ...paper, abstractText: localAbstract });
+            setIsEditingAbstract(false);
+        } catch (err) {
+            console.error('Failed to update abstract', err);
+            alert('Failed to update abstract');
+        }
+    };
+
+    const handleSaveTopics = async () => {
+        try {
+            const updatedPaper = await updatePaperTopicsRequest(paper.id, localTopics);
+            setPaper({ ...paper, topics: updatedPaper.topics });
+            setIsEditingTopics(false);
+        } catch (err) {
+            console.error('Failed to update topics', err);
+            alert('Failed to update topics');
+        }
+    };
+
+    const toggleTopic = (id: string) => {
+        if (localTopics.includes(id)) {
+            setLocalTopics(localTopics.filter(t => t !== id));
+        } else {
+            setLocalTopics([...localTopics, id]);
+        }
+    };
+
     return (
         <div className="max-w-5xl mx-auto py-4 animate-in fade-in duration-500 mb-20">
             <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-6">
@@ -153,9 +217,9 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     </div>
 
                     <div className="flex items-center gap-2 mb-4 flex-wrap group/topics cursor-pointer relative">
-                        {localTopics.map(topic => (
-                            <span key={topic} className="px-2 py-1 rounded bg-white/10 text-slate-300 text-xs font-medium border border-white/5">
-                                {topic}
+                        {paper.topics?.map((topic: any) => (
+                            <span key={topic.id} className="px-2 py-1 rounded bg-white/10 text-slate-300 text-xs font-medium border border-white/5">
+                                {topic.name}
                             </span>
                         ))}
                         {canEditAbstract && !isEditingTopics && (
@@ -167,20 +231,37 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                             </button>
                         )}
                         {isEditingTopics && (
-                            <div className="flex items-center gap-2 w-full mt-2">
-                                <input
-                                    type="text"
-                                    value={localTopics.join(', ')}
-                                    onChange={(e) => setLocalTopics(e.target.value.split(',').map(t => t.trim()).filter(Boolean))}
-                                    className="flex-1 bg-background border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-slate-500"
-                                    placeholder="Topic 1, Topic 2, Topic 3"
-                                />
-                                <button
-                                    onClick={() => setIsEditingTopics(false)}
-                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors shrink-0"
-                                >
-                                    Done
-                                </button>
+                            <div className="absolute left-0 top-full mt-2 bg-slate-900 border border-white/10 p-4 rounded-xl shadow-2xl z-50 min-w-[300px]">
+                                <h4 className="text-xs font-semibold text-slate-400 uppercase mb-3">Select Topics</h4>
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                    {availableTopics.map(topic => (
+                                        <button
+                                            key={topic.id}
+                                            type="button"
+                                            onClick={() => toggleTopic(topic.id)}
+                                            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${localTopics.includes(topic.id) ? 'bg-blue-600/20 border-blue-500/50 text-blue-300' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                                        >
+                                            {topic.name}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                    <button
+                                        onClick={() => {
+                                            setLocalTopics(paper.topics?.map((t: any) => t.id) || []);
+                                            setIsEditingTopics(false);
+                                        }}
+                                        className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleSaveTopics}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors"
+                                    >
+                                        Save Topics
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -492,7 +573,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 <div className="flex justify-end gap-2">
                                     <button
                                         onClick={() => {
-                                            setLocalAbstract(paper.abstract);
+                                            setLocalAbstract(paper.abstractText);
                                             setIsEditingAbstract(false);
                                         }}
                                         className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
@@ -500,7 +581,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         Cancel
                                     </button>
                                     <button
-                                        onClick={() => setIsEditingAbstract(false)}
+                                        onClick={handleSaveAbstract}
                                         className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
                                     >
                                         Save Changes
@@ -566,18 +647,16 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 </button>
                             )}
                         </h3>
-                        <div className="space-y-4">
-                            {paper.authors.length > 0 ? paper.authors.map(authorId => {
-                                const authorInfo = MOCK_USERS[Object.keys(MOCK_USERS).find(k => MOCK_USERS[k as keyof typeof MOCK_USERS].id === authorId) as keyof typeof MOCK_USERS];
-                                if (!authorInfo) return null;
+                         <div className="space-y-4">
+                            {paper.authors?.length > 0 ? paper.authors.map((author: any) => {
                                 return (
-                                    <div key={authorId} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
+                                    <div key={author.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
                                         <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-semibold text-sm border border-blue-500/20 shrink-0">
-                                            {authorInfo.name.charAt(0)}
+                                            {author.name?.charAt(0)}
                                         </div>
                                         <div>
-                                            <p className="text-white text-sm font-medium">{authorInfo.name}</p>
-                                            <p className="text-xs text-slate-500">{authorInfo.email}</p>
+                                            <p className="text-white text-sm font-medium">{author.name}</p>
+                                            <p className="text-xs text-slate-500">{author.email}</p>
                                         </div>
                                     </div>
                                 );
