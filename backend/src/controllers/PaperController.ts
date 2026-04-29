@@ -27,7 +27,7 @@ export class PaperController {
           return res.status(401).json({ message: 'Authentication required' });
       }
 
-      if (!dto.title || !dto.abstractText || !dto.targetVenue || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
+      if (!dto.title || !dto.abstractText || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
           return res.status(400).json({ message: 'Missing required fields' });
       }
 
@@ -163,7 +163,6 @@ export class PaperController {
         id: paper.id,
         title: paper.title,
         status: paper.status,
-        targetVenue: paper.targetVenue,
         latestRound: latestRoundSummary,
       });
     } catch (e: any) {
@@ -230,7 +229,7 @@ export class PaperController {
           roundStatus: round.status,
           deadline: round.deadline,
           startedAt: round.startedAt,
-          closedAt: round.closedAt,
+          completedAt: round.completedAt,
           assignments: (round.assignments ?? []).map(assignment => ({
             assignmentId: assignment.id,
             reviewerId: assignment.reviewer?.id ?? null,
@@ -268,7 +267,6 @@ export class PaperController {
         id: paper.id,
         title: paper.title,
         status: paper.status,
-        targetVenue: paper.targetVenue,
         rounds,
       });
     } catch (e: any) {
@@ -295,7 +293,6 @@ export class PaperController {
         id: p.id,
         title: p.title,
         status: p.status,
-        targetVenue: p.targetVenue,
         creationTime: p.creationTime,
         topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
         authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name })),
@@ -358,7 +355,6 @@ export class PaperController {
         paperId: paper.id,
         title: paper.title,
         paperStatus: paper.status,
-        targetVenue: paper.targetVenue,
         topics: (paper.topics ?? []).map(t => ({ id: t.id, name: t.name })),
         latestAssignmentStatus: latestAssignment.status,
         latestRoundNumber: latestAssignment.round?.roundNumber ?? null,
@@ -402,7 +398,6 @@ export class PaperController {
         paperId: a.round.paper?.id ?? null,
         title: a.round.paper?.title ?? null,
         paperStatus: a.round.paper?.status ?? null,
-        targetVenue: a.round.paper?.targetVenue ?? null,
         topics: (a.round.paper?.topics ?? []).map(t => ({ id: t.id, name: t.name })),
         roundNumber: a.round.roundNumber,
         assignmentId: a.id,

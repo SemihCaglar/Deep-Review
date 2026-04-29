@@ -43,7 +43,6 @@ async function runTest() {
     title: "Test Paper",
     abstractText: "Test Abstract",
     creationTime: new Date(),
-    targetVenue: "Test Venue",
     status: PaperStatus.Draft,
     authors: [author]
   });

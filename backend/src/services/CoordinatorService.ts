@@ -189,7 +189,7 @@ export class CoordinatorService {
         relations: ['labs'],
       });
       if (!newReviewer) throw new CoordinatorServiceError(404, 'New reviewer not found');
-      if (newReviewer.role === UserRole.Coordinator || newReviewer.role === UserRole.Admin) {
+      if (newReviewer.role === UserRole.Coordinator || newReviewer.role === UserRole.GlobalAdmin || newReviewer.role === UserRole.LocalAdmin) {
         throw new CoordinatorServiceError(400, 'Coordinators and admins cannot be assigned as reviewers');
       }
 
