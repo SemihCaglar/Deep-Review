@@ -206,6 +206,57 @@ export function rejectSignupRequest(id: string) {
   });
 }
 
+export type Paper = {
+  id: string;
+  title: string;
+  abstractText?: string;
+  targetVenue?: string;
+  overleafLink?: string;
+  status: string;
+  topics?: TopicOption[];
+  authors?: LabMember[];
+  coordinators?: LabMember[];
+  history?: any[];
+};
+
+export type RegisterPaperPayload = {
+  title: string;
+  abstractText: string;
+  targetVenue: string;
+  topics: string[];
+  authors?: string[];
+  overleafLink?: string;
+};
+
+export function registerPaperRequest(payload: RegisterPaperPayload) {
+  return apiRequest<{ message: string; paper: Paper }>('/papers', {
+    method: 'POST',
+    body: payload,
+  });
+}
+
+export function getPaperByIdRequest(id: string) {
+  return apiRequest<Paper>(`/papers/${id}`);
+}
+
+export function getAllPapersRequest() {
+  return apiRequest<Paper[]>('/papers/all');
+}
+
+export function updatePaperAbstractRequest(id: string, abstract: string) {
+  return apiRequest<Paper>(`/papers/${id}/abstract`, {
+    method: 'PUT',
+    body: { abstract },
+  });
+}
+
+export function updatePaperTopicsRequest(id: string, topics: string[]) {
+  return apiRequest<Paper>(`/papers/${id}/topics-update`, {
+    method: 'PUT',
+    body: { topics },
+  });
+}
+
 export function getLabsRequest() {
   return apiRequest<Lab[]>('/labs');
 }
