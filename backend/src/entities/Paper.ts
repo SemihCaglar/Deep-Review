@@ -44,6 +44,9 @@ export class Paper {
   @ManyToMany('User', 'writtenPapers')
   authors: User[];
 
+  @Column({ type: 'simple-json', nullable: true })
+  authorOrder: string[];
+
   @ManyToMany('Coordinator', 'coordinatedPapers')
   @JoinTable()
   coordinators: Coordinator[];

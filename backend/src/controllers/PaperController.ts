@@ -15,6 +15,10 @@ export class PaperController {
           return res.status(401).json({ message: 'Authentication required' });
       }
 
+      if (!dto.title || !dto.abstractText || !dto.targetVenue || !dto.topics || dto.topics.length === 0) {
+          return res.status(400).json({ message: 'Missing required fields: title, abstractText, targetVenue, topics are required.' });
+      }
+
       const paper = await PaperService.registerPaper(dto, creator);
 
       return res.status(201).json({
@@ -22,6 +26,9 @@ export class PaperController {
         paper
       });
     } catch (e: any) {
+      if (e.message && e.message.includes('invalid')) {
+          return res.status(400).json({ error: e.message });
+      }
       return res.status(500).json({ error: e.message || 'Internal Server Error' });
     }
   }
@@ -46,6 +53,9 @@ export class PaperController {
         const paper = await PaperService.updateTopics(id, topics);
         res.status(200).json(paper);
     } catch (e: any) {
+        if (e.message === 'Paper not found') {
+            return res.status(404).json({ message: e.message });
+        }
         res.status(500).json({ error: e.message });
     }
   }
@@ -63,6 +73,9 @@ export class PaperController {
         const paper = await PaperService.updateAbstract(id, abstract);
         res.status(200).json(paper);
     } catch (e: any) {
+        if (e.message === 'Paper not found') {
+            return res.status(404).json({ message: e.message });
+        }
         res.status(500).json({ error: e.message });
     }
   }
@@ -74,6 +87,9 @@ export class PaperController {
         const paper = await PaperService.updateTopics(id, topics);
         res.status(200).json(paper);
     } catch (e: any) {
+        if (e.message === 'Paper not found') {
+            return res.status(404).json({ message: e.message });
+        }
         res.status(500).json({ error: e.message });
     }
   }
@@ -95,10 +111,42 @@ export class PaperController {
   static async getAllPapers(req: Request, res: Response) {
     try {
         const repo = AppDataSource.getRepository(Paper);
-        const papers = await repo.find({ relations: ['authors'] });
-        const mapMockShape = papers.map(p => ({ ...p, authors: p.authors ? p.authors.map(a => a.id) : [] }));
-        res.status(200).json(mapMockShape);
+        const papers = await repo.find({ relations: ['authors', 'topics'] });
+        
+        const sortedPapers = papers.map(paper => {
+            if (paper.authorOrder && paper.authors) {
+                const orderMap = new Map(paper.authorOrder.map((id, index) => [id, index]));
+                paper.authors.sort((a, b) => {
+                    const orderA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999;
+                    const orderB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999;
+                    return orderA - orderB;
+                });
+            }
+            return {
+                ...paper,
+                authors: paper.authors?.map(a => ({ id: a.id, name: a.name, email: a.email })) || []
+            };
+        });
+
+        res.status(200).json(sortedPapers);
     } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+  }
+  static async updateAuthors(req: Request<{ id: string }>, res: Response) {
+    try {
+        const { id } = req.params;
+        const { authors } = req.body;
+        if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+        const paper = await PaperService.updateAuthors(id, authors);
+        res.status(200).json(paper);
+    } catch (e: any) {
+        if (e.message === 'Paper not found') {
+            return res.status(404).json({ message: e.message });
+        }
+        if (e.message && e.message.includes('invalid')) {
+            return res.status(400).json({ error: e.message });
+        }
         res.status(500).json({ error: e.message });
     }
   }

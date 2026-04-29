@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2 } from 'lucide-react';
-import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, TopicOption } from '@/lib/api';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
+import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, TopicOption, getLabMembersRequest } from '@/lib/api';
 
 export default function PaperDetails({ params }: { params: { id: string } }) {
     const { user } = useUser();
@@ -32,6 +32,9 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [isEditingDeadline, setIsEditingDeadline] = useState(false);
     const [isSendingReminder, setIsSendingReminder] = useState(false);
     const [reminderSent, setReminderSent] = useState(false);
+    const [isEditingAuthors, setIsEditingAuthors] = useState(false);
+    const [localAuthors, setLocalAuthors] = useState<string[]>([]);
+    const [availableUsers, setAvailableUsers] = useState<any[]>([]);
 
     const [localAbstract, setLocalAbstract] = useState('');
     const [localTopics, setLocalTopics] = useState<string[]>([]); // These will be IDs
@@ -48,14 +51,12 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 setPaper(paperData);
                 setLocalAbstract(paperData.abstractText || '');
                 setLocalTopics(paperData.topics?.map((t: any) => t.id) || []);
+                setLocalAuthors(paperData.authors?.map((a: any) => a.id) || []);
                 setAvailableTopics(topicsData);
-
-                // Set initial deadline from mock data if it matches
-                const activeRound = MOCK_ROUNDS.find(r => r.paperId === paperData.id && r.status === 'Open');
-                if (activeRound) {
-                    setLocalDeadline(activeRound.deadline || '');
-                }
-                setLocalHistory(paperData.history || []);
+                
+                // Fetch lab members for author editing
+                const membersRes = await getLabMembersRequest();
+                setAvailableUsers(membersRes.users);
             } catch (err) {
                 console.error('Failed to fetch paper details', err);
             } finally {
@@ -141,6 +142,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         getEffectiveAssignmentStatus(a.id, a.reviewerId, a.status) === 'Submitted'
     );
     const effectivePaperStatus = isRoundComplete && currentStatus === 'In Review' ? 'Review Done' : currentStatus;
+    const canEditAuthors = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
 
     const handleSubmitReview = () => {
         setIsSubmittingReview(true);
@@ -161,6 +163,35 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }, 800);
     };
 
+    const handleSaveAuthors = async () => {
+        try {
+            const { updatePaperAuthorsRequest } = await import('@/lib/api');
+            const updatedPaper = await updatePaperAuthorsRequest(paper.id, localAuthors);
+            setPaper(updatedPaper);
+            setIsEditingAuthors(false);
+        } catch (err) {
+            console.error('Failed to update authors', err);
+            alert('Failed to update authors');
+        }
+    };
+
+    const toggleAuthor = (id: string) => {
+        if (localAuthors.includes(id)) {
+            setLocalAuthors(localAuthors.filter(a => a !== id));
+        } else {
+            setLocalAuthors([...localAuthors, id]);
+        }
+    };
+
+    const moveAuthor = (index: number, direction: 'up' | 'down') => {
+        const newAuthors = [...localAuthors];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= newAuthors.length) return;
+        
+        [newAuthors[index], newAuthors[targetIndex]] = [newAuthors[targetIndex], newAuthors[index]];
+        setLocalAuthors(newAuthors);
+    };
+
     const handleSendReminder = () => {
         setIsSendingReminder(true);
         setTimeout(() => {
@@ -172,8 +203,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
     const handleSaveAbstract = async () => {
         try {
-            await updatePaperAbstractRequest(paper.id, localAbstract);
-            setPaper({ ...paper, abstractText: localAbstract });
+            const updatedPaper = await updatePaperAbstractRequest(paper.id, localAbstract);
+            setPaper(updatedPaper);
             setIsEditingAbstract(false);
         } catch (err) {
             console.error('Failed to update abstract', err);
@@ -356,10 +387,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     {/* Coordinator General Actions */}
                     {user.isCoordinator && effectivePaperStatus !== 'Archived' && (
                         <>
-                            <button className="w-full px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
-                                <Edit className="w-4 h-4 text-slate-400" />
-                                Edit Authors
-                            </button>
 
                             <button
                                 onClick={handleArchive}
@@ -379,6 +406,16 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 Run AI Analysis
                             </button>
                         </>
+                    )}
+
+                    {canEditAuthors && (
+                        <button 
+                            onClick={() => setIsEditingAuthors(true)}
+                            className="w-full px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 mt-2"
+                        >
+                            <Edit className="w-4 h-4 text-slate-400" />
+                            Edit Authors & Order
+                        </button>
                     )}
 
                     {/* Reviewer Actions */}
@@ -641,27 +678,77 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     <div className="glass p-6 rounded-2xl border border-white/5">
                         <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4 flex items-center justify-between">
                             Authors
-                            {user.isCoordinator && (
-                                <button className="text-xs text-blue-400 hover:text-blue-300 capitalize flex items-center gap-1">
+                            {canEditAuthors && (
+                                <button onClick={() => setIsEditingAuthors(true)} className="text-xs text-blue-400 hover:text-blue-300 capitalize flex items-center gap-1">
                                     <Edit className="w-3 h-3" /> Edit
                                 </button>
                             )}
                         </h3>
                          <div className="space-y-4">
-                            {paper.authors?.length > 0 ? paper.authors.map((author: any) => {
-                                return (
-                                    <div key={author.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
-                                        <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-semibold text-sm border border-blue-500/20 shrink-0">
-                                            {author.name?.charAt(0)}
-                                        </div>
-                                        <div>
-                                            <p className="text-white text-sm font-medium">{author.name}</p>
-                                            <p className="text-xs text-slate-500">{author.email}</p>
-                                        </div>
+                            {isEditingAuthors ? (
+                                <div className="space-y-6">
+                                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                        {availableUsers.map(u => (
+                                            <button
+                                                key={u.id}
+                                                type="button"
+                                                onClick={() => toggleAuthor(u.id)}
+                                                className={`w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all ${localAuthors.includes(u.id) ? 'bg-blue-600/20 border-blue-500/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                            >
+                                                <div className={`w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-xs ${localAuthors.includes(u.id) ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                                                    {u.name.charAt(0)}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={`text-xs font-medium truncate ${localAuthors.includes(u.id) ? 'text-blue-100' : 'text-slate-300'}`}>{u.name}</p>
+                                                </div>
+                                            </button>
+                                        ))}
                                     </div>
-                                );
-                            }) : (
-                                <p className="text-sm text-slate-500">No authors assigned.</p>
+                                    
+                                    <div className="pt-4 border-t border-white/10 space-y-2">
+                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Order</h4>
+                                        {localAuthors.map((id, index) => {
+                                            const u = availableUsers.find(user => user.id === id);
+                                            if (!u) return null;
+                                            return (
+                                                <div key={id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/5">
+                                                    <span className="text-xs text-blue-400 font-mono w-4">{index + 1}</span>
+                                                    <span className="text-xs text-white truncate flex-1 px-2">{u.name}</span>
+                                                    <div className="flex gap-1">
+                                                        <button disabled={index === 0} onClick={() => moveAuthor(index, 'up')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowUp className="w-3 h-3 text-slate-400" /></button>
+                                                        <button disabled={index === localAuthors.length - 1} onClick={() => moveAuthor(index, 'down')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowDown className="w-3 h-3 text-slate-400" /></button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <div className="flex gap-2 pt-2">
+                                        <button onClick={() => setIsEditingAuthors(false)} className="flex-1 py-2 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
+                                        <button onClick={handleSaveAuthors} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors">Save</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    {paper.authors?.length > 0 ? paper.authors.map((author: any, index: number) => {
+                                        return (
+                                            <div key={author.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
+                                                <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-semibold text-sm border border-blue-500/20 shrink-0">
+                                                    {author.name?.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <p className="text-white text-sm font-medium">
+                                                        {author.name}
+                                                        {author.id === user.id && <span className="ml-2 text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">You</span>}
+                                                    </p>
+                                                    <p className="text-xs text-slate-500">{author.email}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    }) : (
+                                        <p className="text-sm text-slate-500">No authors assigned.</p>
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>

@@ -199,41 +199,67 @@ export function rejectSignupRequest(id: string) {
   });
 }
 
+export type PaperAuthor = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+export type Paper = {
+  id: string;
+  title: string;
+  abstractText: string;
+  creationTime: string;
+  targetVenue: string;
+  status: string;
+  overleafLink?: string | null;
+  authorOrder?: string[] | null;
+  authors?: PaperAuthor[];
+  topics?: TopicOption[];
+};
+
 export type RegisterPaperPayload = {
   title: string;
   abstractText: string;
   targetVenue: string;
   topics: string[];
-  authors?: string[];
+  authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
 };
 
 export function registerPaperRequest(payload: RegisterPaperPayload) {
-  return apiRequest<{ message: string; paper: any }>('/papers', {
+  return apiRequest<{ message: string; paper: Paper }>('/papers', {
     method: 'POST',
     body: payload,
   });
 }
 
 export function getPaperByIdRequest(id: string) {
-  return apiRequest<any>(`/papers/${id}`);
+  return apiRequest<Paper>(`/papers/${id}`);
 }
 
 export function getAllPapersRequest() {
-  return apiRequest<any[]>('/papers/all');
+  return apiRequest<Paper[]>('/papers/all');
 }
 
 export function updatePaperAbstractRequest(id: string, abstract: string) {
-  return apiRequest<any>(`/papers/${id}/abstract`, {
+  return apiRequest<Paper>(`/papers/${id}/abstract`, {
     method: 'PUT',
     body: { abstract },
   });
 }
 
 export function updatePaperTopicsRequest(id: string, topics: string[]) {
-  return apiRequest<any>(`/papers/${id}/topics-update`, {
+  return apiRequest<Paper>(`/papers/${id}/topics-update`, {
     method: 'PUT',
     body: { topics },
+  });
+}
+
+export function updatePaperAuthorsRequest(id: string, authors: string[]) {
+  return apiRequest<Paper>(`/papers/${id}/authors`, {
+    method: 'PUT',
+    body: { authors },
   });
 }
 
