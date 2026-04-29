@@ -206,16 +206,24 @@ export function rejectSignupRequest(id: string) {
   });
 }
 
+export type PaperAuthor = {
+  id: string;
+  name: string;
+  email: string;
+};
+
 export type Paper = {
   id: string;
   title: string;
   abstractText?: string;
+  creationTime?: string;
   targetVenue?: string;
-  overleafLink?: string;
   status: string;
-  topics?: TopicOption[];
-  authors?: LabMember[];
+  overleafLink?: string | null;
+  authorOrder?: string[] | null;
+  authors?: PaperAuthor[];
   coordinators?: LabMember[];
+  topics?: TopicOption[];
   history?: any[];
 };
 
@@ -224,7 +232,7 @@ export type RegisterPaperPayload = {
   abstractText: string;
   targetVenue: string;
   topics: string[];
-  authors?: string[];
+  authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
 };
 
@@ -254,6 +262,13 @@ export function updatePaperTopicsRequest(id: string, topics: string[]) {
   return apiRequest<Paper>(`/papers/${id}/topics-update`, {
     method: 'PUT',
     body: { topics },
+  });
+}
+
+export function updatePaperAuthorsRequest(id: string, authors: string[]) {
+  return apiRequest<Paper>(`/papers/${id}/authors`, {
+    method: 'PUT',
+    body: { authors },
   });
 }
 

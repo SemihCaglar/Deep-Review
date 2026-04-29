@@ -23,16 +23,16 @@ export default function Sidebar() {
             { name: 'My Profile', href: '/profile', icon: UserCircle2 },
             { name: 'Lab Members', href: '/lab-members', icon: Users },
             ...(user.isCoordinator ? [{ name: 'Pending Approvals', href: '/pending-approvals', icon: UserCheck }] : []),
-            { name: 'My Authored Papers', href: '/papers?filter=authored', icon: FileText },
             ...(user.isAdmin ? [{ name: 'Admin Dashboard', href: '/admin', icon: Shield }] : []),
         ];
 
         if (!user.isCoordinator) {
+            base.push({ name: 'My Authored Papers', href: '/papers?filter=authored', icon: FileText });
             base.push({ name: 'My Assigned Reviews', href: '/my-reviews', icon: CheckCircle });
+            base.push({ name: 'Register Paper', href: '/register', icon: PlusSquare });
         } else {
             base.push({ name: 'All Papers (System)', href: '/papers', icon: FileText });
             base.push({ name: 'Round Management', href: '/rounds', icon: ClipboardList });
-            base.push({ name: 'Register Paper', href: '/register', icon: PlusSquare });
         }
 
         return base;

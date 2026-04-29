@@ -88,12 +88,12 @@ router.get('/papers/my-coordinated', authenticateRequest, PaperController.getMyC
 router.post('/papers', authenticateRequest, PaperController.registerPaper);
 
 router.get('/papers/:id', authenticateRequest, PaperController.getPaperById);
-router.get('/papers/:id/status', PaperController.getPaperStatus);
+router.get('/papers/:id/status', authenticateRequest, PaperController.getPaperStatus);
 router.get('/papers/:id/history', authenticateRequest, PaperController.getPaperHistory);
-
 router.put('/papers/:id/topics', authenticateRequest, PaperController.setTopics);
 router.put('/papers/:id/topics-update', authenticateRequest, PaperController.updateTopics);
 router.put('/papers/:id/abstract', authenticateRequest, PaperController.updateAbstract);
+router.put('/papers/:id/authors', authenticateRequest, PaperController.updateAuthors);
 router.put('/papers/:id/status', authenticateRequest, PaperController.updatePaperStatus);
 router.post('/papers/:id/manuscript', authenticateRequest, PaperController.uploadManuscript);
 router.post('/papers/:id/parents', authenticateRequest, PaperController.linkParentPapers);

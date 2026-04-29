@@ -32,11 +32,12 @@ export default function PapersList() {
 
     const getPapers = () => {
         if (filter === 'authored') {
-            return allPapers.filter(p => p.authors && p.authors.includes(user.id));
+            return allPapers.filter(p => p.authors?.some((a: any) => a.id === user.id));
         }
         if (filter === 'reviews') {
             // Currently displays all assignment contexts until Round relations are mapped
-            return allPapers; 
+            // We explicitly exclude authored papers from the reviews list
+            return allPapers.filter(p => !p.authors?.some((a: any) => a.id === user.id)); 
         }
         // Default system view (only accessible via sidebar if Coordinator)
         return allPapers;
@@ -77,7 +78,7 @@ export default function PapersList() {
                         {getSubtitle()}
                     </p>
                 </div>
-                {user.isCoordinator && (!filter || filter === 'all') && (
+                {(user.isCoordinator || user.id) && (!filter || filter === 'all' || filter === 'authored') && (
                     <Link href="/register" className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-blue-500/20">
                         Register Academic Paper
                     </Link>
@@ -120,8 +121,8 @@ export default function PapersList() {
                                                 {paper.status}
                                             </span>
                                         </div>
-                                        <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-3">
-                                            {paper.abstractText || paper.abstract}
+                                        <p className="text-sm text-slate-400 line-clamp-1 leading-relaxed mb-3">
+                                            <span className="font-semibold text-slate-300">Authors:</span> {paper.authors?.map((a: any) => typeof a === 'object' ? a.name : a).join(', ') || 'Unknown'}
                                         </p>
                                         <div className="flex items-center gap-2">
                                             {(paper.topics || []).map((topic: any) => (

@@ -28,7 +28,7 @@ export class PaperController {
       }
 
       if (!dto.title || !dto.abstractText || !dto.targetVenue || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
-          return res.status(400).json({ message: 'Missing required fields' });
+          return res.status(400).json({ message: 'Missing required fields: title, abstractText, targetVenue, topics are required.' });
       }
 
       const paper = await PaperService.registerPaper(dto, creator);
@@ -38,6 +38,9 @@ export class PaperController {
         paper
       });
     } catch (e: any) {
+      if (e.message && e.message.includes('invalid')) {
+          return res.status(400).json({ error: e.message });
+      }
       return res.status(500).json({ error: e.message || 'Internal Server Error' });
     }
   }
@@ -445,41 +448,44 @@ export class PaperController {
 
   static async getAllPapers(req: Request, res: Response) {
     try {
-      const authReq = req as AuthenticatedRequest;
-      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
-
-      if (authReq.user.role === UserRole.GlobalAdmin) {
-        return res.status(403).json({ message: 'Global Admins cannot view papers' });
-      }
-
-      const repo = AppDataSource.getRepository(Paper);
-      let papers: Paper[];
-
-      if (authReq.user.role === UserRole.LocalAdmin) {
-        // Find papers for the lab managed by this LocalAdmin
-        const la = await AppDataSource.getRepository(LocalAdmin).findOne({ 
-          where: { id: authReq.user.id }, 
-          relations: ['lab'] 
-        });
-        if (!la?.lab) return res.status(200).json([]);
+        const repo = AppDataSource.getRepository(Paper);
+        const papers = await repo.find({ relations: ['authors', 'topics'] });
         
-        papers = await repo.find({
-          where: { labs: { id: la.lab.id } },
-          relations: ['authors', 'labs']
+        const sortedPapers = papers.map(paper => {
+            if (paper.authorOrder && paper.authors) {
+                const orderMap = new Map(paper.authorOrder.map((id, index) => [id, index]));
+                paper.authors.sort((a, b) => {
+                    const orderA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999;
+                    const orderB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999;
+                    return orderA - orderB;
+                });
+            }
+            return {
+                ...paper,
+                authors: paper.authors?.map(a => ({ id: a.id, name: a.name, email: a.email })) || []
+            };
         });
-      } else if (authReq.user.role === UserRole.Coordinator) {
-        // Already handled elsewhere or filter by lab coordinator?
-        // For now, allow all if coordinator, but ideally filter by lab.
-        papers = await repo.find({ relations: ['authors'] });
-      } else {
-        // Standard users shouldn't really hit this global endpoint
-        return res.status(403).json({ message: 'Access denied' });
-      }
 
-      const result = papers.map(p => ({ ...p, authors: p.authors ? p.authors.map(a => a.id) : [] }));
-      res.status(200).json(result);
+        res.status(200).json(sortedPapers);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
+    }
+  }
+  static async updateAuthors(req: Request<{ id: string }>, res: Response) {
+    try {
+        const { id } = req.params;
+        const { authors } = req.body;
+        if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+        const paper = await PaperService.updateAuthors(id, authors);
+        res.status(200).json(paper);
+    } catch (e: any) {
+        if (e.message === 'Paper not found') {
+            return res.status(404).json({ message: e.message });
+        }
+        if (e.message && e.message.includes('invalid')) {
+            return res.status(400).json({ error: e.message });
+        }
+        res.status(500).json({ error: e.message });
     }
   }
   static async updatePaperStatus(req: Request, res: Response) {

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { BookOpen, Tag, CheckCircle2, Users } from 'lucide-react';
+import { BookOpen, Tag, CheckCircle2, Users, ArrowUp, ArrowDown } from 'lucide-react';
 import { getLabMembersRequest, getTopicsRequest, registerPaperRequest, LabMember, TopicOption } from '@/lib/api';
 
 export default function RegisterPaper() {
@@ -32,28 +32,44 @@ export default function RegisterPaper() {
                 ]);
                 setAvailableUsers(membersRes.users);
                 setTopicsList(topicsRes);
+                
+                // Automatically add current user to authors if not already there
+                if (user?.id && !selectedAuthors.includes(user.id)) {
+                    setSelectedAuthors([user.id]);
+                }
             } catch (err) {
                 console.error('Failed to fetch form data', err);
             }
         };
         fetchData();
-    }, []);
+    }, [user?.id]);
 
-    if (!user.isCoordinator) {
+    if (!user.id) {
         return (
             <div className="flex flex-col items-center justify-center h-full">
                 <h2 className="text-xl font-bold text-red-400">Access Denied</h2>
-                <p className="text-slate-400 mt-2">Only the Coordinator can register papers.</p>
+                <p className="text-slate-400 mt-2">Please login to register papers.</p>
             </div>
         );
     }
 
     const toggleAuthor = (id: string) => {
         if (selectedAuthors.includes(id)) {
+            // Prevent removing self if that's desired, but user said "added automatically"
+            // If they want to remove themselves they can, but let's assume they stay.
             setSelectedAuthors(selectedAuthors.filter(a => a !== id));
         } else {
             setSelectedAuthors([...selectedAuthors, id]);
         }
+    };
+
+    const moveAuthor = (index: number, direction: 'up' | 'down') => {
+        const newAuthors = [...selectedAuthors];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        if (targetIndex < 0 || targetIndex >= newAuthors.length) return;
+        
+        [newAuthors[index], newAuthors[targetIndex]] = [newAuthors[targetIndex], newAuthors[index]];
+        setSelectedAuthors(newAuthors);
     };
 
     const toggleTopic = (topicId: string) => {
@@ -150,8 +166,8 @@ export default function RegisterPaper() {
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Assign Authors</label>
                                 <p className="text-slate-500 text-sm mb-4">Select users from the system to be attached as authors. They will receive formal email invitations upon registration.</p>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                    {availableUsers.map(u => (
+                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                    {availableUsers.filter(u => u.id !== user.id && u.role !== 'Coordinator').map(u => (
                                         <button
                                             key={u.id}
                                             type="button"
@@ -161,13 +177,53 @@ export default function RegisterPaper() {
                                             <div className={`w-10 h-10 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${selectedAuthors.includes(u.id) ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
                                                 {u.name.charAt(0)}
                                             </div>
-                                            <div>
+                                            <div className="flex-1">
                                                 <p className={`font-medium ${selectedAuthors.includes(u.id) ? 'text-blue-100' : 'text-slate-300'}`}>{u.name}</p>
                                                 <p className={`text-xs ${selectedAuthors.includes(u.id) ? 'text-blue-300/70' : 'text-slate-500'}`}>{u.email}</p>
                                             </div>
                                         </button>
                                     ))}
                                 </div>
+
+                                {selectedAuthors.length > 1 && (
+                                    <div className="mt-6 pt-6 border-t border-white/5">
+                                        <label className="block text-sm font-medium text-slate-300 mb-4">Adjust Author Order</label>
+                                        <div className="space-y-2">
+                                            {selectedAuthors.map((authorId, index) => {
+                                                const authorInfo = availableUsers.find(u => u.id === authorId) || (authorId === user.id ? { name: user.name + ' (You)', email: user.email } : null);
+                                                if (!authorInfo) return null;
+                                                return (
+                                                    <div key={authorId} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-blue-500 font-bold text-sm w-4">{index + 1}.</span>
+                                                            <div>
+                                                                <p className="text-sm font-medium text-white">{authorInfo.name}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-1">
+                                                            <button 
+                                                                type="button" 
+                                                                disabled={index === 0} 
+                                                                onClick={() => moveAuthor(index, 'up')}
+                                                                className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 disabled:opacity-20"
+                                                            >
+                                                                <ArrowUp className="w-4 h-4" />
+                                                            </button>
+                                                            <button 
+                                                                type="button" 
+                                                                disabled={index === selectedAuthors.length - 1} 
+                                                                onClick={() => moveAuthor(index, 'down')}
+                                                                className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 disabled:opacity-20"
+                                                            >
+                                                                <ArrowDown className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="pt-6 border-t border-white/5">
