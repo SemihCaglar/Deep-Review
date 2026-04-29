@@ -1,0 +1,9 @@
+{
+  "extends": "../backend/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "types": ["jest", "node", "supertest"],
+    "typeRoots": ["../backend/node_modules/@types"]
+  },
+  "include": ["**/*.ts"]
+}

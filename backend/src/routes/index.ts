@@ -57,6 +57,7 @@ router.post('/assignments/invite', authenticateRequest, AssignmentController.sen
 router.post('/assignments/remind', authenticateRequest, AssignmentController.sendReminders);
 router.delete('/assignments/:id', authenticateRequest, AssignmentController.cancelAssignment);
 router.put('/assignments/:id/deadline', authenticateRequest, AssignmentController.updateAssignmentDeadline);
+router.post('/assignments/:id/reassign', authenticateRequest, AssignmentController.reassignReviewer);
 router.patch('/assignments/:id/process-decline', authenticateRequest, CoordinatorController.processDeclineRequest);
 router.patch('/assignments/:id/process-extension', authenticateRequest, CoordinatorController.processExtensionRequest);
 
@@ -64,6 +65,7 @@ router.patch('/assignments/:id/process-extension', authenticateRequest, Coordina
 router.get('/papers/my-coordinated', authenticateRequest, PaperController.getMyCoordinatedPapers);
 router.post('/papers', PaperController.registerPaper);
 router.put('/papers/:id/topics', PaperController.setTopics);
+router.put('/papers/:id/overleaf', authenticateRequest, PaperController.updateOverleafLink);
 router.post('/papers/:id/manuscript', PaperController.uploadManuscript);
 router.post('/papers/:id/parents', PaperController.linkParentPapers);
 router.put('/papers/:id/abstract', PaperController.updateAbstract);
@@ -99,6 +101,7 @@ router.post('/responses/complete', authenticateRequest, ReviewerResponseControll
 // ==== ROUND ROUTES ====
 router.get('/papers/:id/rounds', authenticateRequest, RoundController.getRoundsWithAssignments);
 router.post('/rounds', RoundController.createReviewRound);
+router.post('/rounds/:id/start', authenticateRequest, RoundController.startRound);
 router.put('/rounds/:id/deadline', RoundController.editRoundDeadline);
 router.get('/rounds/:id/suggest', authenticateRequest, RoundController.suggestReviewers);
 router.post('/rounds/:id/propose', RoundController.addProposeReviewer);
@@ -106,7 +109,7 @@ router.get('/rounds/:id/propose', RoundController.getProposeReviewers);
 router.get('/rounds/:id/status', RoundController.trackReviewStatus);
 router.post('/rounds/:id/alerts', RoundController.alertOverdueReviews);
 router.post('/rounds/:id/close', RoundController.closeRound);
-router.post('/rounds/next', RoundController.startNextRound);
+router.post('/rounds/next', RoundController.createReviewRound);
 router.post('/rounds/:id/ai', RoundController.startAIReview);
 router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
 router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistItem);

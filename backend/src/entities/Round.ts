@@ -7,8 +7,14 @@ import type { User } from './User';
 import type { ReviewerResponse } from './ReviewerResponse';
 
 export enum RoundStatus {
+  Draft = 'Draft',
   Open = 'Open',
-  Closed = 'Closed'
+  Completed = 'Completed'
+}
+
+export enum VenueCategory {
+  Conference = 'Conference',
+  Article = 'Article'
 }
 
 @Entity()
@@ -19,21 +25,33 @@ export class Round {
   @Column()
   roundNumber: number;
 
-  @Column()
-  deadline: Date;
+  @Column({ type: 'datetime', nullable: true })
+  deadline: Date | null;
 
   @Column({
     type: 'simple-enum',
     enum: RoundStatus,
-    default: RoundStatus.Open
+    default: RoundStatus.Draft
   })
   status: RoundStatus;
+
+  @Column()
+  targetVenue: string;
+
+  @Column({
+    type: 'simple-enum',
+    enum: VenueCategory,
+  })
+  venueCategory: VenueCategory;
+
+  @Column({ type: 'datetime', nullable: true })
+  submissionDeadline: Date | null;
 
   @Column({ type: 'datetime', nullable: true })
   startedAt: Date | null;
 
   @Column({ type: 'datetime', nullable: true })
-  closedAt: Date | null;
+  completedAt: Date | null;
 
   @CreateDateColumn({ type: 'datetime' })
   createdAt: Date;

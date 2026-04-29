@@ -66,7 +66,7 @@ export class ReviewerResponseController {
 
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
-        where: { id: req.params.id },
+        where: { id: req.params.id as string },
         relations: ['reviewer'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
@@ -98,23 +98,47 @@ export class ReviewerResponseController {
 
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
-        where: { id: req.params.id },
+        where: { id: req.params.id as string },
         relations: ['reviewer'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
       }
-      if (assignment.status !== AssignmentStatus.Invited) {
-        return res.status(400).json({ message: 'Assignment is not in Invited status' });
+      const allowedStatuses = [
+        AssignmentStatus.Invited,
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.PendingDecline,
+      ];
+      if (!allowedStatuses.includes(assignment.status)) {
+        return res.status(400).json({ message: 'Assignment is not in a state that allows a decline request' });
       }
 
       const declineRepo = AppDataSource.getRepository(DeclineRequest);
-      const declineRequest = declineRepo.create({ assignment, reason, status: DeclineRequestStatus.Pending });
-      await declineRepo.save(declineRequest);
+      const pendingDecline = await declineRepo.findOne({
+        where: { assignment: { id: req.params.id as string }, status: DeclineRequestStatus.Pending },
+      });
 
-      return res.status(201).json({
-        message: 'Decline request submitted and awaiting coordinator approval',
+      let declineRequest: DeclineRequest;
+      let isUpdate = false;
+
+      if (pendingDecline) {
+        pendingDecline.reason = reason;
+        declineRequest = await declineRepo.save(pendingDecline);
+        isUpdate = true;
+      } else {
+        declineRequest = await declineRepo.save(
+          declineRepo.create({ assignment, reason, status: DeclineRequestStatus.Pending })
+        );
+        if (assignment.status !== AssignmentStatus.PendingDecline) {
+          assignment.status = AssignmentStatus.PendingDecline;
+          await assignRepo.save(assignment);
+        }
+      }
+
+      return res.status(isUpdate ? 200 : 201).json({
+        message: isUpdate ? 'Decline request updated' : 'Decline request submitted and awaiting coordinator approval',
         declineRequestId: declineRequest.id,
       });
     } catch (err) {
@@ -152,11 +176,23 @@ export class ReviewerResponseController {
       if (assignment.reviewer.id !== user.id) {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
       }
-      if (assignment.status !== AssignmentStatus.Accepted) {
-        return res.status(400).json({ message: 'Assignment must be in Accepted status to request an extension' });
+      const allowedForExtension = [
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.PendingDecline,
+      ];
+      if (!allowedForExtension.includes(assignment.status)) {
+        return res.status(400).json({ message: 'Assignment must be Accepted, PendingExtension, or PendingDecline to request an extension' });
       }
       if (assignment.deadline && requested <= assignment.deadline) {
         return res.status(400).json({ message: 'Requested deadline must be after your current assignment deadline' });
+      }
+      if (!assignment.round.submissionDeadline && assignment.deadline) {
+        const maxAllowed = new Date(assignment.deadline);
+        maxAllowed.setDate(maxAllowed.getDate() + 5);
+        if (requested > maxAllowed) {
+          return res.status(400).json({ message: 'Extension cannot exceed 5 days beyond your current deadline for non-conference rounds' });
+        }
       }
 
       const extensionRepo = AppDataSource.getRepository(Extension);
@@ -176,6 +212,11 @@ export class ReviewerResponseController {
         extension = await extensionRepo.save(
           extensionRepo.create({ assignment, reason, requestedDeadline: requested, status: ExtensionStatus.Pending })
         );
+        if (assignment.status === AssignmentStatus.Accepted) {
+          assignment.status = AssignmentStatus.PendingExtension;
+          await assignRepo.save(assignment);
+        }
+        // PendingDecline stays PendingDecline; PendingExtension stays PendingExtension
       }
 
       const coordinators = assignment.round.paper.coordinators ?? [];
@@ -301,11 +342,12 @@ export class ReviewerResponseController {
         extension.status = ExtensionStatus.Approved;
         extension.approvedDeadline = new Date(approvedDeadline);
         extension.assignment.deadline = new Date(approvedDeadline);
-        await assignRepo.save(extension.assignment);
       } else {
         extension.status = ExtensionStatus.Rejected;
       }
 
+      extension.assignment.status = AssignmentStatus.Accepted;
+      await assignRepo.save(extension.assignment);
       await extensionRepo.save(extension);
 
       return res.status(200).json({
@@ -333,7 +375,7 @@ export class ReviewerResponseController {
       }
 
       const assignRepo = AppDataSource.getRepository(Assignment);
-      const assignment = await assignRepo.findOne({ where: { id }, relations: ['reviewer'] });
+      const assignment = await assignRepo.findOne({ where: { id: id as string }, relations: ['reviewer'] });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
@@ -356,20 +398,25 @@ export class ReviewerResponseController {
       const user = req.user;
       if (!user) return res.status(401).json({ message: 'Authentication required' });
 
-      const assignmentId = req.params.id ?? req.body?.assignmentId;
+      const assignmentId = (req.params.id as string) ?? req.body?.assignmentId;
       if (!assignmentId) return res.status(400).json({ message: 'Missing assignmentId' });
 
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
-        where: { id: assignmentId },
+        where: { id: assignmentId as string },
         relations: ['reviewer'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
       }
-      if (assignment.status !== AssignmentStatus.Accepted) {
-        return res.status(400).json({ message: 'Assignment must be in Accepted status to complete' });
+      const completableStatuses = [
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.PendingDecline,
+      ];
+      if (!completableStatuses.includes(assignment.status)) {
+        return res.status(400).json({ message: 'Assignment must be Accepted, PendingExtension, or PendingDecline to complete' });
       }
 
       const summary = req.body?.summary ?? req.body?.text;
@@ -381,6 +428,26 @@ export class ReviewerResponseController {
       assignment.status = AssignmentStatus.Completed;
       assignment.submittedAt = new Date();
       await assignRepo.save(assignment);
+
+      // Auto-reject any pending decline/extension requests on submission
+      const declineRepo = AppDataSource.getRepository(DeclineRequest);
+      const extensionRepo = AppDataSource.getRepository(Extension);
+
+      const pendingDeclines = await declineRepo.find({
+        where: { assignment: { id: assignment.id }, status: DeclineRequestStatus.Pending },
+      });
+      if (pendingDeclines.length > 0) {
+        for (const d of pendingDeclines) d.status = DeclineRequestStatus.Rejected;
+        await declineRepo.save(pendingDeclines);
+      }
+
+      const pendingExtensions = await extensionRepo.find({
+        where: { assignment: { id: assignment.id }, status: ExtensionStatus.Pending },
+      });
+      if (pendingExtensions.length > 0) {
+        for (const e of pendingExtensions) e.status = ExtensionStatus.Rejected;
+        await extensionRepo.save(pendingExtensions);
+      }
 
       return res.status(200).json({ message: 'Review completed', id: assignment.id, status: assignment.status });
     } catch (err) {

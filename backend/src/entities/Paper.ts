@@ -28,9 +28,6 @@ export class Paper {
   @Column()
   creationTime: Date;
 
-  @Column()
-  targetVenue: string;
-
   @Column({
     type: 'simple-enum',
     enum: PaperStatus,

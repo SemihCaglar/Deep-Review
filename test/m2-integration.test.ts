@@ -6,7 +6,7 @@ import { Coordinator } from '../backend/src/entities/Coordinator';
 import { LabMember } from '../backend/src/entities/LabMember';
 import { Lab } from '../backend/src/entities/Lab';
 import { Paper, PaperStatus } from '../backend/src/entities/Paper';
-import { Round, RoundStatus } from '../backend/src/entities/Round';
+import { Round, RoundStatus, VenueCategory } from '../backend/src/entities/Round';
 import { Assignment, AssignmentStatus } from '../backend/src/entities/Assignment';
 import { ApprovalStatus } from '../backend/src/entities/User';
 import { hashPassword } from '../backend/src/services/accountSecurity';
@@ -93,7 +93,6 @@ async function seedTestDb() {
         title: 'Integration Test Paper',
         abstractText: 'A paper for integration testing.',
         creationTime: new Date(),
-        targetVenue: 'ICSE 2026',
         status: PaperStatus.HumanReview,
     });
     paper.coordinators = [coordinator];
@@ -104,7 +103,18 @@ async function seedTestDb() {
 
     const deadline = new Date();
     deadline.setDate(deadline.getDate() + 14);
-    const round = roundRepo.create({ paper, roundNumber: 1, deadline, status: RoundStatus.Open });
+    const submissionDeadline = new Date();
+    submissionDeadline.setDate(submissionDeadline.getDate() + 30);
+    const round = roundRepo.create({
+        paper,
+        roundNumber: 1,
+        deadline,
+        status: RoundStatus.Open,
+        targetVenue: 'ICSE 2026',
+        venueCategory: VenueCategory.Conference,
+        submissionDeadline,
+        startedAt: new Date(),
+    });
     await roundRepo.save(round);
     roundId = round.id;
 

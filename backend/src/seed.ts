@@ -4,7 +4,7 @@ import { Coordinator } from './entities/Coordinator';
 import { Lab } from './entities/Lab';
 import { LabMember } from './entities/LabMember';
 import { Paper, PaperStatus } from './entities/Paper';
-import { Round, RoundStatus } from './entities/Round';
+import { Round, RoundStatus, VenueCategory } from './entities/Round';
 import { Assignment, AssignmentStatus } from './entities/Assignment';
 import { Topic } from './entities/Topic';
 import { ApprovalStatus, User } from './entities/User';
@@ -107,7 +107,6 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       title: 'Test Paper for Review',
       abstractText: 'This is a test paper for development purposes.',
       creationTime: new Date(),
-      targetVenue: 'ICSE 2026',
       status: PaperStatus.HumanReview,
       coordinators: [coordinator],
       labs: [lab],
@@ -128,6 +127,9 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       roundNumber: 1,
       deadline,
       status: RoundStatus.Open,
+      targetVenue: 'ICSE 2026',
+      venueCategory: VenueCategory.Conference,
+      submissionDeadline: new Date(deadline.getTime() + 7 * 24 * 60 * 60 * 1000),
     });
     await roundRepo.save(round);
     console.log('✅ Round created');

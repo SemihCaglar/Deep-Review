@@ -71,9 +71,42 @@ export class PaperController {
         id: p.id,
         title: p.title,
         status: p.status,
-        targetVenue: p.targetVenue,
         abstractText: p.abstractText,
+        overleafLink: p.overleafLink ?? null,
       })));
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async updateOverleafLink(req: AuthenticatedRequest, res: Response) {
+    try {
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      }
+
+      const id = req.params.id as string;
+      const { overleafLink } = req.body;
+      if (typeof overleafLink !== 'string') {
+        return res.status(400).json({ message: 'overleafLink must be a string' });
+      }
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id },
+        relations: ['coordinators'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
+      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+
+      paper.overleafLink = overleafLink || null!;
+      await paperRepo.save(paper);
+
+      return res.status(200).json({ message: 'Overleaf link updated', overleafLink: paper.overleafLink ?? null });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
