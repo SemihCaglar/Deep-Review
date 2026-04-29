@@ -15,6 +15,10 @@ export class PaperController {
           return res.status(401).json({ message: 'Authentication required' });
       }
 
+      if (!dto.title || !dto.abstractText || !dto.targetVenue || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
+          return res.status(400).json({ message: 'Missing required fields' });
+      }
+
       const paper = await PaperService.registerPaper(dto, creator);
 
       return res.status(201).json({
@@ -46,6 +50,9 @@ export class PaperController {
         const paper = await PaperService.updateTopics(id, topics);
         res.status(200).json(paper);
     } catch (e: any) {
+        if (e.message === 'Paper not found') {
+            return res.status(404).json({ message: e.message });
+        }
         res.status(500).json({ error: e.message });
     }
   }
@@ -63,6 +70,9 @@ export class PaperController {
         const paper = await PaperService.updateAbstract(id, abstract);
         res.status(200).json(paper);
     } catch (e: any) {
+        if (e.message === 'Paper not found') {
+            return res.status(404).json({ message: e.message });
+        }
         res.status(500).json({ error: e.message });
     }
   }
@@ -74,6 +84,9 @@ export class PaperController {
         const paper = await PaperService.updateTopics(id, topics);
         res.status(200).json(paper);
     } catch (e: any) {
+        if (e.message === 'Paper not found') {
+            return res.status(404).json({ message: e.message });
+        }
         res.status(500).json({ error: e.message });
     }
   }

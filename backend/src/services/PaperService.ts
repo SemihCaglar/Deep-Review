@@ -37,7 +37,11 @@ export class PaperService {
 
     // Fetch and assign Topics
     if (dto.topics && dto.topics.length > 0) {
-      paper.topics = await topicRepo.find({ where: { id: In(dto.topics) } });
+      const foundTopics = await topicRepo.find({ where: { id: In(dto.topics) } });
+      if (foundTopics.length !== dto.topics.length) {
+          throw new Error('One or more topics are invalid');
+      }
+      paper.topics = foundTopics;
     } else {
       paper.topics = [];
     }
@@ -51,7 +55,11 @@ export class PaperService {
 
     // Fetch and assign the authors
     if (dto.authors && dto.authors.length > 0) {
-      paper.authors = await userRepo.find({ where: { id: In(dto.authors) } });
+      const foundAuthors = await userRepo.find({ where: { id: In(dto.authors) } });
+      if (foundAuthors.length !== dto.authors.length) {
+          throw new Error('One or more authors are invalid');
+      }
+      paper.authors = foundAuthors;
     } else {
       paper.authors = [];
     }
@@ -60,12 +68,11 @@ export class PaperService {
     const coordinatorRepo = AppDataSource.getRepository(Coordinator);
     const labRepo = AppDataSource.getRepository(Lab);
     
-    // We assume the creator is a Coordinator (enforced by frontend/role checks)
+    let mappedLab: Lab | null = null;
     const coordinator = await coordinatorRepo.findOne({ where: { id: creator.id } });
     if (coordinator) {
         paper.coordinators = [coordinator];
-        // Automatically map this paper to the Coordinator's Lab
-        const mappedLab = await labRepo.findOne({ where: { coordinator: { id: coordinator.id } } });
+        mappedLab = await labRepo.findOne({ where: { coordinator: { id: coordinator.id } } });
         if (mappedLab) {
             paper.labs = [mappedLab];
         } else {
@@ -77,7 +84,23 @@ export class PaperService {
     }
 
     // Save and return
-    return await paperRepo.save(paper);
+    const savedPaper = await paperRepo.save(paper);
+
+    // Persist ManyToMany relations from the owning sides
+    if (paper.authors && paper.authors.length > 0) {
+        await AppDataSource.createQueryBuilder()
+            .relation(User, 'writtenPapers')
+            .of(paper.authors)
+            .add(savedPaper);
+    }
+    if (mappedLab) {
+        await AppDataSource.createQueryBuilder()
+            .relation(Lab, 'papers')
+            .of(mappedLab)
+            .add(savedPaper);
+    }
+
+    return savedPaper;
   }
 
   static async updateAbstract(paperId: string, newAbstract: string): Promise<Paper> {
@@ -102,6 +125,10 @@ export class PaperService {
       paper.topics = [];
     }
 
-    return await paperRepo.save(paper);
+    await paperRepo.save(paper);
+
+    const updatedPaper = await this.getPaperById(paperId);
+    if (!updatedPaper) throw new Error('Paper not found');
+    return updatedPaper;
   }
 }

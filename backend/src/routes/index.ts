@@ -69,12 +69,12 @@ router.post('/papers', authenticateRequest, PaperController.registerPaper);
 router.get('/papers/:id', authenticateRequest, PaperController.getPaperById);
 router.get('/papers/:id/status', PaperController.getPaperStatus);
 router.get('/papers/:id/history', PaperController.getPaperHistory);
-router.put('/papers/:id/topics', PaperController.setTopics);
-router.put('/papers/:id/topics-update', PaperController.updateTopics);
-router.put('/papers/:id/abstract', PaperController.updateAbstract);
-router.put('/papers/:id/status', PaperController.updatePaperStatus);
-router.post('/papers/:id/manuscript', PaperController.uploadManuscript);
-router.post('/papers/:id/parents', PaperController.linkParentPapers);
+router.put('/papers/:id/topics', authenticateRequest, PaperController.setTopics);
+router.put('/papers/:id/topics-update', authenticateRequest, PaperController.updateTopics);
+router.put('/papers/:id/abstract', authenticateRequest, PaperController.updateAbstract);
+router.put('/papers/:id/status', authenticateRequest, PaperController.updatePaperStatus);
+router.post('/papers/:id/manuscript', authenticateRequest, PaperController.uploadManuscript);
+router.post('/papers/:id/parents', authenticateRequest, PaperController.linkParentPapers);
 
 // ==== RATING ANALYTICS ROUTES ====
 router.post('/ratings', RatingAnalyticsController.rateReviewer);
