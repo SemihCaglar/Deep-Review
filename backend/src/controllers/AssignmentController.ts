@@ -49,12 +49,11 @@ export class AssignmentController {
         if (!reviewer) continue;
         if (reviewer.role === UserRole.Coordinator || reviewer.role === UserRole.GlobalAdmin || reviewer.role === UserRole.LocalAdmin) continue;
 
-        // Skip if any active (non-Cancelled) assignment already exists for this reviewer on this round
+        // Skip if ANY assignment already exists for this reviewer on this round
         const activeExists = await assignRepo.findOne({
           where: {
             round: { id: roundId },
             reviewer: { id: rId },
-            status: Not(AssignmentStatus.Cancelled),
           },
         });
         if (activeExists) continue;

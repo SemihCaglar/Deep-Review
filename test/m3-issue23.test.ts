@@ -77,6 +77,7 @@ async function seedTestDb() {
     const paper = paperRepo.create({
         title: 'Issue 23 Test Paper',
         abstractText: 'Testing round and assignment lifecycle.',
+        overleafLink: 'https://overleaf.com/testlink',
         creationTime: new Date(),
         status: PaperStatus.Draft,
     });

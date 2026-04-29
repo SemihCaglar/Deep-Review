@@ -16,10 +16,12 @@ import { hashPassword } from '../backend/src/services/accountSecurity';
 let coordinatorToken: string;
 let reviewer1Token: string;
 let reviewer2Token: string;
+let reviewer4Token: string;
 
 let coordinatorId: string;
 let reviewer1Id: string;
 let reviewer2Id: string;
+let reviewer4Id: string;
 let paperId: string;
 let roundId: string;
 let assignment1Id: string; // reviewer1 pre-assigned in seed
@@ -84,9 +86,24 @@ async function seedTestDb() {
     await userRepo.save(reviewer2);
     reviewer2Id = reviewer2.id;
 
+    const reviewer4 = Object.assign(new LabMember(), {
+        name: 'Reviewer Four',
+        email: 'reviewer4@test.com',
+        passwordHash: pw,
+        approvalStatus: ApprovalStatus.Approved,
+        approvalReviewedAt: new Date(),
+        approvalNote: null,
+        failedLogins: 0,
+        failedLoginWindowStartedAt: null,
+        lockedUntil: null,
+        lastLoginAt: null,
+    });
+    await userRepo.save(reviewer4);
+    reviewer4Id = reviewer4.id;
+
     const lab = labRepo.create({ name: 'Test Lab', description: 'Integration test lab' });
     lab.coordinator = coordinator;
-    lab.members = [coordinator, reviewer1, reviewer2];
+    lab.members = [coordinator, reviewer1, reviewer2, reviewer4];
     await labRepo.save(lab);
 
     const paper = paperRepo.create({
@@ -176,6 +193,12 @@ describe('1 · Authentication', () => {
         const res = await request(app).post('/api/account/login').send({ email: 'reviewer2@test.com', password: '123' });
         expect(res.status).toBe(200);
         reviewer2Token = res.body.token;
+    });
+
+    test('reviewer4 login succeeds', async () => {
+        const res = await request(app).post('/api/account/login').send({ email: 'reviewer4@test.com', password: '123' });
+        expect(res.status).toBe(200);
+        reviewer4Token = res.body.token;
     });
 
     test('wrong password returns 401', async () => {
@@ -502,14 +525,20 @@ describe('13 · Cancel and re-assign', () => {
         expect(res.status).toBe(200);
     });
 
-    test('reviewer1 reappears in suggestions after cancel', async () => {
+    test('reviewer1 does NOT reappear in suggestions after cancel', async () => {
         const res = await api(coordinatorToken).get(`/api/rounds/${roundId}/suggest`);
         const ids = res.body.map((s: any) => s.user.id);
-        expect(ids).toContain(reviewer1Id);
+        expect(ids).not.toContain(reviewer1Id);
     });
 
-    test('reviewer1 can be re-assigned after cancel', async () => {
+    test('reviewer1 cannot be re-assigned after cancel', async () => {
         const res = await api(coordinatorToken).post('/api/assignments', { roundId, reviewerIds: [reviewer1Id] });
+        expect(res.status).toBe(200);
+        expect(res.body.message).toMatch(/No new assignments/i);
+    });
+
+    test('reviewer4 can be assigned instead', async () => {
+        const res = await api(coordinatorToken).post('/api/assignments', { roundId, reviewerIds: [reviewer4Id] });
         expect(res.status).toBe(201);
         expect(res.body).toHaveLength(1);
         assignment3Id = res.body[0].id;
@@ -522,15 +551,15 @@ describe('13 · Cancel and re-assign', () => {
 
 describe('14 · Decline invitation', () => {
     test('decline without reason returns 400', async () => {
-        const res = await api(reviewer1Token).post('/api/responses/invitation', {
+        const res = await api(reviewer4Token).post('/api/responses/invitation', {
             assignmentId: assignment3Id,
             response: 'decline',
         });
         expect(res.status).toBe(400);
     });
 
-    test('reviewer1 declines with a reason — creates pending decline request', async () => {
-        const res = await api(reviewer1Token).post('/api/responses/invitation', {
+    test('reviewer4 declines with a reason — creates pending decline request', async () => {
+        const res = await api(reviewer4Token).post('/api/responses/invitation', {
             assignmentId: assignment3Id,
             response: 'decline',
             reason: 'Conflict of schedule',
@@ -554,7 +583,7 @@ describe('14 · Decline invitation', () => {
 
 describe('15 · Process decline request', () => {
     test('reviewer cannot process decline request', async () => {
-        const res = await api(reviewer1Token).post('/api/responses/process-decline', {
+        const res = await api(reviewer4Token).post('/api/responses/process-decline', {
             declineRequestId,
             decision: 'approve',
         });
@@ -581,6 +610,6 @@ describe('15 · Process decline request', () => {
     test('declined reviewer no longer appears in suggestions (not Cancelled)', async () => {
         const res = await api(coordinatorToken).get(`/api/rounds/${roundId}/suggest`);
         const ids = res.body.map((s: any) => s.user.id);
-        expect(ids).not.toContain(reviewer1Id);
+        expect(ids).not.toContain(reviewer4Id);
     });
 });
