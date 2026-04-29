@@ -315,18 +315,7 @@ describe('5 · Start round', () => {
     });
 
     test('round without deadline cannot be started — create a no-deadline draft to verify', async () => {
-        // Create a throwaway Conference draft without setting a deadline
-        const createRes = await api(coordinatorToken).post('/api/rounds', {
-            paperId: (await (() => {
-                // We need a second paper for this isolated test
-                return Promise.resolve(null);
-            })()),
-            coordinatorId,
-            targetVenue: 'SOSP 2026',
-            venueCategory: 'Conference',
-            submissionDeadline: futureDate(30),
-        });
-        // Can't create because conferenceRound is still active — we verify via the service directly
+        // Insert a no-deadline draft directly so we can test the start guard in isolation
         const roundRepo = AppDataSource.getRepository(Round);
         const noDlRound = roundRepo.create({
             paper: { id: paperId } as any,

@@ -378,7 +378,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
       if (reassigningForId) {
         const newReviewerId = Array.from(selectedIds)[0];
         await reassignReviewerRequest(reassigningForId, newReviewerId);
-        setAssignMsg(`Reviewer reassigned and invited.`);
+        setAssignMsg(`Reviewer reassigned. Invitation sent automatically.`);
       } else {
         const result = await assignReviewersRequest(round.id, Array.from(selectedIds));
         await sendInvitationsRequest(round.id);
@@ -416,7 +416,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
     if (!draftDeadline) return;
     setSavingDeadline(true);
     try {
-      await editRoundDeadlineRequest(round.id, coordinatorId, new Date(draftDeadline).toISOString());
+      await editRoundDeadlineRequest(round.id, new Date(draftDeadline).toISOString());
       setEditingDeadline(false);
       onRefresh();
     } catch (e) {
@@ -694,7 +694,6 @@ export default function RoundsPage() {
     try {
       await createRoundRequest(
         selectedPaperId,
-        user.id,
         newRoundTargetVenue,
         newRoundVenueCat,
         newRoundVenueCat === 'Conference' ? newRoundSubDeadline : undefined,

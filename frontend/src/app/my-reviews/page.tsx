@@ -110,16 +110,18 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
       return res;
     });
 
-  const assignDeadlineDate = assignment.deadline
-    ? new Date(assignment.deadline).toISOString().split('T')[0]
-    : new Date(assignment.round.deadline).toISOString().split('T')[0];
+  const effectiveDeadline = assignment.deadline ?? assignment.round.deadline;
+  const assignDeadlineDate = effectiveDeadline
+    ? new Date(effectiveDeadline).toISOString().split('T')[0]
+    : '';
 
   // Max date for extension picker: submissionDeadline if Conference, otherwise +5 days from current deadline
   const maxExtDate = (() => {
     if (assignment.round.submissionDeadline) {
       return new Date(assignment.round.submissionDeadline).toISOString().split('T')[0];
     }
-    const base = new Date(assignment.deadline ?? assignment.round.deadline);
+    if (!effectiveDeadline) return '';
+    const base = new Date(effectiveDeadline);
     base.setDate(base.getDate() + 5);
     return base.toISOString().split('T')[0];
   })();

@@ -184,11 +184,19 @@ export class ReviewerResponseController {
       if (!allowedForExtension.includes(assignment.status)) {
         return res.status(400).json({ message: 'Assignment must be Accepted, PendingExtension, or PendingDecline to request an extension' });
       }
-      if (assignment.deadline && requested <= assignment.deadline) {
+      const effectiveDeadline = assignment.deadline ?? assignment.round.deadline;
+      if (!effectiveDeadline) {
+        return res.status(400).json({ message: 'No deadline is set for this assignment or round; cannot request an extension' });
+      }
+      if (requested <= effectiveDeadline) {
         return res.status(400).json({ message: 'Requested deadline must be after your current assignment deadline' });
       }
-      if (!assignment.round.submissionDeadline && assignment.deadline) {
-        const maxAllowed = new Date(assignment.deadline);
+      if (assignment.round.submissionDeadline) {
+        if (requested > assignment.round.submissionDeadline) {
+          return res.status(400).json({ message: 'Extension cannot exceed the round\'s submission deadline' });
+        }
+      } else {
+        const maxAllowed = new Date(effectiveDeadline);
         maxAllowed.setDate(maxAllowed.getDate() + 5);
         if (requested > maxAllowed) {
           return res.status(400).json({ message: 'Extension cannot exceed 5 days beyond your current deadline for non-conference rounds' });
@@ -346,7 +354,9 @@ export class ReviewerResponseController {
         extension.status = ExtensionStatus.Rejected;
       }
 
-      extension.assignment.status = AssignmentStatus.Accepted;
+      if (extension.assignment.status === AssignmentStatus.PendingExtension) {
+        extension.assignment.status = AssignmentStatus.Accepted;
+      }
       await assignRepo.save(extension.assignment);
       await extensionRepo.save(extension);
 

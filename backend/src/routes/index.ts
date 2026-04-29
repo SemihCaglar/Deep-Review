@@ -127,16 +127,16 @@ router.post('/responses/complete', authenticateRequest, ReviewerResponseControll
 
 // ==== ROUND ROUTES ====
 router.get('/papers/:id/rounds', authenticateRequest, RoundController.getRoundsWithAssignments);
-router.post('/rounds', RoundController.createReviewRound);
+router.post('/rounds', authenticateRequest, RoundController.createReviewRound);
 router.post('/rounds/:id/start', authenticateRequest, RoundController.startRound);
-router.put('/rounds/:id/deadline', RoundController.editRoundDeadline);
+router.put('/rounds/:id/deadline', authenticateRequest, RoundController.editRoundDeadline);
 router.get('/rounds/:id/suggest', authenticateRequest, RoundController.suggestReviewers);
 router.post('/rounds/:id/propose', RoundController.addProposeReviewer);
 router.get('/rounds/:id/propose', RoundController.getProposeReviewers);
 router.get('/rounds/:id/status', RoundController.trackReviewStatus);
 router.post('/rounds/:id/alerts', RoundController.alertOverdueReviews);
 router.post('/rounds/:id/close', RoundController.closeRound);
-router.post('/rounds/next', RoundController.createReviewRound);
+router.post('/rounds/next', authenticateRequest, RoundController.createReviewRound);
 router.post('/rounds/:id/ai', RoundController.startAIReview);
 router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
 router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistItem);

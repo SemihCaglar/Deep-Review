@@ -10,12 +10,17 @@ import { RoundService, RoundServiceError } from '../services/RoundService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class RoundController {
-  static async createReviewRound(req: Request, res: Response) {
+  static async createReviewRound(req: AuthenticatedRequest, res: Response) {
     try {
-      const { paperId, coordinatorId, targetVenue, venueCategory, submissionDeadline, deadline } = req.body;
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      }
 
-      if (!paperId || !coordinatorId || !targetVenue || !venueCategory) {
-        return res.status(400).json({ message: 'Missing required fields: paperId, coordinatorId, targetVenue, venueCategory' });
+      const { paperId, targetVenue, venueCategory, submissionDeadline, deadline } = req.body;
+
+      if (!paperId || !targetVenue || !venueCategory) {
+        return res.status(400).json({ message: 'Missing required fields: paperId, targetVenue, venueCategory' });
       }
 
       if (!Object.values(VenueCategory).includes(venueCategory)) {
@@ -40,19 +45,13 @@ export class RoundController {
         }
       }
 
-      const userRepo = AppDataSource.getRepository<User>('User');
-      const coordinator = await userRepo.findOne({ where: { id: coordinatorId } });
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
-      }
-
       const paperRepo = AppDataSource.getRepository(Paper);
       const roundRepo = AppDataSource.getRepository(Round);
 
       const paper = await paperRepo.findOne({ where: { id: paperId }, relations: ['coordinators'] });
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isOwner = paper.coordinators?.some(c => c.id === coordinatorId);
+      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
       const activeRound = await roundRepo.findOne({
@@ -87,20 +86,19 @@ export class RoundController {
     }
   }
 
-  static async editRoundDeadline(req: Request, res: Response) {
+  static async editRoundDeadline(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
-      const { deadline, coordinatorId } = req.body;
-
-      if (!id) return res.status(400).json({ message: 'Missing round id' });
-      if (!deadline || !coordinatorId) return res.status(400).json({ message: 'Missing new deadline or coordinatorId' });
-      if (isNaN(new Date(deadline).getTime())) return res.status(400).json({ message: 'Invalid deadline format' });
-
-      const userRepo = AppDataSource.getRepository<User>('User');
-      const coordinator = await userRepo.findOne({ where: { id: coordinatorId } });
+      const coordinator = req.user;
       if (!coordinator || coordinator.role !== UserRole.Coordinator) {
         return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
       }
+
+      const { id } = req.params;
+      const { deadline } = req.body;
+
+      if (!id) return res.status(400).json({ message: 'Missing round id' });
+      if (!deadline) return res.status(400).json({ message: 'Missing new deadline' });
+      if (isNaN(new Date(deadline).getTime())) return res.status(400).json({ message: 'Invalid deadline format' });
 
       const roundRepo = AppDataSource.getRepository(Round);
       const round = await roundRepo.findOne({
@@ -109,7 +107,7 @@ export class RoundController {
       });
       if (!round) return res.status(404).json({ message: 'Round not found' });
 
-      const isOwner = round.paper.coordinators?.some(c => c.id === coordinatorId);
+      const isOwner = round.paper.coordinators?.some(c => c.id === coordinator.id);
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
       if (round.status !== RoundStatus.Draft) {

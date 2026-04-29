@@ -223,6 +223,18 @@ export class AssignmentController {
         { coordinatorId: coordinator.id, labId },
       );
 
+      // Send the invite email immediately (reassign = cancel + re-invite atomically)
+      if (newAssignment.reviewer) {
+        await sendEmail(
+          newAssignment.reviewer,
+          'You have been invited to review a paper',
+          `Hello ${newAssignment.reviewer.name},\n\nYou have been invited to review a paper. Please log in to accept or decline.\n\nDeadline: ${newAssignment.deadline?.toISOString() ?? 'TBD'}`,
+        );
+        const assignRepo = AppDataSource.getRepository(Assignment);
+        await assignRepo.update(newAssignment.id, { invitationSent: true });
+        newAssignment.invitationSent = true;
+      }
+
       return res.status(201).json(newAssignment);
     } catch (err) {
       if (err instanceof CoordinatorServiceError) {

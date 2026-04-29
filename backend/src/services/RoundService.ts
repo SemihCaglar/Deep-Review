@@ -1,6 +1,7 @@
 import { AppDataSource } from '../data-source';
 import { Round, RoundStatus, VenueCategory } from '../entities/Round';
 import { Paper } from '../entities/Paper';
+import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest';
 import { Extension, ExtensionStatus } from '../entities/Extension';
 
@@ -61,14 +62,28 @@ export class RoundService {
         relations: ['assignments'],
       });
 
+      const activeStatuses = new Set<AssignmentStatus>([
+        AssignmentStatus.Invited,
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.PendingDecline,
+      ]);
+      const terminalStatuses = new Set<AssignmentStatus>([
+        AssignmentStatus.Declined,
+        AssignmentStatus.Cancelled,
+        AssignmentStatus.Reassigned,
+        AssignmentStatus.Completed,
+        AssignmentStatus.Overdue,
+      ]);
+
       for (const round of openRounds) {
         for (const assignment of round.assignments ?? []) {
-          const isActive = ['Invited', 'Accepted', 'PendingExtension', 'PendingDecline'].includes(assignment.status);
+          const isActive = activeStatuses.has(assignment.status);
           const isPastDeadline = assignment.deadline && assignment.deadline.getTime() < now.getTime();
 
           if (isActive && isPastDeadline) {
-            assignment.status = 'Overdue' as any;
-            await manager.getRepository('Assignment').save(assignment);
+            assignment.status = AssignmentStatus.Overdue;
+            await manager.getRepository(Assignment).save(assignment);
 
             // Reject any pending decline/extension requests — coordinator didn't act in time
             await manager.getRepository(DeclineRequest).update(
@@ -83,7 +98,6 @@ export class RoundService {
         }
 
         if (round.assignments.length > 0) {
-          const terminalStatuses = new Set(['Declined', 'Cancelled', 'Reassigned', 'Completed', 'Overdue']);
           const allTerminal = round.assignments.every(a => terminalStatuses.has(a.status));
 
           if (allTerminal) {

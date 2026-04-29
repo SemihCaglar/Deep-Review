@@ -328,7 +328,7 @@ export type MyAssignment = {
   status: string;
   deadline: string | null;
   invitationSent: boolean;
-  round: { id: string; roundNumber: number; deadline: string; submissionDeadline: string | null; targetVenue: string; venueCategory: string };
+  round: { id: string; roundNumber: number; deadline: string | null; submissionDeadline: string | null; targetVenue: string; venueCategory: string };
   paper: { id: string; title: string; abstractText: string; overleafLink: string | null };
   pendingDeclineRequest: PendingDeclineRequest | null;
   pendingExtensionRequest: PendingExtensionRequest | null;
@@ -419,10 +419,10 @@ export function updateAssignmentDeadlineRequest(assignmentId: string, deadline: 
   });
 }
 
-export function createRoundRequest(paperId: string, coordinatorId: string, targetVenue: string, venueCategory: string, submissionDeadline?: string, deadline?: string) {
+export function createRoundRequest(paperId: string, targetVenue: string, venueCategory: string, submissionDeadline?: string, deadline?: string) {
   return apiRequest<{ id: string; status: string }>('/rounds', {
     method: 'POST',
-    body: { paperId, coordinatorId, targetVenue, venueCategory, ...(submissionDeadline ? { submissionDeadline } : {}), ...(deadline ? { deadline } : {}) },
+    body: { paperId, targetVenue, venueCategory, ...(submissionDeadline ? { submissionDeadline } : {}), ...(deadline ? { deadline } : {}) },
   });
 }
 
@@ -433,15 +433,15 @@ export function startRoundRequest(roundId: string, coordinatorId: string) {
   });
 }
 
-export function editRoundDeadlineRequest(roundId: string, coordinatorId: string, deadline: string) {
+export function editRoundDeadlineRequest(roundId: string, deadline: string) {
   return apiRequest<{ id: string; deadline: string }>(`/rounds/${roundId}/deadline`, {
     method: 'PUT',
-    body: { coordinatorId, deadline },
+    body: { deadline },
   });
 }
 
 export function reassignReviewerRequest(assignmentId: string, newReviewerId: string) {
-  return apiRequest<{ message: string; assignment: object }>(`/assignments/${assignmentId}/reassign`, {
+  return apiRequest<{ id: string; status: string; deadline: string | null; invitationSent: boolean; reviewer: { id: string; name: string; email: string } }>(`/assignments/${assignmentId}/reassign`, {
     method: 'POST',
     body: { newReviewerId },
   });
