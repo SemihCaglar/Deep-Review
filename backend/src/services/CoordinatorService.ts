@@ -1,10 +1,11 @@
-import { EntityManager } from 'typeorm';
+import { EntityManager, In } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { Extension, ExtensionStatus } from '../entities/Extension';
 import { Lab } from '../entities/Lab';
 import { ReviewerResponse, ReviewerResponseStatus } from '../entities/ReviewerResponse';
-import { UserRole } from '../entities/User';
+import { User, UserRole } from '../entities/User';
+import { VenueCategory } from '../entities/Round';
 
 export class CoordinatorServiceError extends Error {
   statusCode: number;
@@ -111,11 +112,24 @@ export class CoordinatorService {
 
       if (decision === 'Approve') {
         const approvedDeadline = this.parseDate(newDeadline, 'newDeadline');
-        const roundDeadline = assignment.round.deadline;
-        if (approvedDeadline.getTime() > roundDeadline.getTime()) {
+        const round = assignment.round;
+        const deadlineCeiling =
+          round.venueCategory === VenueCategory.Conference && round.submissionDeadline
+            ? round.submissionDeadline
+            : round.deadline;
+
+        if (!deadlineCeiling) {
+          throw new CoordinatorServiceError(400, 'Round deadline is not set');
+        }
+
+        if (approvedDeadline.getTime() > deadlineCeiling.getTime()) {
+          const label =
+            round.venueCategory === VenueCategory.Conference
+              ? 'the submission deadline'
+              : 'the round deadline';
           throw new CoordinatorServiceError(
             400,
-            'Approved deadline cannot exceed the round deadline',
+            `Approved deadline cannot exceed ${label}`,
           );
         }
 
@@ -140,6 +154,89 @@ export class CoordinatorService {
     });
   }
 
+  static async reassignReviewer(
+    oldAssignmentId: string,
+    newReviewerId: string,
+    context: CoordinatorContext,
+  ): Promise<Assignment> {
+    const normalizedOldId = normalizeId(oldAssignmentId, 'oldAssignmentId');
+    const normalizedNewReviewerId = normalizeId(newReviewerId, 'newReviewerId');
+
+    return AppDataSource.transaction(async (manager) => {
+      const oldAssignment = await this.findAssignmentByAssignmentOrResponseId(manager, normalizedOldId);
+      await this.assertCoordinatorAccess(manager, oldAssignment, context);
+
+      const cancellableStatuses: AssignmentStatus[] = [
+        AssignmentStatus.Invited,
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingDecline,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.Declined,
+        AssignmentStatus.Cancelled,
+      ];
+      if (!cancellableStatuses.includes(oldAssignment.status)) {
+        throw new CoordinatorServiceError(
+          400,
+          `Cannot reassign an assignment with status "${oldAssignment.status}"`,
+        );
+      }
+
+      const round = oldAssignment.round;
+      const paper = round.paper;
+
+      const newReviewer = await manager.getRepository(User).findOne({
+        where: { id: normalizedNewReviewerId },
+        relations: ['labs'],
+      });
+      if (!newReviewer) throw new CoordinatorServiceError(404, 'New reviewer not found');
+      if (newReviewer.role === UserRole.Coordinator || newReviewer.role === UserRole.GlobalAdmin || newReviewer.role === UserRole.LocalAdmin) {
+        throw new CoordinatorServiceError(400, 'Coordinators and admins cannot be assigned as reviewers');
+      }
+
+      const paperLabIds = paper.labs?.map(l => l.id) ?? [];
+      const reviewerLabIds = newReviewer.labs?.map(l => l.id) ?? [];
+      const sharesLab = reviewerLabIds.some(lid => paperLabIds.includes(lid));
+      if (!sharesLab) {
+        throw new CoordinatorServiceError(400, 'New reviewer must belong to the same lab as the paper');
+      }
+
+      const authorIds = paper.authors?.map(a => a.id) ?? [];
+      if (authorIds.includes(normalizedNewReviewerId)) {
+        throw new CoordinatorServiceError(400, 'Cannot assign an author of the paper as reviewer (conflict of interest)');
+      }
+
+      const assignRepo = manager.getRepository(Assignment);
+      const activeExists = await assignRepo.findOne({
+        where: {
+          round: { id: round.id },
+          reviewer: { id: normalizedNewReviewerId },
+          status: In([
+            AssignmentStatus.Invited,
+            AssignmentStatus.Accepted,
+            AssignmentStatus.PendingDecline,
+            AssignmentStatus.PendingExtension,
+          ]),
+        },
+      });
+      if (activeExists) {
+        throw new CoordinatorServiceError(400, 'This reviewer already has an active assignment in the current round');
+      }
+
+      oldAssignment.status = AssignmentStatus.Reassigned;
+      await assignRepo.save(oldAssignment);
+
+      const newAssignment = new Assignment();
+      newAssignment.round = round;
+      newAssignment.reviewer = newReviewer;
+      newAssignment.status = AssignmentStatus.Invited;
+      newAssignment.deadline = round.deadline;
+      newAssignment.invitationSent = false;
+      const savedNew = await assignRepo.save(newAssignment);
+
+      return this.loadAssignment(manager, savedNew.id);
+    });
+  }
+
   private static async findAssignmentByAssignmentOrResponseId(
     manager: EntityManager,
     id: string,
@@ -147,7 +244,7 @@ export class CoordinatorService {
     const assignmentRepository = manager.getRepository(Assignment);
     const assignment = await assignmentRepository.findOne({
       where: { id },
-      relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
+      relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'round.paper.authors', 'response', 'extensions'],
     });
 
     if (assignment) {
@@ -164,6 +261,7 @@ export class CoordinatorService {
         'assignment.round',
         'assignment.round.paper',
         'assignment.round.paper.labs',
+        'assignment.round.paper.authors',
         'assignment.response',
         'assignment.extensions',
       ],
