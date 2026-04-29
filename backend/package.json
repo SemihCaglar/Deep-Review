@@ -27,17 +27,20 @@
       "jest.setup.ts"
     ],
     "transform": {
-      "^.+\\.tsx?$": ["ts-jest", {
-        "diagnostics": false,
-        "tsconfig": {
-          "experimentalDecorators": true,
-          "emitDecoratorMetadata": true,
-          "strictPropertyInitialization": false,
-          "esModuleInterop": true,
-          "module": "commonjs",
-          "target": "es2016"
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "diagnostics": false,
+          "tsconfig": {
+            "experimentalDecorators": true,
+            "emitDecoratorMetadata": true,
+            "strictPropertyInitialization": false,
+            "esModuleInterop": true,
+            "module": "commonjs",
+            "target": "es2016"
+          }
         }
-      }]
+      ]
     }
   },
   "keywords": [],

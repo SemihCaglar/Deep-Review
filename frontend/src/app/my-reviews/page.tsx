@@ -7,9 +7,10 @@ import {
   getMyAssignmentsRequest,
   respondToInvitationRequest,
   requestExtensionRequest,
+  requestDeclineForAssignmentRequest,
   completeReviewRequest,
 } from '@/lib/api';
-import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 
 function formatDate(d: string | null) {
   if (!d) return '—';
@@ -31,9 +32,13 @@ function statusColor(status: string) {
 function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; onRefresh: () => void }) {
   const [showAbstract, setShowAbstract] = useState(false);
 
-  // Decline flow
+  // Decline flow (invited — via old invitation endpoint)
   const [showDeclineForm, setShowDeclineForm] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
+
+  // Post-acceptance decline request flow
+  const [showLateDeclineForm, setShowLateDeclineForm] = useState(false);
+  const [lateDeclineReason, setLateDeclineReason] = useState('');
 
   // Extension flow
   const [showExtForm, setShowExtForm] = useState(false);
@@ -87,6 +92,16 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
     });
   };
 
+  const handleLateDecline = () => {
+    if (!lateDeclineReason.trim()) { setError('Please provide a reason for your decline request.'); return; }
+    act(async () => {
+      const res = await requestDeclineForAssignmentRequest(assignment.id, lateDeclineReason.trim());
+      setShowLateDeclineForm(false);
+      setLateDeclineReason('');
+      return res;
+    });
+  };
+
   const handleComplete = () =>
     act(async () => {
       const res = await completeReviewRequest(assignment.id, reviewSummary.trim() || undefined);
@@ -95,9 +110,21 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
       return res;
     });
 
-  const assignDeadlineDate = assignment.deadline
-    ? new Date(assignment.deadline).toISOString().split('T')[0]
-    : new Date(assignment.round.deadline).toISOString().split('T')[0];
+  const effectiveDeadline = assignment.deadline ?? assignment.round.deadline;
+  const assignDeadlineDate = effectiveDeadline
+    ? new Date(effectiveDeadline).toISOString().split('T')[0]
+    : '';
+
+  // Max date for extension picker: submissionDeadline if Conference, otherwise +5 days from current deadline
+  const maxExtDate = (() => {
+    if (assignment.round.submissionDeadline) {
+      return new Date(assignment.round.submissionDeadline).toISOString().split('T')[0];
+    }
+    if (!effectiveDeadline) return '';
+    const base = new Date(effectiveDeadline);
+    base.setDate(base.getDate() + 5);
+    return base.toISOString().split('T')[0];
+  })();
 
   return (
     <div className="glass rounded-2xl border border-white/5 overflow-hidden">
@@ -122,7 +149,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
               )}
             </div>
             <h3 className="text-base font-semibold text-white leading-snug">{assignment.paper.title}</h3>
-            <p className="text-xs text-slate-500 mt-1">{assignment.paper.targetVenue}</p>
+            <p className="text-xs text-slate-500 mt-1">{assignment.round.targetVenue}</p>
           </div>
 
           <div className="flex flex-col items-end gap-1 shrink-0 text-right">
@@ -150,10 +177,28 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
             {assignment.paper.abstractText}
           </p>
         )}
+
+        {/* Paper details — visible only after accepting */}
+        {assignment.paper.overleafLink && (
+          <div className="mt-3 flex items-center gap-2 p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
+            <ExternalLink className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-emerald-400 mb-0.5">Paper manuscript</p>
+              <a
+                href={assignment.paper.overleafLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-slate-300 hover:text-white underline underline-offset-2 truncate block"
+              >
+                {assignment.paper.overleafLink}
+              </a>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Actions */}
-      {(assignment.status === 'Invited' || assignment.status === 'Accepted') && (
+      {(['Invited', 'Accepted', 'PendingExtension', 'PendingDecline'].includes(assignment.status)) && (
         <div className="border-t border-white/5 px-6 py-4 space-y-4">
 
           {/* ── Invited actions ── */}
@@ -210,41 +255,63 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
               <div>
                 <p className="text-xs font-semibold text-amber-400">Decline request submitted</p>
                 <p className="text-xs text-slate-400 mt-0.5">Waiting for coordinator to approve or reject your request to decline.</p>
-                <p className="text-xs text-slate-500 mt-1">Your reason: "{assignment.pendingDeclineRequest.reason}"</p>
+                <p className="text-xs text-slate-400">&quot;{assignment.pendingDeclineRequest.reason}&quot;</p>
               </div>
             </div>
           )}
 
-          {/* ── Accepted actions ── */}
-          {assignment.status === 'Accepted' && (
+          {/* ── Accepted / PendingExtension / PendingDecline actions ── */}
+          {(['Accepted', 'PendingExtension', 'PendingDecline'].includes(assignment.status)) && (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => { setShowCompleteForm(v => !v); setError(''); }}
+                  onClick={() => { setShowCompleteForm(v => !v); setShowExtForm(false); setShowLateDeclineForm(false); setError(''); }}
                   disabled={busy}
                   className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50 transition-colors"
                 >
                   <CheckCircle className="w-4 h-4" /> Submit Review
                 </button>
                 <button
-                  onClick={() => { setShowExtForm(v => !v); setError(''); }}
+                  onClick={() => { setShowExtForm(v => !v); setShowCompleteForm(false); setShowLateDeclineForm(false); setError(''); }}
                   disabled={busy}
                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 disabled:opacity-50 transition-colors"
                 >
-                  <Clock className="w-4 h-4" /> Request Extension
+                  <Clock className="w-4 h-4" />
+                  {assignment.pendingExtensionRequest ? 'Update Extension Request' : 'Request Extension'}
+                </button>
+                <button
+                  onClick={() => { setShowLateDeclineForm(v => !v); setShowCompleteForm(false); setShowExtForm(false); setError(''); }}
+                  disabled={busy}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
+                >
+                  <XCircle className="w-4 h-4" />
+                  {assignment.pendingDeclineRequest ? 'Update Decline Request' : 'Request to Decline'}
                 </button>
               </div>
 
+              {/* Decline pending info */}
+              {assignment.pendingDeclineRequest && !showLateDeclineForm && (
+                <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                  <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-amber-400">Decline request pending coordinator approval</p>
+                    <p className="text-xs text-slate-500 mt-0.5">&quot;{assignment.pendingDeclineRequest.reason}&quot;</p>
+                    <p className="text-xs text-slate-600 mt-1">You can submit a new request — it will replace this one.</p>
+                  </div>
+                </div>
+              )}
+
               {/* Extension pending info */}
-              {assignment.pendingExtensionRequest && (
+              {assignment.pendingExtensionRequest && !showExtForm && (
                 <div className="flex items-start gap-2 p-3 rounded-xl border border-blue-500/20 bg-blue-500/5">
                   <Clock className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-xs font-semibold text-blue-400">Extension request pending</p>
+                    <p className="text-xs font-semibold text-blue-400">Extension request pending coordinator approval</p>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Requested: {formatDate(assignment.pendingExtensionRequest.requestedDeadline)} — waiting for coordinator approval.
+                      Requested deadline: {formatDate(assignment.pendingExtensionRequest.requestedDeadline)}
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">Your reason: "{assignment.pendingExtensionRequest.reason}"</p>
+                    <p className="text-xs text-slate-500 mt-0.5">&quot;{assignment.pendingExtensionRequest.reason}&quot;</p>
+                    <p className="text-xs text-slate-600 mt-1">You can still submit a new request — it will replace this one.</p>
                   </div>
                 </div>
               )}
@@ -276,7 +343,14 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
 
               {showExtForm && (
                 <div className="space-y-2 p-4 rounded-xl border border-white/10 bg-white/[0.03]">
-                  <p className="text-xs font-semibold text-slate-400">Request a deadline extension</p>
+                  <p className="text-xs font-semibold text-slate-400">
+                    {assignment.pendingExtensionRequest ? 'Update your pending extension request' : 'Request a deadline extension'}
+                  </p>
+                  {assignment.pendingExtensionRequest && (
+                    <p className="text-xs text-slate-500">
+                      Current request: {formatDate(assignment.pendingExtensionRequest.requestedDeadline)} — submitting a new request will replace it.
+                    </p>
+                  )}
                   <div className="flex items-center gap-3">
                     <label className="text-xs text-slate-500 shrink-0">New date:</label>
                     <input
@@ -284,6 +358,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                       value={extDate}
                       onChange={e => setExtDate(e.target.value)}
                       min={assignDeadlineDate}
+                      max={maxExtDate}
                       className="bg-background border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                     />
                   </div>
@@ -300,9 +375,41 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                       disabled={busy || !extReason.trim() || !extDate}
                       className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors"
                     >
-                      Submit Request
+                      {assignment.pendingExtensionRequest ? 'Update Request' : 'Submit Request'}
                     </button>
                     <button onClick={() => setShowExtForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {showLateDeclineForm && (
+                <div className="space-y-2 p-4 rounded-xl border border-red-500/20 bg-red-500/5">
+                  <p className="text-xs font-semibold text-red-400">
+                    {assignment.pendingDeclineRequest ? 'Update your decline request' : 'Request to decline this review'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {assignment.pendingDeclineRequest
+                      ? 'Submitting a new reason will replace your previous request.'
+                      : 'The coordinator will review your request before it is approved.'}
+                  </p>
+                  <textarea
+                    value={lateDeclineReason}
+                    onChange={e => setLateDeclineReason(e.target.value)}
+                    rows={3}
+                    placeholder="Explain why you can no longer review this paper..."
+                    className="w-full bg-background border border-red-500/20 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-red-500/50 resize-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleLateDecline}
+                      disabled={busy || !lateDeclineReason.trim()}
+                      className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-red-600 hover:bg-red-500 text-white disabled:opacity-50 transition-colors"
+                    >
+                      Submit Decline Request
+                    </button>
+                    <button onClick={() => setShowLateDeclineForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>
@@ -335,8 +442,9 @@ export default function MyReviewsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const active = assignments.filter(a => ['Invited', 'Accepted'].includes(a.status));
-  const past = assignments.filter(a => !['Invited', 'Accepted'].includes(a.status));
+  const activeStatuses = ['Invited', 'Accepted', 'PendingExtension', 'PendingDecline'];
+  const active = assignments.filter(a => activeStatuses.includes(a.status));
+  const past = assignments.filter(a => !activeStatuses.includes(a.status));
 
   return (
     <div className="max-w-3xl mx-auto py-6 space-y-8 animate-in fade-in duration-500 mb-20">
