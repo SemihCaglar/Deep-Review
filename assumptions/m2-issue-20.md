@@ -59,19 +59,15 @@ _(Carried over — not changed)_
 
 ## 7. Decline Request Flow
 
-1. **All declines require coordinator approval.** There is no immediate/unilateral decline. This applies to:
-   - A reviewer declining their initial invitation (status still `Invited`).
-   - A reviewer withdrawing after having already accepted (status `Accepted`).
+1. **All declines require coordinator approval.** There is no immediate/unilateral decline. This applies to a reviewer declining their initial invitation (status still `Invited`). Post-acceptance withdrawal was removed — see point 3.
 
 2. **`respondToInvitation` handles both accept and decline:**
    - `accept` → `Assignment.status = Accepted` immediately.
    - `decline` → creates a `DeclineRequest` record with `status = Pending`. Assignment status remains `Invited`. Coordinator must approve before the assignment moves to `Declined`.
 
-3. **Post-acceptance withdrawal (`requestDecline`):**
-   - Reviewer who has already accepted calls `POST /responses/decline` with a `reason`.
-   - A `DeclineRequest` record is created with `status = Pending`. Assignment status remains `Accepted`. Coordinator must approve before the assignment moves to `Declined`.
+3. **Post-acceptance withdrawal — removed:** Per professor's instruction, a reviewer who has already accepted cannot later request to withdraw. `POST /responses/decline` is deleted. This is documented in Issue #21 assumptions.
 
-4. **Both paths use the same coordinator approval step:**
+4. **Coordinator approval step:**
    - Coordinator calls `POST /responses/process-decline` (`processDeclineRequest`) to approve or reject.
    - If **approved**: `DeclineRequest.status = Approved`, `Assignment.status = Declined`.
    - If **rejected**: `DeclineRequest.status = Rejected`, Assignment status is **unchanged**.
@@ -112,6 +108,7 @@ _(Carried over — not changed)_
 2. **Coordinator responds:** Coordinator calls `POST /responses/process-extension` with an `approvedDeadline`. The approved date does **not** need to match the reviewer's requested date — the coordinator can set any date they choose.
 3. **On approval:** `Extension.status = Approved`, `Extension.approvedDeadline` is set, `Assignment.deadline` is updated to the approved date.
 4. **On rejection:** `Extension.status = Rejected`. `Assignment.deadline` is unchanged.
+5. **No upper bound on requested date:** The `requestedDeadline` is only validated to be strictly after `assignment.deadline` (it must extend, not shorten). There is no constraint tying it to `round.deadline` — the purpose of an extension request is precisely to exceed the round boundary.
 
 ---
 

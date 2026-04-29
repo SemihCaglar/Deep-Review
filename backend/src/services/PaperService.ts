@@ -89,7 +89,6 @@ export class PaperService {
     // Connect Coordinator
     const coordinatorRepo = AppDataSource.getRepository(Coordinator);
     const labRepo = AppDataSource.getRepository(Lab);
-
     // Check if creator is a Coordinator
     const coordinator = await coordinatorRepo.findOne({ where: { id: creator.id } });
     if (coordinator) {

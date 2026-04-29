@@ -2,9 +2,9 @@ import { ChildEntity } from 'typeorm';
 import { User, UserRole } from './User';
 
 @ChildEntity()
-export class Admin extends User {
+export class GlobalAdmin extends User {
   constructor() {
     super();
-    this.role = UserRole.Admin;
+    this.role = UserRole.GlobalAdmin;
   }
 }

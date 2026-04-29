@@ -2,8 +2,12 @@ export interface User {
     id: string;
     name: string;
     isCoordinator: boolean;
+    isAdmin?: boolean;
+    isGlobalAdmin?: boolean;
+    isLocalAdmin?: boolean;
     email: string;
     topics?: string[];
+    labs?: { id: string; name: string }[];
 }
 
 export interface PaperEvent {

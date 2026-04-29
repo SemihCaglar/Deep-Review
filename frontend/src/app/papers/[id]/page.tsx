@@ -215,7 +215,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const handleSaveTopics = async () => {
         try {
             const updatedPaper = await updatePaperTopicsRequest(paper.id, localTopics);
-            setPaper(updatedPaper);
+            setPaper({ ...paper, topics: updatedPaper.topics });
             setIsEditingTopics(false);
         } catch (err) {
             console.error('Failed to update topics', err);
