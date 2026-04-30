@@ -5,8 +5,16 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, ShieldCheck, Cpu, Download } from 'lucide-react';
-import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError, updateOverleafLinkRequest, updateOverleafGitUrlRequest, updatePaperVenueRequest, startAIReviewRequest, runComplianceCheckRequest, getVenueRulesRequest } from '@/lib/api';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github } from 'lucide-react';
+import {
+  getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
+  getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
+  getLabMembersRequest, ApiError, LabMember,
+  AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest,
+  getSuggestedReviewersRequest, SuggestedReviewer,
+  getProposedReviewersRequest, addProposedReviewerRequest, removeProposedReviewerRequest,
+  updateOverleafLinkRequest, updateGithubLinkRequest, updatePaperStatusRequest,
+} from '@/lib/api';
 
 function todayInputValue() {
     const today = new Date();
@@ -19,8 +27,9 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [paper, setPaper] = useState<Paper | null>(null);
     const [loading, setLoading] = useState(true);
     const [availableTopics, setAvailableTopics] = useState<TopicOption[]>([]);
-
+    
     const [isArchiving, setIsArchiving] = useState(false);
+    const [archiveError, setArchiveError] = useState('');
     const [declineReason, setDeclineReason] = useState('');
     const [showDeclineForm, setShowDeclineForm] = useState(false);
     const [showExtensionForm, setShowExtensionForm] = useState(false);
@@ -35,30 +44,45 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [isEditingAbstract, setIsEditingAbstract] = useState(false);
     const [isEditingTopics, setIsEditingTopics] = useState(false);
     const [isEditingDeadline, setIsEditingDeadline] = useState(false);
+    const [isEditingLinks, setIsEditingLinks] = useState(false);
     const [isSendingReminder, setIsSendingReminder] = useState(false);
     const [reminderSent, setReminderSent] = useState(false);
     const [isEditingAuthors, setIsEditingAuthors] = useState(false);
     const [localAuthors, setLocalAuthors] = useState<string[]>([]);
-    const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+    const [availableUsers, setAvailableUsers] = useState<LabMember[]>([]);
 
     const [localAbstract, setLocalAbstract] = useState('');
+    const [abstractError, setAbstractError] = useState('');
+    const [topicsError, setTopicsError] = useState('');
+    const [authorsError, setAuthorsError] = useState('');
     const [localTopics, setLocalTopics] = useState<string[]>([]); // These will be IDs
     const [localDeadline, setLocalDeadline] = useState('');
+    const [localOverleafLink, setLocalOverleafLink] = useState('');
+    const [localGithubLink, setLocalGithubLink] = useState('');
+    const [linksError, setLinksError] = useState('');
+    const [savingLinks, setSavingLinks] = useState(false);
     const [paperHistory, setPaperHistory] = useState<PaperHistory | null>(null);
     const [historyError, setHistoryError] = useState('');
 
-    const [isEditingOverleaf, setIsEditingOverleaf] = useState(false);
-    const [isEditingGit, setIsEditingGit] = useState(false);
-    const [localOverleaf, setLocalOverleaf] = useState('');
-    const [localGit, setLocalGit] = useState('');
-    const [isSavingOverleaf, setIsSavingOverleaf] = useState(false);
-    const [isSavingGit, setIsSavingGit] = useState(false);
-    const [isEditingVenue, setIsEditingVenue] = useState(false);
-    const [localVenue, setLocalVenue] = useState('');
-    const [isSavingVenue, setIsSavingVenue] = useState(false);
-    const [runningAI, setRunningAI] = useState<string | null>(null);
-    const [runningCompliance, setRunningCompliance] = useState<string | null>(null);
-    const [aiError, setAiError] = useState('');
+    // Author round proposal state
+    const [authorRounds, setAuthorRounds] = useState<AuthorRound[]>([]);
+    const [loadingRounds, setLoadingRounds] = useState(false);
+    const [showCreateRound, setShowCreateRound] = useState(false);
+    const [newVenueCat, setNewVenueCat] = useState('Conference');
+    const [newTargetVenue, setNewTargetVenue] = useState('');
+    const [newSubDeadline, setNewSubDeadline] = useState('');
+    const [newRoundDeadline, setNewRoundDeadline] = useState('');
+    const [creatingRound, setCreatingRound] = useState(false);
+    const [createRoundError, setCreateRoundError] = useState('');
+    // Per-round proposal panel state (keyed by round id)
+    const [expandedRound, setExpandedRound] = useState<string | null>(null);
+    const [proposedMap, setProposedMap] = useState<Record<string, { id: string; name: string; email: string }[]>>({});
+    const [suggestionsMap, setSuggestionsMap] = useState<Record<string, SuggestedReviewer[]>>({});
+    const [loadingSuggestions, setLoadingSuggestions] = useState<Record<string, boolean>>({});
+    const [showSuggestPanel, setShowSuggestPanel] = useState<Record<string, boolean>>({});
+    const [roundErrors, setRoundErrors] = useState<Record<string, string>>({});
+    const [editingRoundDeadline, setEditingRoundDeadline] = useState<string | null>(null);
+    const [roundDeadlineDraft, setRoundDeadlineDraft] = useState('');
 
     useEffect(() => {
         const fetchData = async () => {
@@ -69,11 +93,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 ]);
                 setPaper(paperData);
                 setLocalAbstract(paperData.abstractText || '');
-                setLocalVenue(paperData.targetVenue || '');
                 setLocalTopics(paperData.topics?.map((t: any) => t.id) || []);
                 setLocalAuthors(paperData.authors?.map((a: any) => a.id) || []);
-                setLocalOverleaf(paperData.overleafLink || '');
-                setLocalGit(paperData.overleafGitUrl || '');
+                setLocalOverleafLink(paperData.overleafLink || '');
+                setLocalGithubLink(paperData.githubLink || '');
                 setAvailableTopics(topicsData);
 
                 // Set initial deadline from mock data if it matches
@@ -81,7 +104,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 if (activeRound) {
                     setLocalDeadline(activeRound.deadline || '');
                 }
-
+                
                 // Fetch lab members for author editing
                 const membersRes = await getLabMembersRequest();
                 setAvailableUsers(membersRes.users);
@@ -113,6 +136,24 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         };
         fetchData();
     }, [params.id]);
+
+    // Load author rounds when paper is available and user is author/coordinator
+    useEffect(() => {
+        if (!paper || !user.id) return;
+        const userIsAuthor = paper.authors?.some(a => a.id === user.id);
+        if (!userIsAuthor && !user.isCoordinator) return;
+        setLoadingRounds(true);
+        getAuthorRoundsRequest(params.id)
+            .then(rounds => {
+                setAuthorRounds(rounds);
+                // Pre-populate proposed lists
+                const map: Record<string, { id: string; name: string; email: string }[]> = {};
+                rounds.forEach(r => { map[r.id] = r.proposedReviewers; });
+                setProposedMap(map);
+            })
+            .catch(() => { /* silently ignore */ })
+            .finally(() => setLoadingRounds(false));
+    }, [paper, user.id, user.isCoordinator, params.id]);
 
     if (loading) {
         return (
@@ -162,12 +203,32 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
-    const handleArchive = () => {
+    const handleArchive = async () => {
         setIsArchiving(true);
-        setTimeout(() => {
-            setLocalStatus('Archived');
+        setArchiveError('');
+        try {
+            const updatedPaper = await updatePaperStatusRequest(paper.id, 'Archived');
+            setPaper(updatedPaper);
+            setLocalStatus(updatedPaper.status);
+        } catch (err) {
+            setArchiveError(err instanceof ApiError ? err.message : 'Failed to archive paper.');
+        } finally {
             setIsArchiving(false);
-        }, 800);
+        }
+    };
+
+    const handleUnarchive = async () => {
+        setIsArchiving(true);
+        setArchiveError('');
+        try {
+            const updatedPaper = await updatePaperStatusRequest(paper.id, 'Draft');
+            setPaper(updatedPaper);
+            setLocalStatus(updatedPaper.status);
+        } catch (err) {
+            setArchiveError(err instanceof ApiError ? err.message : 'Failed to unarchive paper.');
+        } finally {
+            setIsArchiving(false);
+        }
     };
 
     // Calculate effective assignment statuses including local mocks
@@ -183,6 +244,12 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     );
     const effectivePaperStatus = isRoundComplete && currentStatus === 'In Review' ? 'Review Done' : currentStatus;
     const canEditAuthors = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
+    const canEditLinks = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
+    const canChangeArchiveState = user.isCoordinator || isAuthor;
+    const addableAuthorOptions = availableUsers.filter(candidate => {
+        if (candidate.role === 'Coordinator' || candidate.role === 'Admin') return false;
+        return !localAuthors.includes(candidate.id);
+    });
 
     const handleSubmitReview = () => {
         setIsSubmittingReview(true);
@@ -193,59 +260,61 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     };
 
     const handleSaveAuthors = async () => {
+        setAuthorsError('');
         try {
             const { updatePaperAuthorsRequest } = await import('@/lib/api');
             const updatedPaper = await updatePaperAuthorsRequest(paper.id, localAuthors);
             setPaper(updatedPaper);
             setIsEditingAuthors(false);
         } catch (err) {
-            console.error('Failed to update authors', err);
-            alert('Failed to update authors');
+            setAuthorsError(err instanceof ApiError ? err.message : 'Failed to update authors. Please try again.');
         }
     };
 
-    const handleSaveOverleaf = async () => {
-        if (!paper) return;
-        setIsSavingOverleaf(true);
+    const handleSaveLinks = async () => {
+        setLinksError('');
+        setSavingLinks(true);
         try {
-            const res = await updateOverleafLinkRequest(paper.id, localOverleaf.trim());
-            setPaper({ ...paper, overleafLink: res.overleafLink });
-            setIsEditingOverleaf(false);
-        } catch (err) {
-            console.error('Failed to save Overleaf link', err);
-            alert(err instanceof ApiError ? err.message : 'Failed to save');
-        } finally {
-            setIsSavingOverleaf(false);
-        }
-    };
+            const trimmedOverleafLink = localOverleafLink.trim();
+            const trimmedGithubLink = localGithubLink.trim();
+            try {
+                await updateOverleafLinkRequest(paper.id, trimmedOverleafLink);
+            } catch (err) {
+                setLinksError(err instanceof ApiError ? err.message : 'Failed to update Overleaf link. Please try again.');
+                return;
+            }
 
-    const handleSaveGit = async () => {
-        if (!paper) return;
-        setIsSavingGit(true);
-        try {
-            const res = await updateOverleafGitUrlRequest(paper.id, localGit.trim());
-            setPaper({ ...paper, overleafGitUrl: res.overleafGitUrl });
-            setIsEditingGit(false);
-        } catch (err) {
-            console.error('Failed to save Git URL', err);
-            alert(err instanceof ApiError ? err.message : 'Failed to save');
-        } finally {
-            setIsSavingGit(false);
-        }
-    };
+            let githubSaveError = '';
+            try {
+                await updateGithubLinkRequest(paper.id, trimmedGithubLink);
+            } catch (err) {
+                githubSaveError = err instanceof ApiError ? err.message : 'Failed to update GitHub link. Please try again.';
+            }
 
-    const handleSaveVenue = async () => {
-        if (!paper || !localVenue.trim()) return;
-        setIsSavingVenue(true);
-        try {
-            const updatedPaper = await updatePaperVenueRequest(paper.id, localVenue.trim());
-            setPaper(updatedPaper);
-            setIsEditingVenue(false);
+            const persistedPaper = await getPaperByIdRequest(paper.id);
+            const nextOverleafLink = persistedPaper.overleafLink ?? null;
+            const nextGithubLink = persistedPaper.githubLink ?? null;
+            setPaper(persistedPaper);
+            setPaperHistory(prev => prev ? {
+                ...prev,
+                overleafLink: nextOverleafLink,
+                githubLink: nextGithubLink,
+            } : prev);
+            setLocalOverleafLink(nextOverleafLink || '');
+            setLocalGithubLink(nextGithubLink || '');
+            if (githubSaveError) {
+                setLinksError(`Overleaf link saved. GitHub link was not saved: ${githubSaveError}`);
+                return;
+            }
+            if (trimmedGithubLink && !nextGithubLink) {
+                setLinksError('Overleaf link saved. GitHub link was not saved by the backend.');
+                return;
+            }
+            setIsEditingLinks(false);
         } catch (err) {
-            console.error('Failed to update venue', err);
-            alert('Failed to update venue');
+            setLinksError(err instanceof ApiError ? err.message : 'Failed to update links. Please try again.');
         } finally {
-            setIsSavingVenue(false);
+            setSavingLinks(false);
         }
     };
 
@@ -261,7 +330,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         const newAuthors = [...localAuthors];
         const targetIndex = direction === 'up' ? index - 1 : index + 1;
         if (targetIndex < 0 || targetIndex >= newAuthors.length) return;
-
+        
         [newAuthors[index], newAuthors[targetIndex]] = [newAuthors[targetIndex], newAuthors[index]];
         setLocalAuthors(newAuthors);
     };
@@ -276,24 +345,24 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     };
 
     const handleSaveAbstract = async () => {
+        setAbstractError('');
         try {
             const updatedPaper = await updatePaperAbstractRequest(paper.id, localAbstract);
             setPaper(updatedPaper);
             setIsEditingAbstract(false);
         } catch (err) {
-            console.error('Failed to update abstract', err);
-            alert('Failed to update abstract');
+            setAbstractError(err instanceof ApiError ? err.message : 'Failed to update abstract. Please try again.');
         }
     };
 
     const handleSaveTopics = async () => {
+        setTopicsError('');
         try {
             const updatedPaper = await updatePaperTopicsRequest(paper.id, localTopics);
             setPaper({ ...paper, topics: updatedPaper.topics });
             setIsEditingTopics(false);
         } catch (err) {
-            console.error('Failed to update topics', err);
-            alert('Failed to update topics');
+            setTopicsError(err instanceof ApiError ? err.message : 'Failed to update topics. Please try again.');
         }
     };
 
@@ -302,6 +371,82 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
             setLocalTopics(localTopics.filter(t => t !== id));
         } else {
             setLocalTopics([...localTopics, id]);
+        }
+    };
+
+    // Author round handlers
+    const refreshRounds = async () => {
+        try {
+            const rounds = await getAuthorRoundsRequest(params.id);
+            setAuthorRounds(rounds);
+            const map: Record<string, { id: string; name: string; email: string }[]> = {};
+            rounds.forEach(r => { map[r.id] = r.proposedReviewers; });
+            setProposedMap(map);
+        } catch { /* ignore */ }
+    };
+
+    const handleCreateRound = async () => {
+        setCreatingRound(true);
+        setCreateRoundError('');
+        try {
+            await createRoundRequest(
+                params.id, newTargetVenue, newVenueCat,
+                newVenueCat === 'Conference' ? newSubDeadline : undefined,
+                newRoundDeadline || undefined,
+            );
+            setShowCreateRound(false);
+            setNewTargetVenue('');
+            setNewSubDeadline('');
+            setNewRoundDeadline('');
+            await refreshRounds();
+        } catch (e) {
+            setCreateRoundError(e instanceof ApiError ? e.message : 'Failed to create round');
+        } finally {
+            setCreatingRound(false);
+        }
+    };
+
+    const handleSaveRoundDeadline = async (roundId: string) => {
+        try {
+            await editRoundDeadlineRequest(roundId, new Date(roundDeadlineDraft).toISOString());
+            setEditingRoundDeadline(null);
+            await refreshRounds();
+        } catch (e) {
+            setRoundErrors(prev => ({ ...prev, [roundId]: e instanceof ApiError ? e.message : 'Failed to save deadline' }));
+        }
+    };
+
+    const openSuggestPanel = async (roundId: string) => {
+        setShowSuggestPanel(prev => ({ ...prev, [roundId]: true }));
+        setLoadingSuggestions(prev => ({ ...prev, [roundId]: true }));
+        setRoundErrors(prev => ({ ...prev, [roundId]: '' }));
+        try {
+            const data = await getSuggestedReviewersRequest(roundId);
+            const alreadyProposed = new Set((proposedMap[roundId] ?? []).map(p => p.id));
+            setSuggestionsMap(prev => ({ ...prev, [roundId]: data.filter(s => !alreadyProposed.has(s.user.id)) }));
+        } catch (e) {
+            setRoundErrors(prev => ({ ...prev, [roundId]: e instanceof ApiError ? e.message : 'Failed to load suggestions' }));
+        } finally {
+            setLoadingSuggestions(prev => ({ ...prev, [roundId]: false }));
+        }
+    };
+
+    const handleAddProposed = async (roundId: string, reviewerId: string) => {
+        try {
+            const updated = await addProposedReviewerRequest(roundId, reviewerId);
+            setProposedMap(prev => ({ ...prev, [roundId]: updated }));
+            setSuggestionsMap(prev => ({ ...prev, [roundId]: (prev[roundId] ?? []).filter(s => s.user.id !== reviewerId) }));
+        } catch (e) {
+            setRoundErrors(prev => ({ ...prev, [roundId]: e instanceof ApiError ? e.message : 'Failed to add reviewer' }));
+        }
+    };
+
+    const handleRemoveProposed = async (roundId: string, userId: string) => {
+        try {
+            const updated = await removeProposedReviewerRequest(roundId, userId);
+            setProposedMap(prev => ({ ...prev, [roundId]: updated }));
+        } catch (e) {
+            setRoundErrors(prev => ({ ...prev, [roundId]: e instanceof ApiError ? e.message : 'Failed to remove reviewer' }));
         }
     };
 
@@ -332,41 +477,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
             default:
                 return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-        }
-    };
-
-    const handleStartAIReview = async (roundId: string) => {
-        setRunningAI(roundId);
-        setAiError('');
-        try {
-            await startAIReviewRequest(roundId);
-            // Refresh paper history
-            const historyData = await getPaperHistoryRequest(params.id);
-            setPaperHistory(historyData);
-        } catch (err: any) {
-            setAiError(err.message || 'Failed to start AI Review');
-        } finally {
-            setRunningAI(null);
-        }
-    };
-
-    const handleRunComplianceCheck = async (roundId: string, targetVenue: string) => {
-        setRunningCompliance(roundId);
-        setAiError('');
-        try {
-            // Fetch venue rules first
-            const venueRules = await getVenueRulesRequest(roundId);
-
-            // Pass them to compliance check
-            await runComplianceCheckRequest(roundId, venueRules);
-
-            // Refresh paper history
-            const historyData = await getPaperHistoryRequest(params.id);
-            setPaperHistory(historyData);
-        } catch (err: any) {
-            setAiError(err.message || 'Failed to run Compliance Check');
-        } finally {
-            setRunningCompliance(null);
         }
     };
 
@@ -512,41 +622,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     ))}
                                 </div>
 
-                                {(checklistItems.length > 0 || aiReports.length > 0 || round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl || round.roundStatus === 'Completed') && (
+                                {(checklistItems.length > 0 || aiReports.length > 0) && (
                                     <div className="p-5 border-t border-white/5 bg-black/10">
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-                                            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Post-Review Phase & Artifacts</h4>
-
-                                            {/* AI Actions */}
-                                            {round.roundStatus === 'Completed' && (user.isCoordinator || user.id === paper.authors?.[0]?.id || paper.authors?.some(a => a.id === user.id)) && (
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => handleRunComplianceCheck(round.id, paperHistory?.targetVenue || paper.targetVenue || '')}
-                                                        disabled={runningCompliance === round.id || runningAI === round.id}
-                                                        className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/20 text-xs font-medium rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
-                                                    >
-                                                        {runningCompliance === round.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                                                        Run Compliance Check
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleStartAIReview(round.id)}
-                                                        disabled={runningCompliance === round.id || runningAI === round.id}
-                                                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500 shadow-sm text-xs font-medium rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
-                                                    >
-                                                        {runningAI === round.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cpu className="w-3.5 h-3.5" />}
-                                                        Generate AI Review
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {aiError && (runningAI === round.id || runningCompliance === round.id) && (
-                                            <div className="mb-4 p-3 rounded-lg border border-red-500/20 bg-red-500/5 text-sm text-red-400">
-                                                {aiError}
-                                            </div>
-                                        )}
-
-                                        <div className="space-y-4">
+                                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Artifacts</h4>
+                                        <div className="space-y-3">
                                             {aiReports.map(report => (
                                                 <div key={report.id} className="flex flex-wrap items-center gap-3 text-sm">
                                                     {report.generatedReportUrl && (
@@ -563,100 +642,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     )}
                                                 </div>
                                             ))}
-
-                                            {/* New AI Review Report */}
-                                            {round.aiReviewReport && (
-                                                <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4 mt-2">
-                                                    <div className="flex items-center gap-2 mb-3">
-                                                        <Cpu className="w-4 h-4 text-indigo-400" />
-                                                        <h5 className="text-sm font-semibold text-indigo-300">AI Review Generated</h5>
-                                                    </div>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                        <div>
-                                                            <p className="text-xs text-slate-500 mb-1">Checklist Compliance</p>
-                                                            <div className="space-y-1">
-                                                                {round.aiReviewReport.checklist?.map((item: any, i: number) => (
-                                                                    <div key={i} className="flex items-start gap-2 text-xs">
-                                                                        {item.status === 'Pass' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
-                                                                        <span className="text-slate-300">{item.requirement}</span>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-xs text-slate-500 mb-1">Methodology Review</p>
-                                                            <p className="text-xs text-slate-300 line-clamp-4">{round.aiReviewReport.methodologyReview}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* New Compliance Report */}
-                                            {round.complianceReport && (
-                                                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 mt-2">
-                                                    <div className="flex items-center gap-2 mb-3">
-                                                        <ShieldCheck className="w-4 h-4 text-blue-400" />
-                                                        <h5 className="text-sm font-semibold text-blue-300">Compliance Check</h5>
-                                                    </div>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                        <div>
-                                                            <p className="text-xs text-slate-500 mb-1">Anonymity Validation</p>
-                                                            <div className="space-y-1">
-                                                                {round.complianceReport.anonymityViolations?.length > 0 ? (
-                                                                    round.complianceReport.anonymityViolations.map((v: string, i: number) => (
-                                                                        <div key={i} className="flex items-start gap-2 text-xs">
-                                                                            <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                                                                            <span className="text-slate-300">{v}</span>
-                                                                        </div>
-                                                                    ))
-                                                                ) : (
-                                                                    <div className="flex items-center gap-2 text-xs text-emerald-400">
-                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> No anonymity violations found.
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-xs text-slate-500 mb-1">Formatting Validation</p>
-                                                            <div className="space-y-1">
-                                                                {round.complianceReport.formattingViolations?.length > 0 ? (
-                                                                    round.complianceReport.formattingViolations.map((v: string, i: number) => (
-                                                                        <div key={i} className="flex items-start gap-2 text-xs">
-                                                                            <XCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                                                                            <span className="text-slate-300">{v}</span>
-                                                                        </div>
-                                                                    ))
-                                                                ) : (
-                                                                    <div className="flex items-center gap-2 text-xs text-emerald-400">
-                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> Formatting looks correct.
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Download Links */}
-                                            {(round.annotatedPdfUrl || round.sourceZipUrl) && (
-                                                <div className="flex flex-wrap gap-3 mt-4">
-                                                    {round.annotatedPdfUrl && (
-                                                        <a href={round.annotatedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-sm font-medium transition-colors">
-                                                            <ExternalLink className="w-4 h-4" />
-                                                            View Annotated PDF
-                                                        </a>
-                                                    )}
-                                                    {round.sourceZipUrl && (
-                                                        <a href={round.sourceZipUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-sm font-medium transition-colors">
-                                                            <Download className="w-4 h-4" />
-                                                            Download Source ZIP
-                                                        </a>
-                                                    )}
-                                                </div>
-                                            )}
-
                                             {checklistItems.length > 0 && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                                     {checklistItems.map(item => (
                                                         <div key={item.id} className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-3">
                                                             <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${item.isChecked ? 'text-emerald-400' : 'text-slate-600'}`} />
@@ -692,50 +679,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         </span>
                     </div>
 
-                    {/* Target Venue */}
-                    <div className="flex items-center gap-2 mb-3">
-                        {isEditingVenue ? (
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="text"
-                                    value={localVenue}
-                                    onChange={(e) => setLocalVenue(e.target.value)}
-                                    className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all w-64"
-                                    placeholder="Target Venue..."
-                                />
-                                <button
-                                    onClick={handleSaveVenue}
-                                    disabled={isSavingVenue}
-                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
-                                >
-                                    {isSavingVenue ? 'Saving...' : 'Save'}
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setLocalVenue(paper.targetVenue || '');
-                                        setIsEditingVenue(false);
-                                    }}
-                                    className="px-2 py-1 text-xs text-slate-400 hover:text-white"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2 group/venue">
-                                <span className="text-slate-400 text-sm">Target Venue:</span>
-                                <span className="text-blue-400 font-medium text-sm">{paper.targetVenue || 'Not specified'}</span>
-                                {canEditAbstract && (
-                                    <button
-                                        onClick={() => setIsEditingVenue(true)}
-                                        className="opacity-0 group-hover/venue:opacity-100 transition-opacity text-xs text-slate-500 hover:text-blue-400 p-1"
-                                    >
-                                        <Edit className="w-3 h-3" />
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
                     <div className="flex items-center gap-2 mb-4 flex-wrap group/topics cursor-pointer relative">
                         {paper.topics?.map((topic) => (
                             <span key={topic.id} className="px-2 py-1 rounded bg-white/10 text-slate-300 text-xs font-medium border border-white/5">
@@ -765,12 +708,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         </button>
                                     ))}
                                 </div>
+                                {topicsError && <p className="text-xs text-red-400">{topicsError}</p>}
                                 <div className="flex justify-end gap-2">
                                     <button
-                                        onClick={() => {
-                                            setLocalTopics(paper.topics?.map(t => t.id) || []);
-                                            setIsEditingTopics(false);
-                                        }}
+                                        onClick={() => { setLocalTopics(paper.topics?.map(t => t.id) || []); setTopicsError(''); setIsEditingTopics(false); }}
                                         className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
                                     >
                                         Cancel
@@ -820,106 +761,91 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         </div>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                                {paper.overleafLink ? (
-                                    <a href={paper.overleafLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 bg-blue-500/10 px-3 py-1.5 rounded-lg transition-colors border border-blue-500/20 w-fit">
-                                        <ExternalLink className="w-4 h-4" />
-                                        Open Overleaf Manuscript
-                                    </a>
-                                ) : (
-                                    <span className="text-sm text-slate-500 italic px-3 py-1.5 rounded-lg border border-dashed border-white/10">
-                                        No Overleaf link provided
-                                    </span>
-                                )}
-                                {(paper.authors?.some(a => a.id === user.id) || paper.coordinators?.some(c => c.id === user.id)) && !isEditingOverleaf && (
-                                    <button
-                                        onClick={() => setIsEditingOverleaf(true)}
-                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 hover:bg-blue-500/5 rounded transition-colors"
-                                    >
-                                        <Edit className="w-3 h-3" /> Edit
-                                    </button>
-                                )}
-                            </div>
-                            {isEditingOverleaf && (
-                                <div className="flex items-center gap-2 mt-1">
-                                    <input
-                                        type="text"
-                                        placeholder="https://www.overleaf.com/..."
-                                        value={localOverleaf}
-                                        onChange={(e) => setLocalOverleaf(e.target.value)}
-                                        className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all w-64"
-                                    />
-                                    <button
-                                        onClick={handleSaveOverleaf}
-                                        disabled={isSavingOverleaf}
-                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[10px] font-medium rounded-lg transition-colors"
-                                    >
-                                        {isSavingOverleaf ? 'Saving...' : 'Save'}
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setLocalOverleaf(paper.overleafLink || '');
-                                            setIsEditingOverleaf(false);
-                                        }}
-                                        className="px-2 py-1 text-[10px] text-slate-400 hover:text-white"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
+                    <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-3">
+                            {paper.overleafLink ? (
+                                <a href={paper.overleafLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 bg-blue-500/10 px-3 py-1.5 rounded-lg transition-colors border border-blue-500/20 w-fit">
+                                    <ExternalLink className="w-4 h-4" />
+                                    Open Overleaf Manuscript
+                                </a>
+                            ) : (
+                                <span className="inline-flex items-center gap-2 text-sm text-slate-500 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/10 w-fit">
+                                    <ExternalLink className="w-4 h-4" />
+                                    No Overleaf link
+                                </span>
+                            )}
+                            {paper.githubLink ? (
+                                <a href={paper.githubLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-slate-300 hover:text-white bg-white/[0.04] px-3 py-1.5 rounded-lg transition-colors border border-white/10 w-fit">
+                                    <Github className="w-4 h-4" />
+                                    Open GitHub Repository
+                                </a>
+                            ) : (
+                                <span className="inline-flex items-center gap-2 text-sm text-slate-500 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/10 w-fit">
+                                    <Github className="w-4 h-4" />
+                                    No GitHub link
+                                </span>
+                            )}
+                            {canEditLinks && !isEditingLinks && (
+                                <button
+                                    onClick={() => {
+                                        setLocalOverleafLink(paper.overleafLink || '');
+                                        setLocalGithubLink(paper.githubLink || '');
+                                        setLinksError('');
+                                        setIsEditingLinks(true);
+                                    }}
+                                    className="inline-flex items-center gap-2 text-sm text-slate-300 hover:text-white bg-white/[0.04] px-3 py-1.5 rounded-lg transition-colors border border-white/10 w-fit"
+                                >
+                                    <Edit className="w-4 h-4" />
+                                    Edit Links
+                                </button>
                             )}
                         </div>
 
-                        <div className="flex flex-col gap-2">
-                            <div className="flex items-center gap-2">
-                                {paper.overleafGitUrl ? (
-                                    <div className="inline-flex items-center gap-2 text-sm text-slate-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 w-fit">
-                                        <span className="font-semibold text-[10px] uppercase tracking-wider text-slate-500">Overleaf Git:</span>
-                                        <span className="font-mono text-xs select-all">{paper.overleafGitUrl}</span>
-                                    </div>
-                                ) : (
-                                    <span className="text-sm text-slate-500 italic px-3 py-1.5 rounded-lg border border-dashed border-white/10">
-                                        No Git URL provided
-                                    </span>
-                                )}
-                                {(paper.authors?.some(a => a.id === user.id) || paper.coordinators?.some(c => c.id === user.id)) && !isEditingGit && (
-                                    <button
-                                        onClick={() => setIsEditingGit(true)}
-                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 hover:bg-blue-500/5 rounded transition-colors"
-                                    >
-                                        <Edit className="w-3 h-3" /> Edit
-                                    </button>
-                                )}
-                            </div>
-                            {isEditingGit && (
-                                <div className="flex items-center gap-2 mt-1">
+                        {canEditLinks && isEditingLinks && (
+                            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3 max-w-2xl">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-slate-400 uppercase tracking-wider">Overleaf manuscript link</label>
                                     <input
-                                        type="text"
-                                        placeholder="https://git.overleaf.com/..."
-                                        value={localGit}
-                                        onChange={(e) => setLocalGit(e.target.value)}
-                                        className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all w-64"
+                                        type="url"
+                                        value={localOverleafLink}
+                                        onChange={(e) => setLocalOverleafLink(e.target.value)}
+                                        placeholder="https://www.overleaf.com/..."
+                                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                                     />
-                                    <button
-                                        onClick={handleSaveGit}
-                                        disabled={isSavingGit}
-                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[10px] font-medium rounded-lg transition-colors"
-                                    >
-                                        {isSavingGit ? 'Saving...' : 'Save'}
-                                    </button>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-slate-400 uppercase tracking-wider">GitHub repository link</label>
+                                    <input
+                                        type="url"
+                                        value={localGithubLink}
+                                        onChange={(e) => setLocalGithubLink(e.target.value)}
+                                        placeholder="https://github.com/org/repo"
+                                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                                    />
+                                </div>
+                                {linksError && <p className="text-xs text-red-400">{linksError}</p>}
+                                <div className="flex justify-end gap-2">
                                     <button
                                         onClick={() => {
-                                            setLocalGit(paper.overleafGitUrl || '');
-                                            setIsEditingGit(false);
+                                            setLocalOverleafLink(paper.overleafLink || '');
+                                            setLocalGithubLink(paper.githubLink || '');
+                                            setLinksError('');
+                                            setIsEditingLinks(false);
                                         }}
-                                        className="px-2 py-1 text-[10px] text-slate-400 hover:text-white"
+                                        className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
                                     >
                                         Cancel
                                     </button>
+                                    <button
+                                        onClick={handleSaveLinks}
+                                        disabled={savingLinks}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
+                                    >
+                                        {savingLinks ? 'Saving...' : 'Save Links'}
+                                    </button>
                                 </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -967,19 +893,44 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         </>
                     )}
 
+                    {canChangeArchiveState && (
+                        <>
+                            {effectivePaperStatus === 'Archived' ? (
+                                <button
+                                    onClick={handleUnarchive}
+                                    disabled={isArchiving}
+                                    className="w-full px-5 py-2.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    <Archive className="w-4 h-4" />
+                                    Unarchive Paper
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleArchive}
+                                    disabled={isArchiving}
+                                    className="w-full px-5 py-2.5 bg-red-600/10 hover:bg-red-600/20 text-red-400 border border-red-500/20 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    <Archive className="w-4 h-4" />
+                                    Archive Paper
+                                </button>
+                            )}
+                            {archiveError && (
+                                <p className="text-xs text-red-400 leading-relaxed">{archiveError}</p>
+                            )}
+                        </>
+                    )}
+
                     {/* Coordinator General Actions */}
                     {user.isCoordinator && effectivePaperStatus !== 'Archived' && (
                         <>
-
                             <button
-                                onClick={handleArchive}
-                                disabled={isArchiving}
-                                className="w-full px-5 py-2.5 bg-red-600/10 hover:bg-red-600/20 text-red-400 border border-red-500/20 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                disabled={!allReviewsComplete}
+                                className={`w-full px-5 py-2.5 border text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 
+                                ${allReviewsComplete ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20' : 'bg-slate-800/50 text-slate-500 border-slate-700 cursor-not-allowed'}`}
                             >
-                                <Archive className="w-4 h-4" />
-                                Archive Paper
+                                <Play className="w-4 h-4" />
+                                Run AI Analysis
                             </button>
-
                         </>
                     )}
 
@@ -1172,12 +1123,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     rows={6}
                                     className="w-full bg-background border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-y"
                                 />
+                                {abstractError && <p className="text-xs text-red-400">{abstractError}</p>}
                                 <div className="flex justify-end gap-2">
                                     <button
-                                        onClick={() => {
-                                            setLocalAbstract(paper.abstractText || '');
-                                            setIsEditingAbstract(false);
-                                        }}
+                                        onClick={() => { setLocalAbstract(paper.abstractText || ''); setAbstractError(''); setIsEditingAbstract(false); }}
                                         className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
                                     >
                                         Cancel
@@ -1197,6 +1146,256 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         )}
                     </div>
 
+                    {/* Author / coordinator round proposal section */}
+                    {(isAuthor || user.isCoordinator) && (
+                        <div className="glass p-6 rounded-2xl border border-white/5 space-y-4">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                                <h2 className="text-xl font-semibold text-white">Review Round Proposals</h2>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {user.isCoordinator && (
+                                        <Link
+                                            href={`/rounds?paper=${paper.id}`}
+                                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                                        >
+                                            <ExternalLink className="w-4 h-4" />
+                                            Open Round Overview
+                                        </Link>
+                                    )}
+                                    {(() => {
+                                        const hasActive = authorRounds.some(r => r.status === 'Draft' || r.status === 'Open');
+                                        return !hasActive && !showCreateRound ? (
+                                            <button
+                                                onClick={() => setShowCreateRound(true)}
+                                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                                            >
+                                                <Plus className="w-4 h-4" />
+                                                {authorRounds.length === 0 ? 'Create Initial Round' : 'Create Next Round'}
+                                            </button>
+                                        ) : null;
+                                    })()}
+                                </div>
+                            </div>
+
+                            {/* Create round form */}
+                            {showCreateRound && (
+                                <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-4">
+                                    <h3 className="text-sm font-semibold text-blue-400">Setup Draft Round</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <label className="text-xs text-slate-400 uppercase tracking-wider">Venue Category</label>
+                                            <select value={newVenueCat} onChange={e => setNewVenueCat(e.target.value)}
+                                                className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50">
+                                                <option value="Conference">Conference</option>
+                                                <option value="Journal">Journal</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs text-slate-400 uppercase tracking-wider">Target Venue Name</label>
+                                            <input type="text" value={newTargetVenue} onChange={e => setNewTargetVenue(e.target.value)}
+                                                placeholder="e.g. NeurIPS 2026"
+                                                className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50" />
+                                        </div>
+                                        {newVenueCat === 'Conference' && (
+                                            <div className="space-y-1">
+                                                <label className="text-xs text-slate-400 uppercase tracking-wider">Submission Deadline</label>
+                                                <input type="date" value={newSubDeadline} onChange={e => setNewSubDeadline(e.target.value)}
+                                                    min={todayInputValue()}
+                                                    className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50" />
+                                            </div>
+                                        )}
+                                        <div className="space-y-1">
+                                            <label className="text-xs text-slate-400 uppercase tracking-wider">Round Deadline (optional)</label>
+                                            <input type="date" value={newRoundDeadline} onChange={e => setNewRoundDeadline(e.target.value)}
+                                                min={todayInputValue()}
+                                                max={newVenueCat === 'Conference' && newSubDeadline ? newSubDeadline : undefined}
+                                                className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50" />
+                                        </div>
+                                    </div>
+                                    {createRoundError && <p className="text-xs text-red-400">{createRoundError}</p>}
+                                    <div className="flex gap-3">
+                                        <button onClick={handleCreateRound}
+                                            disabled={creatingRound || !newTargetVenue || (newVenueCat === 'Conference' && !newSubDeadline)}
+                                            className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors">
+                                            {creatingRound ? 'Creating…' : 'Create Draft'}
+                                        </button>
+                                        <button onClick={() => setShowCreateRound(false)}
+                                            className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {loadingRounds && <p className="text-sm text-slate-400">Loading rounds…</p>}
+
+                            {!loadingRounds && authorRounds.length === 0 && !showCreateRound && (
+                                <p className="text-sm text-slate-500">No rounds yet. Create the first round to start proposing reviewers.</p>
+                            )}
+
+                            {/* Round list */}
+                            {authorRounds.map(round => {
+                                const proposed = proposedMap[round.id] ?? [];
+                                const suggestions = suggestionsMap[round.id] ?? [];
+                                const isExpanded = expandedRound === round.id;
+                                const statusColor = round.status === 'Draft' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
+                                    : round.status === 'Open' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                                    : 'text-slate-400 border-slate-500/30 bg-slate-500/10';
+
+                                return (
+                                    <div key={round.id} className="rounded-xl border border-white/10 overflow-hidden">
+                                        <button
+                                            onClick={() => setExpandedRound(isExpanded ? null : round.id)}
+                                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-xs font-bold">
+                                                    {round.roundNumber}
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="text-sm font-medium text-white">Round {round.roundNumber} — {round.targetVenue}</p>
+                                                    <p className="text-xs text-slate-500">{round.venueCategory} · Deadline: {round.deadline ? new Date(round.deadline).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <span className={`px-2 py-0.5 rounded-full text-xs border ${statusColor}`}>{round.status}</span>
+                                                {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+                                            </div>
+                                        </button>
+
+                                        {isExpanded && (
+                                            <div className="border-t border-white/5 px-4 py-3 space-y-3 bg-white/[0.01]">
+                                                {/* Config */}
+                                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                                    {round.venueCategory === 'Conference' && (
+                                                        <div>
+                                                            <p className="text-xs text-slate-500 mb-0.5">Submission Deadline</p>
+                                                            <p className="text-white">{round.submissionDeadline ? new Date(round.submissionDeadline).toLocaleDateString() : '—'}</p>
+                                                        </div>
+                                                    )}
+                                                    <div>
+                                                        <p className="text-xs text-slate-500 mb-0.5">Round Deadline</p>
+                                                        {round.status === 'Draft' && editingRoundDeadline === round.id ? (
+                                                            <div className="flex items-center gap-2">
+                                                                <input type="date" value={roundDeadlineDraft} onChange={e => setRoundDeadlineDraft(e.target.value)}
+                                                                    min={todayInputValue()}
+                                                                    max={round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : undefined}
+                                                                    className="bg-background border border-white/10 rounded px-2 py-0.5 text-xs text-white" />
+                                                                <button onClick={() => handleSaveRoundDeadline(round.id)} className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-0.5 rounded text-white">Save</button>
+                                                                <button onClick={() => setEditingRoundDeadline(null)} className="text-xs text-slate-400 hover:text-white">Cancel</button>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="text-white">{round.deadline ? new Date(round.deadline).toLocaleDateString() : '—'}</p>
+                                                                {round.status === 'Draft' && (
+                                                                    <button onClick={() => { setEditingRoundDeadline(round.id); setRoundDeadlineDraft(round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : ''); }}
+                                                                        className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-1.5 py-0.5 rounded">
+                                                                        Edit
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {round.status === 'Draft' && (
+                                                    <>
+                                                        {/* Proposed reviewers */}
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center justify-between">
+                                                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                                                                    Proposed Reviewers ({proposed.length})
+                                                                </p>
+                                                                <button
+                                                                    onClick={() => showSuggestPanel[round.id] ? setShowSuggestPanel(prev => ({ ...prev, [round.id]: false })) : openSuggestPanel(round.id)}
+                                                                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-1 rounded"
+                                                                >
+                                                                    <UserPlus className="w-3 h-3" /> Add Reviewer
+                                                                </button>
+                                                            </div>
+
+                                                            {proposed.length === 0 && (
+                                                                <p className="text-xs text-slate-500 italic">No reviewers proposed yet. Use the suggestions below to build your list.</p>
+                                                            )}
+                                                            {proposed.map(r => (
+                                                                <div key={r.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
+                                                                    <div className="flex items-center gap-2 min-w-0">
+                                                                        <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs font-bold shrink-0">
+                                                                            {r.name.charAt(0)}
+                                                                        </div>
+                                                                        <div className="min-w-0">
+                                                                            <p className="text-sm text-white truncate">{r.name}</p>
+                                                                            <p className="text-xs text-slate-500 truncate">{r.email}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <button onClick={() => handleRemoveProposed(round.id, r.id)}
+                                                                        className="ml-2 text-slate-500 hover:text-red-400 transition-colors shrink-0">
+                                                                        <XCircle className="w-4 h-4" />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+
+                                                            {showSuggestPanel[round.id] && (
+                                                                <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2">
+                                                                    <p className="text-xs font-semibold text-slate-400">System suggestions (eligible lab members):</p>
+                                                                    {loadingSuggestions[round.id] ? (
+                                                                        <div className="flex items-center gap-2 text-slate-400 text-xs">
+                                                                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
+                                                                        </div>
+                                                                    ) : suggestions.length === 0 ? (
+                                                                        <p className="text-xs text-slate-500">No eligible reviewers found.</p>
+                                                                    ) : (
+                                                                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                                                                            {suggestions.map(s => (
+                                                                                <div key={s.user.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <p className="text-sm text-white truncate">{s.user.name}</p>
+                                                                                        <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
+                                                                                        {s.reasons[0]?.startsWith('Warning') && (
+                                                                                            <p className="text-xs text-amber-400 mt-0.5">{s.reasons[0]}</p>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <button onClick={() => handleAddProposed(round.id, s.user.id)}
+                                                                                        className="ml-2 flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 transition-colors shrink-0">
+                                                                                        <Plus className="w-3 h-3" /> Add
+                                                                                    </button>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                    <button onClick={() => setShowSuggestPanel(prev => ({ ...prev, [round.id]: false }))}
+                                                                        className="text-xs text-slate-500 hover:text-slate-300">
+                                                                        Close
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {proposed.length > 0 && (
+                                                            <p className="text-xs text-slate-400 italic">
+                                                                {proposed.length} reviewer(s) proposed. The coordinator will review and approve this list to start the round.
+                                                            </p>
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                {round.status === 'Open' && (
+                                                    <p className="text-xs text-emerald-400">Round is open — reviewers have been assigned and invited by the coordinator.</p>
+                                                )}
+                                                {round.status === 'Completed' && (
+                                                    <p className="text-xs text-slate-400">This round has been completed.</p>
+                                                )}
+
+                                                {roundErrors[round.id] && (
+                                                    <p className="text-xs text-red-400">{roundErrors[round.id]}</p>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     {canViewHistory && renderPaperHistory()}
                 </div>
 
@@ -1205,32 +1404,37 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4 flex items-center justify-between">
                             Authors
                             {canEditAuthors && (
-                                <button onClick={() => setIsEditingAuthors(true)} className="text-xs text-blue-400 hover:text-blue-300 capitalize flex items-center gap-1">
+                                <button onClick={() => { setLocalAuthors(paper.authors?.map(author => author.id) ?? []); setIsEditingAuthors(true); }} className="text-xs text-blue-400 hover:text-blue-300 capitalize flex items-center gap-1">
                                     <Edit className="w-3 h-3" /> Edit
                                 </button>
                             )}
                         </h3>
-                        <div className="space-y-4">
+                         <div className="space-y-4">
                             {isEditingAuthors ? (
                                 <div className="space-y-6">
                                     <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                        {availableUsers.map(u => (
+                                        {addableAuthorOptions.length === 0 ? (
+                                            <p className="text-xs text-slate-500 rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                                                No eligible lab members available to add.
+                                            </p>
+                                        ) : addableAuthorOptions.map(u => (
                                             <button
                                                 key={u.id}
                                                 type="button"
                                                 onClick={() => toggleAuthor(u.id)}
-                                                className={`w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all ${localAuthors.includes(u.id) ? 'bg-blue-600/20 border-blue-500/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                                className="w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all bg-white/5 border-white/10 hover:bg-white/10"
                                             >
-                                                <div className={`w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-xs ${localAuthors.includes(u.id) ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                                                <div className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-xs bg-slate-700 text-slate-300">
                                                     {u.name.charAt(0)}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className={`text-xs font-medium truncate ${localAuthors.includes(u.id) ? 'text-blue-100' : 'text-slate-300'}`}>{u.name}</p>
+                                                    <p className="text-xs font-medium truncate text-slate-300">{u.name}</p>
+                                                    <p className="text-[11px] text-slate-500 truncate">{u.email}</p>
                                                 </div>
                                             </button>
                                         ))}
                                     </div>
-
+                                    
                                     <div className="pt-4 border-t border-white/10 space-y-2">
                                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Order</h4>
                                         {localAuthors.map((id, index) => {
@@ -1243,14 +1447,18 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     <div className="flex gap-1">
                                                         <button disabled={index === 0} onClick={() => moveAuthor(index, 'up')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowUp className="w-3 h-3 text-slate-400" /></button>
                                                         <button disabled={index === localAuthors.length - 1} onClick={() => moveAuthor(index, 'down')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowDown className="w-3 h-3 text-slate-400" /></button>
+                                                        <button onClick={() => setLocalAuthors(current => current.filter(authorId => authorId !== id))} className="p-1 hover:bg-red-500/10 rounded text-slate-400 hover:text-red-400">
+                                                            <XCircle className="w-3 h-3" />
+                                                        </button>
                                                     </div>
                                                 </div>
                                             );
                                         })}
                                     </div>
 
+                                    {authorsError && <p className="text-xs text-red-400">{authorsError}</p>}
                                     <div className="flex gap-2 pt-2">
-                                        <button onClick={() => setIsEditingAuthors(false)} className="flex-1 py-2 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
+                                        <button onClick={() => { setLocalAuthors(paper.authors?.map(author => author.id) ?? []); setIsEditingAuthors(false); setAuthorsError(''); }} className="flex-1 py-2 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
                                         <button onClick={handleSaveAuthors} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors">Save</button>
                                     </div>
                                 </div>

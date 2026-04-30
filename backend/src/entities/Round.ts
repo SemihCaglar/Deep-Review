@@ -14,7 +14,7 @@ export enum RoundStatus {
 
 export enum VenueCategory {
   Conference = 'Conference',
-  Article = 'Article'
+  Journal = 'Journal'
 }
 
 @Entity()

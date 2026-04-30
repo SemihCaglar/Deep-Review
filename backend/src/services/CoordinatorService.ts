@@ -1,6 +1,7 @@
 import { EntityManager, In } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
+import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest';
 import { Extension, ExtensionStatus } from '../entities/Extension';
 import { Lab } from '../entities/Lab';
 import { ReviewerResponse, ReviewerResponseStatus } from '../entities/ReviewerResponse';
@@ -43,20 +44,48 @@ export class CoordinatorService {
       const assignment = await this.findAssignmentByAssignmentOrResponseId(manager, normalizedId);
       await this.assertCoordinatorAccess(manager, assignment, context);
 
+      const declineRepository = manager.getRepository(DeclineRequest);
+      const declineRequest = await declineRepository.findOne({
+        where: { assignment: { id: assignment.id }, status: DeclineRequestStatus.Pending },
+        order: { requestedAt: 'DESC' },
+      });
+
+      if (!declineRequest) {
+        const processedRequest = await declineRepository.findOne({
+          where: { assignment: { id: assignment.id } },
+          order: { requestedAt: 'DESC' },
+        });
+        if (processedRequest && processedRequest.status !== DeclineRequestStatus.Pending) {
+          throw new CoordinatorServiceError(
+            400,
+            `Decline request has already been processed (${processedRequest.status}). No further action is possible.`,
+          );
+        }
+      }
+
       if (assignment.status !== AssignmentStatus.PendingDecline) {
         throw new CoordinatorServiceError(
           400,
           'Assignment must be PendingDecline before a decline request can be processed',
         );
       }
-
-      const isApproved = decision === 'Approve';
-      assignment.status = isApproved ? AssignmentStatus.Declined : AssignmentStatus.Accepted;
-      if (!isApproved) {
-        assignment.acceptedAt = assignment.acceptedAt ?? new Date();
-        assignment.declineReason = null;
+      if (!declineRequest) {
+        throw new CoordinatorServiceError(404, 'Pending decline request not found for this assignment');
       }
 
+      const isApproved = decision === 'Approve';
+      assignment.status = isApproved
+        ? AssignmentStatus.Declined
+        : (assignment.acceptedAt ? AssignmentStatus.Accepted : AssignmentStatus.Invited);
+      if (!isApproved) {
+        assignment.declineReason = null;
+        declineRequest.status = DeclineRequestStatus.Rejected;
+      } else {
+        assignment.declineReason = declineRequest.reason;
+        declineRequest.status = DeclineRequestStatus.Approved;
+      }
+
+      await declineRepository.save(declineRequest);
       const savedAssignment = await manager.getRepository(Assignment).save(assignment);
       await this.upsertCompatibilityResponse(
         manager,
@@ -84,13 +113,6 @@ export class CoordinatorService {
       const assignment = await this.findAssignmentByAssignmentOrResponseId(manager, normalizedAssignmentId);
       await this.assertCoordinatorAccess(manager, assignment, context);
 
-      if (assignment.status !== AssignmentStatus.PendingExtension) {
-        throw new CoordinatorServiceError(
-          400,
-          'Assignment must be PendingExtension before an extension request can be processed',
-        );
-      }
-
       const extensionRepository = manager.getRepository(Extension);
       const extension = await extensionRepository.findOne({
         where: {
@@ -105,7 +127,17 @@ export class CoordinatorService {
       }
 
       if (extension.status !== ExtensionStatus.Pending) {
-        throw new CoordinatorServiceError(400, 'Only pending extension requests can be processed');
+        throw new CoordinatorServiceError(
+          400,
+          `Extension request has already been processed (${extension.status}). No further action is possible.`,
+        );
+      }
+
+      if (assignment.status !== AssignmentStatus.PendingExtension) {
+        throw new CoordinatorServiceError(
+          400,
+          'Assignment must be PendingExtension before an extension request can be processed',
+        );
       }
 
       assignment.status = AssignmentStatus.Accepted;
@@ -222,8 +254,10 @@ export class CoordinatorService {
         throw new CoordinatorServiceError(400, 'This reviewer already has an active assignment in the current round');
       }
 
-      oldAssignment.status = AssignmentStatus.Reassigned;
-      await assignRepo.save(oldAssignment);
+      if (oldAssignment.status !== AssignmentStatus.Declined) {
+        oldAssignment.status = AssignmentStatus.Reassigned;
+        await assignRepo.save(oldAssignment);
+      }
 
       const newAssignment = new Assignment();
       newAssignment.round = round;
@@ -244,7 +278,7 @@ export class CoordinatorService {
     const assignmentRepository = manager.getRepository(Assignment);
     const assignment = await assignmentRepository.findOne({
       where: { id },
-      relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'round.paper.authors', 'response', 'extensions'],
+      relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'round.paper.authors', 'response', 'extensions', 'declineRequests'],
     });
 
     if (assignment) {

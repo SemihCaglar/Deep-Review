@@ -10,7 +10,7 @@ import {
   requestDeclineForAssignmentRequest,
   completeReviewRequest,
 } from '@/lib/api';
-import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Github, Users } from 'lucide-react';
 
 const ACTIVE_ASSIGNMENT_STATUSES = ['Invited', 'Accepted', 'PendingDecline', 'PendingExtension', 'Overdue'];
 
@@ -47,15 +47,15 @@ function laterDateInputValue(a: string, b: string) {
 
 function statusColor(status: string) {
   switch (status) {
-    case 'Invited': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-    case 'Accepted': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    case 'Invited':    return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+    case 'Accepted':   return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
     case 'PendingDecline': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
     case 'PendingExtension': return 'bg-sky-500/10 text-sky-400 border-sky-500/20';
-    case 'Declined': return 'bg-red-500/10 text-red-400 border-red-500/20';
-    case 'Completed': return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
-    case 'Cancelled': return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
-    case 'Overdue': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-    default: return 'bg-white/10 text-slate-300 border-white/10';
+    case 'Declined':   return 'bg-red-500/10 text-red-400 border-red-500/20';
+    case 'Completed':  return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+    case 'Cancelled':  return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+    case 'Overdue':    return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+    default:           return 'bg-white/10 text-slate-300 border-white/10';
   }
 }
 
@@ -198,6 +198,14 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
             </div>
             <h3 className="text-base font-semibold text-white leading-snug">{assignment.paper.title}</h3>
             <p className="text-xs text-slate-500 mt-1">{assignment.round.targetVenue}</p>
+            {assignment.paper.authors.length > 0 && (
+              <div className="mt-2 flex items-start gap-1.5 text-xs text-slate-400">
+                <Users className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-500" />
+                <span className="leading-relaxed">
+                  Authors: {assignment.paper.authors.map(author => author.name).join(', ')}
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col items-end gap-1 shrink-0 text-right">
@@ -246,14 +254,19 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
             </div>
           </div>
         )}
-        {assignment.paper.overleafGitUrl && (
-          <div className="mt-3 flex items-center gap-2 p-3 rounded-xl border border-blue-500/20 bg-blue-500/5">
-            <ExternalLink className="w-4 h-4 text-blue-400 shrink-0" />
+        {assignment.paper.githubLink && (
+          <div className="mt-3 flex items-center gap-2 p-3 rounded-xl border border-slate-500/20 bg-white/[0.03]">
+            <Github className="w-4 h-4 text-slate-300 shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-blue-400 mb-0.5">Overleaf Git URL</p>
-              <p className="text-xs text-slate-300 font-mono select-all truncate">
-                {assignment.paper.overleafGitUrl}
-              </p>
+              <p className="text-xs font-semibold text-slate-300 mb-0.5">Paper repository</p>
+              <a
+                href={assignment.paper.githubLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-slate-300 hover:text-white underline underline-offset-2 truncate block"
+              >
+                {assignment.paper.githubLink}
+              </a>
             </div>
           </div>
         )}
@@ -309,8 +322,6 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
               )}
             </div>
           )}
-
-          {declinePendingNotice}
 
           {/* ── Accepted / PendingExtension / PendingDecline / Overdue actions ── */}
           {canWorkOnReview && (
@@ -459,6 +470,9 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
               )}
             </div>
           )}
+
+          {declinePendingNotice}
+
 
           {error && <p className="text-xs text-red-400">{error}</p>}
           {successMsg && <p className="text-xs text-emerald-400">{successMsg}</p>}

@@ -221,7 +221,7 @@ export type Paper = {
   targetVenue?: string;
   status: string;
   overleafLink?: string | null;
-  overleafGitUrl?: string | null;
+  githubLink?: string | null;
   authorOrder?: string[] | null;
   authors?: PaperAuthor[];
   coordinators?: LabMember[];
@@ -281,10 +281,6 @@ export type PaperHistoryRound = {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
     aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
   };
-  aiReviewReport?: any | null;
-  complianceReport?: any | null;
-  annotatedPdfUrl?: string | null;
-  sourceZipUrl?: string | null;
 };
 
 export type PaperHistory = {
@@ -293,7 +289,7 @@ export type PaperHistory = {
   status: string;
   targetVenue: string;
   overleafLink?: string | null;
-  overleafGitUrl?: string | null;
+  githubLink?: string | null;
   authors: PaperAuthor[];
   rounds: PaperHistoryRound[];
 };
@@ -305,7 +301,7 @@ export type RegisterPaperPayload = {
   topics: string[];
   authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
-  overleafGitUrl?: string;
+  githubLink?: string;
 };
 
 export function registerPaperRequest(payload: RegisterPaperPayload) {
@@ -338,13 +334,6 @@ export function updatePaperAbstractRequest(id: string, abstract: string) {
   });
 }
 
-export function updatePaperVenueRequest(id: string, targetVenue: string) {
-  return apiRequest<Paper>(`/papers/${id}/venue`, {
-    method: 'PUT',
-    body: { targetVenue },
-  });
-}
-
 export function updatePaperTopicsRequest(id: string, topics: string[]) {
   return apiRequest<Paper>(`/papers/${id}/topics-update`, {
     method: 'PUT',
@@ -359,11 +348,31 @@ export function updatePaperAuthorsRequest(id: string, authors: string[]) {
   });
 }
 
+export function updatePaperStatusRequest(id: string, status: string) {
+  return apiRequest<Paper>(`/papers/${id}/status`, {
+    method: 'PUT',
+    body: { status },
+  });
+}
+
 export function getLabsRequest() {
   return apiRequest<Lab[]>('/labs');
 }
 
 // ==== ROUND MANAGEMENT TYPES ====
+
+export type AuthorRound = {
+  id: string;
+  roundNumber: number;
+  status: 'Draft' | 'Open' | 'Completed';
+  targetVenue: string;
+  venueCategory: 'Conference' | 'Journal';
+  submissionDeadline: string | null;
+  deadline: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  proposedReviewers: { id: string; name: string; email: string }[];
+};
 
 export type CoordinatedPaper = {
   id: string;
@@ -371,7 +380,7 @@ export type CoordinatedPaper = {
   status: string;
   abstractText: string;
   overleafLink: string | null;
-  overleafGitUrl: string | null;
+  githubLink: string | null;
 };
 
 export type PendingDeclineRequest = {
@@ -413,7 +422,7 @@ export type RoundWithAssignments = {
   deadline: string | null;
   status: 'Draft' | 'Open' | 'Completed';
   targetVenue: string;
-  venueCategory: 'Conference' | 'Article';
+  venueCategory: 'Conference' | 'Journal';
   submissionDeadline: string | null;
   startedAt: string | null;
   completedAt: string | null;
@@ -426,7 +435,14 @@ export type MyAssignment = {
   deadline: string | null;
   invitationSent: boolean;
   round: { id: string; roundNumber: number; deadline: string | null; submissionDeadline: string | null; targetVenue: string; venueCategory: string };
-  paper: { id: string; title: string; abstractText: string; overleafLink: string | null; overleafGitUrl: string | null };
+  paper: {
+    id: string;
+    title: string;
+    abstractText: string;
+    overleafLink: string | null;
+    githubLink: string | null;
+    authors: PaperAuthor[];
+  };
   pendingDeclineRequest: PendingDeclineRequest | null;
   pendingExtensionRequest: PendingExtensionRequest | null;
   resolvedDeclineRequests: ResolvedDeclineRequest[];
@@ -490,10 +506,17 @@ export function updateOverleafLinkRequest(paperId: string, overleafLink: string)
   });
 }
 
-export function updateOverleafGitUrlRequest(paperId: string, overleafGitUrl: string) {
-  return apiRequest<{ message: string; overleafGitUrl: string | null }>(`/papers/${paperId}/overleaf-git`, {
+export function updatePaperLinksRequest(paperId: string, overleafLink: string, githubLink: string) {
+  return apiRequest<{ message: string; overleafLink?: string | null; githubLink?: string | null }>(`/papers/${paperId}/overleaf`, {
     method: 'PUT',
-    body: { overleafGitUrl },
+    body: { overleafLink, githubLink },
+  });
+}
+
+export function updateGithubLinkRequest(paperId: string, githubLink: string) {
+  return apiRequest<{ message: string; githubLink: string | null }>(`/papers/${paperId}/github`, {
+    method: 'PUT',
+    body: { githubLink },
   });
 }
 
@@ -516,6 +539,13 @@ export function sendInvitationsRequest(roundId: string) {
   return apiRequest<{ message: string }>('/assignments/invite', {
     method: 'POST',
     body: { roundId },
+  });
+}
+
+export function sendRemindersRequest(assignmentIds: string[]) {
+  return apiRequest<{ message: string; sent: number; skipped: number }>('/assignments/remind', {
+    method: 'POST',
+    body: { assignmentIds },
   });
 }
 
@@ -550,6 +580,67 @@ export function editRoundDeadlineRequest(roundId: string, deadline: string) {
   return apiRequest<{ id: string; deadline: string }>(`/rounds/${roundId}/deadline`, {
     method: 'PUT',
     body: { deadline },
+  });
+}
+
+export function getAuthorRoundsRequest(paperId: string) {
+  return apiRequest<AuthorRound[]>(`/papers/${paperId}/author-rounds`);
+}
+
+export function getProposedReviewersRequest(roundId: string) {
+  return apiRequest<{ id: string; name: string; email: string }[]>(`/rounds/${roundId}/propose`);
+}
+
+export function addProposedReviewerRequest(roundId: string, reviewerId: string) {
+  return apiRequest<{ id: string; name: string; email: string }[]>(`/rounds/${roundId}/propose`, {
+    method: 'POST',
+    body: { reviewerId },
+  });
+}
+
+export function removeProposedReviewerRequest(roundId: string, userId: string) {
+  return apiRequest<{ id: string; name: string; email: string }[]>(`/rounds/${roundId}/propose/${userId}`, {
+    method: 'DELETE',
+  });
+}
+
+export type RoundStatusAlert = {
+  id: string;
+  reviewer: { id: string; name: string; email: string };
+  status: string;
+  deadline: string | null;
+};
+
+export type RoundStatusSummary = {
+  id: string;
+  roundNumber: number;
+  status: string;
+  deadline: string | null;
+  targetVenue: string;
+  venueCategory: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  summary: {
+    total: number;
+    completed: number;
+    completionRate: number;
+    statusCounts: Record<string, number>;
+    overdueCount: number;
+    approachingDeadlineCount: number;
+    pendingDeclineRequests: number;
+    pendingExtensionRequests: number;
+  };
+  overdueAssignments: RoundStatusAlert[];
+  approachingDeadline: RoundStatusAlert[];
+};
+
+export function getRoundStatusRequest(roundId: string) {
+  return apiRequest<RoundStatusSummary>(`/rounds/${roundId}/status`);
+}
+
+export function approveRoundRequest(roundId: string) {
+  return apiRequest<{ message: string; round: { id: string; status: string; startedAt: string }; assigned: number; skipped: number }>(`/rounds/${roundId}/approve`, {
+    method: 'POST',
   });
 }
 
@@ -615,27 +706,6 @@ export function getOverallAnalyticsRequest() {
 
 export function getUserAnalyticsRequest(userId: string) {
   return apiRequest<UserAnalyticsResponse>(`/ratings/user/${userId}`);
-}
-
-// ==== AI POST-REVIEW API FUNCTIONS ====
-
-export function startAIReviewRequest(roundId: string) {
-  return apiRequest<{ message: string; data: any }>(`/rounds/${roundId}/ai`, {
-    method: 'POST'
-  });
-}
-
-export function runComplianceCheckRequest(roundId: string, venueRules: any) {
-  return apiRequest<{ message: string; data: any }>(`/rounds/${roundId}/compliance`, {
-    method: 'POST',
-    body: { venueRules }
-  });
-}
-
-export function getVenueRulesRequest(roundId: string) {
-  return apiRequest<any>(`/rounds/${roundId}/venue-rules`, {
-    method: 'GET'
-  });
 }
 
 function buildUrl(path: string) {

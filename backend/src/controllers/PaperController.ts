@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
-import { Paper } from '../entities/Paper';
+import { Paper, PaperStatus } from '../entities/Paper';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { RoundStatus } from '../entities/Round';
 import { UserRole } from '../entities/User';
@@ -27,26 +27,8 @@ export class PaperController {
         return res.status(401).json({ message: 'Authentication required' });
       }
 
-      // Validation
-      const errors: string[] = [];
-      if (!dto.title?.trim()) errors.push('Title is required');
-      if (!dto.abstractText?.trim()) errors.push('Abstract text is required');
-      if (!dto.targetVenue?.trim()) errors.push('Target venue is required');
-      if (!dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
-        errors.push('At least one topic must be selected');
-      }
-
-      // Optional URL validation
-      const urlRegex = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
-      if (dto.overleafLink && !urlRegex.test(dto.overleafLink)) {
-        errors.push('Invalid Overleaf link format');
-      }
-      if (dto.overleafGitUrl && !urlRegex.test(dto.overleafGitUrl)) {
-        errors.push('Invalid Overleaf Git URL format');
-      }
-
-      if (errors.length > 0) {
-        return res.status(400).json({ message: 'Validation failed', errors });
+      if (!dto.title || !dto.abstractText || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
+        return res.status(400).json({ message: 'Missing required fields' });
       }
 
       const paper = await PaperService.registerPaper(dto, creator);
@@ -95,73 +77,13 @@ export class PaperController {
   static async linkParentPapers(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
-  static async updateAbstract(req: AuthenticatedRequest, res: Response) {
+  static async updateAbstract(req: Request<{ id: string }>, res: Response) {
     try {
-      const id = req.params.id as string;
+      const { id } = req.params;
       const { abstract } = req.body;
-      const user = req.user;
-      if (!user) return res.status(401).json({ message: 'Unauthorized' });
-
-      if (typeof abstract !== 'string' || !abstract.trim()) {
-        return res.status(400).json({ message: 'abstract must be a non-empty string' });
-      }
-
       if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-
-      const paperRepo = AppDataSource.getRepository(Paper);
-      const paper = await paperRepo.findOne({
-        where: { id },
-        relations: ['authors', 'coordinators'],
-      });
-      if (!paper) return res.status(404).json({ message: 'Paper not found' });
-
-      const isAuthor = paper.authors?.some(a => a.id === user.id);
-      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
-      const isAdmin = user.role === UserRole.Admin;
-
-      if (!isAuthor && !isCoordinator && !isAdmin) {
-        return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
-      }
-
-      const updatedPaper = await PaperService.updateAbstract(id, abstract);
-      res.status(200).json(updatedPaper);
-    } catch (e: any) {
-      if (e.message === 'Paper not found') {
-        return res.status(404).json({ message: e.message });
-      }
-      res.status(500).json({ error: e.message });
-    }
-  }
-  static async updateTargetVenue(req: AuthenticatedRequest, res: Response) {
-    try {
-      const id = req.params.id as string;
-      const { targetVenue } = req.body;
-      const user = req.user;
-      if (!user) return res.status(401).json({ message: 'Unauthorized' });
-
-      if (typeof targetVenue !== 'string' || !targetVenue.trim()) {
-        return res.status(400).json({ message: 'targetVenue must be a non-empty string' });
-      }
-
-      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-
-      const paperRepo = AppDataSource.getRepository(Paper);
-      const paper = await paperRepo.findOne({
-        where: { id },
-        relations: ['authors', 'coordinators'],
-      });
-      if (!paper) return res.status(404).json({ message: 'Paper not found' });
-
-      const isAuthor = paper.authors?.some(a => a.id === user.id);
-      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
-      const isAdmin = user.role === UserRole.Admin;
-
-      if (!isAuthor && !isCoordinator && !isAdmin) {
-        return res.status(403).json({ message: 'Forbidden' });
-      }
-
-      const updatedPaper = await PaperService.updateTargetVenue(id, targetVenue);
-      res.status(200).json(updatedPaper);
+      const paper = await PaperService.updateAbstract(id, abstract);
+      res.status(200).json(paper);
     } catch (e: any) {
       if (e.message === 'Paper not found') {
         return res.status(404).json({ message: e.message });
@@ -314,37 +236,37 @@ export class PaperController {
             .slice()
             .sort((a, b) => a.invitedAt.getTime() - b.invitedAt.getTime())
             .map(assignment => ({
-              assignmentId: assignment.id,
-              reviewerId: assignment.reviewer?.id ?? null,
-              reviewerName: assignment.reviewer?.name ?? null,
-              reviewerEmail: assignment.reviewer?.email ?? null,
-              status: assignment.status,
-              deadline: assignment.deadline,
-              invitedAt: assignment.invitedAt,
-              acceptedAt: assignment.acceptedAt,
-              submittedAt: assignment.submittedAt,
-              declineReason: assignment.declineReason,
-              declineRequests: (assignment.declineRequests ?? [])
-                .slice()
-                .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
-                .map(request => ({
-                  id: request.id,
-                  reason: request.reason,
-                  status: request.status,
-                  requestedAt: request.requestedAt,
-                })),
-              extensions: (assignment.extensions ?? [])
-                .slice()
-                .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
-                .map(extension => ({
-                  id: extension.id,
-                  reason: extension.reason,
-                  requestedDeadline: extension.requestedDeadline,
-                  approvedDeadline: extension.approvedDeadline,
-                  requestedAt: extension.requestedAt,
-                  status: extension.status,
-                })),
-            })),
+            assignmentId: assignment.id,
+            reviewerId: assignment.reviewer?.id ?? null,
+            reviewerName: assignment.reviewer?.name ?? null,
+            reviewerEmail: assignment.reviewer?.email ?? null,
+            status: assignment.status,
+            deadline: assignment.deadline,
+            invitedAt: assignment.invitedAt,
+            acceptedAt: assignment.acceptedAt,
+            submittedAt: assignment.submittedAt,
+            declineReason: assignment.declineReason,
+            declineRequests: (assignment.declineRequests ?? [])
+              .slice()
+              .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+              .map(request => ({
+                id: request.id,
+                reason: request.reason,
+                status: request.status,
+                requestedAt: request.requestedAt,
+              })),
+            extensions: (assignment.extensions ?? [])
+              .slice()
+              .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+              .map(extension => ({
+                id: extension.id,
+                reason: extension.reason,
+                requestedDeadline: extension.requestedDeadline,
+                approvedDeadline: extension.approvedDeadline,
+                requestedAt: extension.requestedAt,
+                status: extension.status,
+              })),
+          })),
           artifacts: {
             checklistItems: (round.checklistItems ?? []).map(item => ({
               id: item.id,
@@ -365,7 +287,7 @@ export class PaperController {
         status: paper.status,
         targetVenue: latestRound?.targetVenue ?? '',
         overleafLink: paper.overleafLink,
-        overleafGitUrl: paper.overleafGitUrl,
+        githubLink: paper.githubLink ?? null,
         authors: (paper.authors ?? []).map(author => ({
           id: author.id,
           name: author.name,
@@ -405,7 +327,7 @@ export class PaperController {
           targetVenue: latestRound?.targetVenue ?? '',
           abstractText: p.abstractText,
           overleafLink: p.overleafLink,
-          overleafGitUrl: p.overleafGitUrl,
+          githubLink: p.githubLink ?? null,
           creationTime: p.creationTime,
           topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
           authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name, email: a.email })),
@@ -536,14 +458,14 @@ export class PaperController {
   }
   static async getMyCoordinatedPapers(req: AuthenticatedRequest, res: Response) {
     try {
-      const coordinator = req.user;
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ message: 'Authentication required' });
       }
 
       const paperRepo = AppDataSource.getRepository(Paper);
       const papers = await paperRepo.find({
-        where: { coordinators: { id: coordinator.id } },
+        where: { coordinators: { id: user.id } },
         relations: ['coordinators', 'labs'],
       });
 
@@ -553,7 +475,7 @@ export class PaperController {
         status: p.status,
         abstractText: p.abstractText,
         overleafLink: p.overleafLink ?? null,
-        overleafGitUrl: p.overleafGitUrl ?? null,
+        githubLink: p.githubLink ?? null,
       })));
     } catch (err) {
       console.error(err);
@@ -564,12 +486,17 @@ export class PaperController {
   static async updateOverleafLink(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
-      if (!user) return res.status(401).json({ message: 'Unauthorized' });
+      if (!user) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
 
       const id = req.params.id as string;
-      const { overleafLink } = req.body;
+      const { overleafLink, githubLink } = req.body;
       if (typeof overleafLink !== 'string') {
         return res.status(400).json({ message: 'overleafLink must be a string' });
+      }
+      if (githubLink !== undefined && typeof githubLink !== 'string') {
+        return res.status(400).json({ message: 'githubLink must be a string' });
       }
 
       const paperRepo = AppDataSource.getRepository(Paper);
@@ -579,33 +506,40 @@ export class PaperController {
       });
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
-      const isAuthor = paper.authors?.some(a => a.id === user.id);
-      const isAdmin = user.role === UserRole.Admin;
+      const canEdit = paper.coordinators?.some(c => c.id === user.id)
+        || paper.authors?.some(a => a.id === user.id);
+      if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
 
-      if (!isCoordinator && !isAuthor && !isAdmin) {
-        return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
+      const normalizedOverleafLink = overleafLink.trim();
+      paper.overleafLink = normalizedOverleafLink || null!;
+      if (githubLink !== undefined) {
+        const normalizedGithubLink = githubLink.trim();
+        paper.githubLink = normalizedGithubLink || null;
       }
-
-      paper.overleafLink = overleafLink || null!;
       await paperRepo.save(paper);
 
-      return res.status(200).json({ message: 'Overleaf link updated', overleafLink: paper.overleafLink ?? null });
+      return res.status(200).json({
+        message: 'Paper links updated',
+        overleafLink: paper.overleafLink ?? null,
+        githubLink: paper.githubLink ?? null,
+      });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
     }
   }
 
-  static async updateOverleafGitUrl(req: AuthenticatedRequest, res: Response) {
+  static async updateGithubLink(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
-      if (!user) return res.status(401).json({ message: 'Unauthorized' });
+      if (!user) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
 
       const id = req.params.id as string;
-      const { overleafGitUrl } = req.body;
-      if (typeof overleafGitUrl !== 'string') {
-        return res.status(400).json({ message: 'overleafGitUrl must be a string' });
+      const { githubLink } = req.body;
+      if (typeof githubLink !== 'string') {
+        return res.status(400).json({ message: 'githubLink must be a string' });
       }
 
       const paperRepo = AppDataSource.getRepository(Paper);
@@ -615,18 +549,15 @@ export class PaperController {
       });
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
-      const isAuthor = paper.authors?.some(a => a.id === user.id);
-      const isAdmin = user.role === UserRole.Admin;
+      const canEdit = paper.coordinators?.some(c => c.id === user.id)
+        || paper.authors?.some(a => a.id === user.id);
+      if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
 
-      if (!isCoordinator && !isAuthor && !isAdmin) {
-        return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
-      }
-
-      paper.overleafGitUrl = overleafGitUrl || null!;
+      const normalizedGithubLink = githubLink.trim();
+      paper.githubLink = normalizedGithubLink || null;
       await paperRepo.save(paper);
 
-      return res.status(200).json({ message: 'Overleaf Git URL updated', overleafGitUrl: paper.overleafGitUrl ?? null });
+      return res.status(200).json({ message: 'GitHub link updated', githubLink: paper.githubLink ?? null });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -651,9 +582,9 @@ export class PaperController {
           where: { id: authReq.user.id },
           relations: ['lab']
         });
-
+        
         if (!coordinator?.lab) return res.status(200).json([]);
-
+        
         papers = await repo.find({
           where: { labs: { id: coordinator.lab.id } },
           relations: ['authors', 'topics', 'labs']
@@ -699,7 +630,58 @@ export class PaperController {
       res.status(500).json({ error: e.message });
     }
   }
-  static async updatePaperStatus(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async updatePaperStatus(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const id = req.params.id as string;
+      const { status } = req.body;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      if (status !== PaperStatus.Archived && status !== PaperStatus.Draft) {
+        return res.status(400).json({ message: 'Only Archived and Draft status updates are supported' });
+      }
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id },
+        relations: ['authors', 'coordinators', 'topics', 'labs', 'rounds'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const canEdit = paper.authors?.some(a => a.id === user.id)
+        || paper.coordinators?.some(c => c.id === user.id);
+      if (!canEdit) {
+        return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
+      }
+
+      if (status === PaperStatus.Archived) {
+        if (paper.status === PaperStatus.HumanReview || paper.status === PaperStatus.AIReview) {
+          return res.status(400).json({ message: 'Paper cannot be archived while it is in human review or AI review' });
+        }
+
+        const now = new Date();
+        const futureSubmission = (paper.rounds ?? []).find(round =>
+          round.submissionDeadline && round.submissionDeadline.getTime() > now.getTime()
+        );
+        if (futureSubmission) {
+          return res.status(400).json({ message: 'Paper cannot be archived before the submission deadline has passed' });
+        }
+
+        const activeRound = (paper.rounds ?? []).find(round => round.status === RoundStatus.Draft || round.status === RoundStatus.Open);
+        if (activeRound) {
+          return res.status(400).json({ message: 'Paper cannot be archived while a review round is draft or open' });
+        }
+      }
+
+      paper.status = status;
+      await paperRepo.save(paper);
+
+      const updated = await PaperService.getPaperById(id);
+      return res.status(200).json(updated);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
   }
 }
