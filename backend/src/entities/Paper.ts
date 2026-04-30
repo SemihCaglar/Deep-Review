@@ -38,6 +38,9 @@ export class Paper {
   @Column({ nullable: true })
   overleafLink: string;
 
+  @Column({ nullable: true })
+  overleafGitUrl: string;
+
   @ManyToMany('User', 'writtenPapers')
   authors: User[];
 

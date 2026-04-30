@@ -88,6 +88,7 @@ router.post('/papers', authenticateRequest, PaperController.registerPaper);
 
 router.get('/papers/:id', authenticateRequest, PaperController.getPaperById);
 router.put('/papers/:id/overleaf', authenticateRequest, PaperController.updateOverleafLink);
+router.put('/papers/:id/overleaf-git', authenticateRequest, PaperController.updateOverleafGitUrl);
 router.get('/papers/:id/status', authenticateRequest, PaperController.getPaperStatus);
 router.get('/papers/:id/history', authenticateRequest, PaperController.getPaperHistory);
 router.put('/papers/:id/topics', authenticateRequest, PaperController.setTopics);
