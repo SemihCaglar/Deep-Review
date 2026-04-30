@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
-import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError } from '@/lib/api';
+import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError, updateOverleafLinkRequest, updateOverleafGitUrlRequest } from '@/lib/api';
 
 function todayInputValue() {
     const today = new Date();
@@ -47,6 +47,13 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [paperHistory, setPaperHistory] = useState<PaperHistory | null>(null);
     const [historyError, setHistoryError] = useState('');
 
+    const [isEditingOverleaf, setIsEditingOverleaf] = useState(false);
+    const [isEditingGit, setIsEditingGit] = useState(false);
+    const [localOverleaf, setLocalOverleaf] = useState('');
+    const [localGit, setLocalGit] = useState('');
+    const [isSavingOverleaf, setIsSavingOverleaf] = useState(false);
+    const [isSavingGit, setIsSavingGit] = useState(false);
+
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -58,6 +65,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 setLocalAbstract(paperData.abstractText || '');
                 setLocalTopics(paperData.topics?.map((t: any) => t.id) || []);
                 setLocalAuthors(paperData.authors?.map((a: any) => a.id) || []);
+                setLocalOverleaf(paperData.overleafLink || '');
+                setLocalGit(paperData.overleafGitUrl || '');
                 setAvailableTopics(topicsData);
 
                 // Set initial deadline from mock data if it matches
@@ -185,6 +194,36 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         } catch (err) {
             console.error('Failed to update authors', err);
             alert('Failed to update authors');
+        }
+    };
+
+    const handleSaveOverleaf = async () => {
+        if (!paper) return;
+        setIsSavingOverleaf(true);
+        try {
+            const res = await updateOverleafLinkRequest(paper.id, localOverleaf.trim());
+            setPaper({ ...paper, overleafLink: res.overleafLink });
+            setIsEditingOverleaf(false);
+        } catch (err) {
+            console.error('Failed to save Overleaf link', err);
+            alert(err instanceof ApiError ? err.message : 'Failed to save');
+        } finally {
+            setIsSavingOverleaf(false);
+        }
+    };
+
+    const handleSaveGit = async () => {
+        if (!paper) return;
+        setIsSavingGit(true);
+        try {
+            const res = await updateOverleafGitUrlRequest(paper.id, localGit.trim());
+            setPaper({ ...paper, overleafGitUrl: res.overleafGitUrl });
+            setIsEditingGit(false);
+        } catch (err) {
+            console.error('Failed to save Git URL', err);
+            alert(err instanceof ApiError ? err.message : 'Failed to save');
+        } finally {
+            setIsSavingGit(false);
         }
     };
 
@@ -558,18 +597,105 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
 
                     <div className="flex flex-wrap items-center gap-3">
-                        {paper.overleafLink && (
-                            <a href={paper.overleafLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 bg-blue-500/10 px-3 py-1.5 rounded-lg transition-colors border border-blue-500/20 w-fit">
-                                <ExternalLink className="w-4 h-4" />
-                                Open Overleaf Manuscript
-                            </a>
-                        )}
-                        {paper.overleafGitUrl && (
-                            <div className="inline-flex items-center gap-2 text-sm text-slate-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 w-fit">
-                                <span className="font-semibold text-[10px] uppercase tracking-wider text-slate-500">Overleaf Git:</span>
-                                <span className="font-mono text-xs select-all">{paper.overleafGitUrl}</span>
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                {paper.overleafLink ? (
+                                    <a href={paper.overleafLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 bg-blue-500/10 px-3 py-1.5 rounded-lg transition-colors border border-blue-500/20 w-fit">
+                                        <ExternalLink className="w-4 h-4" />
+                                        Open Overleaf Manuscript
+                                    </a>
+                                ) : (
+                                    <span className="text-sm text-slate-500 italic px-3 py-1.5 rounded-lg border border-dashed border-white/10">
+                                        No Overleaf link provided
+                                    </span>
+                                )}
+                                {(paper.authors?.some(a => a.id === user.id) || paper.coordinators?.some(c => c.id === user.id)) && !isEditingOverleaf && (
+                                    <button
+                                        onClick={() => setIsEditingOverleaf(true)}
+                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 hover:bg-blue-500/5 rounded transition-colors"
+                                    >
+                                        <Edit className="w-3 h-3" /> Edit
+                                    </button>
+                                )}
                             </div>
-                        )}
+                            {isEditingOverleaf && (
+                                <div className="flex items-center gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        placeholder="https://www.overleaf.com/..."
+                                        value={localOverleaf}
+                                        onChange={(e) => setLocalOverleaf(e.target.value)}
+                                        className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all w-64"
+                                    />
+                                    <button
+                                        onClick={handleSaveOverleaf}
+                                        disabled={isSavingOverleaf}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[10px] font-medium rounded-lg transition-colors"
+                                    >
+                                        {isSavingOverleaf ? 'Saving...' : 'Save'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setLocalOverleaf(paper.overleafLink || '');
+                                            setIsEditingOverleaf(false);
+                                        }}
+                                        className="px-2 py-1 text-[10px] text-slate-400 hover:text-white"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                {paper.overleafGitUrl ? (
+                                    <div className="inline-flex items-center gap-2 text-sm text-slate-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 w-fit">
+                                        <span className="font-semibold text-[10px] uppercase tracking-wider text-slate-500">Overleaf Git:</span>
+                                        <span className="font-mono text-xs select-all">{paper.overleafGitUrl}</span>
+                                    </div>
+                                ) : (
+                                    <span className="text-sm text-slate-500 italic px-3 py-1.5 rounded-lg border border-dashed border-white/10">
+                                        No Git URL provided
+                                    </span>
+                                )}
+                                {(paper.authors?.some(a => a.id === user.id) || paper.coordinators?.some(c => c.id === user.id)) && !isEditingGit && (
+                                    <button
+                                        onClick={() => setIsEditingGit(true)}
+                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 hover:bg-blue-500/5 rounded transition-colors"
+                                    >
+                                        <Edit className="w-3 h-3" /> Edit
+                                    </button>
+                                )}
+                            </div>
+                            {isEditingGit && (
+                                <div className="flex items-center gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        placeholder="https://git.overleaf.com/..."
+                                        value={localGit}
+                                        onChange={(e) => setLocalGit(e.target.value)}
+                                        className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all w-64"
+                                    />
+                                    <button
+                                        onClick={handleSaveGit}
+                                        disabled={isSavingGit}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[10px] font-medium rounded-lg transition-colors"
+                                    >
+                                        {isSavingGit ? 'Saving...' : 'Save'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setLocalGit(paper.overleafGitUrl || '');
+                                            setIsEditingGit(false);
+                                        }}
+                                        className="px-2 py-1 text-[10px] text-slate-400 hover:text-white"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
