@@ -15,8 +15,8 @@ export class AzureOpenAIClient {
 
     try {
       // Find the ai_content folder which is at the root of the project
-      // backend/src/utils/AzureOpenAIClient.ts -> ../../../ai_content/secrets.yaml
-      const secretsPath = path.resolve(__dirname, '../../../ai_content/secrets.yaml');
+      // backend/src/ai_content/utils/AzureOpenAIClient.ts -> ../secrets.yaml
+      const secretsPath = path.resolve(__dirname, '../secrets.yaml');
       const fileContents = fs.readFileSync(secretsPath, 'utf8');
       const secrets: any = yaml.load(fileContents);
 
