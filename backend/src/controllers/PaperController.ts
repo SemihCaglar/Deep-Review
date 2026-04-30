@@ -4,11 +4,11 @@ import { Paper } from '../entities/Paper';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { RoundStatus } from '../entities/Round';
 import { UserRole } from '../entities/User';
-import { LocalAdmin } from '../entities/LocalAdmin';
 import { In } from 'typeorm';
 import { PaperService } from '../services/PaperService';
 import { RegisterPaperDto } from '../dtos/PaperDto';
 import { AuthenticatedRequest } from '../types/auth';
+import { Coordinator } from '../entities/Coordinator';
 
 /** Safely extracts a single string from a query param (which Express types as string | string[]). */
 function queryString(value: unknown): string | undefined {
@@ -211,9 +211,10 @@ export class PaperController {
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
       const isAuthor = paper.authors?.some(a => a.id === userId) ?? false;
+      const isAdmin = authReq.user.role === UserRole.Admin;
       const isCoordinator = authReq.user.role === UserRole.Coordinator;
 
-      if (!isCoordinator && !isAuthor) {
+      if (!isCoordinator && !isAuthor && !isAdmin) {
         return res.status(403).json({ message: 'Forbidden' });
       }
 
@@ -514,8 +515,32 @@ export class PaperController {
 
   static async getAllPapers(req: Request, res: Response) {
     try {
+      const authReq = req as AuthenticatedRequest;
+      if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
+
       const repo = AppDataSource.getRepository(Paper);
-      const papers = await repo.find({ relations: ['authors', 'topics'] });
+      let papers: Paper[];
+
+      if (authReq.user.role === UserRole.Admin) {
+        // Admins can see everything
+        papers = await repo.find({ relations: ['authors', 'topics'] });
+      } else if (authReq.user.role === UserRole.Coordinator) {
+        // Coordinators can see papers in their own lab
+        const coordinatorRepo = AppDataSource.getRepository(Coordinator);
+        const coordinator = await coordinatorRepo.findOne({
+          where: { id: authReq.user.id },
+          relations: ['lab']
+        });
+        
+        if (!coordinator?.lab) return res.status(200).json([]);
+        
+        papers = await repo.find({
+          where: { labs: { id: coordinator.lab.id } },
+          relations: ['authors', 'topics', 'labs']
+        });
+      } else {
+        return res.status(403).json({ message: 'Access denied' });
+      }
 
       const sortedPapers = papers.map(paper => {
         if (paper.authorOrder && paper.authors) {

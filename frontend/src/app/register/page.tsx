@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { BookOpen, Tag, CheckCircle2, Users, ArrowUp, ArrowDown } from 'lucide-react';
+import { BookOpen, CheckCircle2, Users, ArrowUp, ArrowDown } from 'lucide-react';
 import { getLabMembersRequest, getTopicsRequest, registerPaperRequest, LabMember, TopicOption } from '@/lib/api';
 
 export default function RegisterPaper() {
@@ -42,7 +42,7 @@ export default function RegisterPaper() {
             }
         };
         fetchData();
-    }, [user?.id]);
+    }, [user?.id, selectedAuthors]);
 
     if (!user.id) {
         return (

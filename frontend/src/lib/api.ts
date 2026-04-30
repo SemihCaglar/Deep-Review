@@ -552,6 +552,49 @@ export function processExtensionRequestApi(extensionId: string, decision: 'appro
   });
 }
 
+// ==== RATING ANALYTICS TYPES & FUNCTIONS ====
+
+export type ReviewerRanking = {
+  rank: number;
+  userId: string;
+  name: string;
+  email: string;
+  aggregateScore: number | null;
+  avgQualityScore: number | null;
+  avgQuantityScore: number | null;
+  avgTimeScore: number | null;
+  totalAssigned: number;
+  totalCompleted: number;
+  totalIncomplete: number;
+  totalDeclined: number;
+  ratingCount: number;
+};
+
+export type OverallAnalyticsSummary = {
+  totalReviewers: number;
+  avgAggregateScore: number | null;
+  highestScore: number | null;
+  lowestScore: number | null;
+  totalRatingsGiven: number;
+};
+
+export type OverallAnalyticsResponse = {
+  rankings: ReviewerRanking[];
+  summary: OverallAnalyticsSummary;
+};
+
+export type UserAnalyticsResponse = ReviewerRanking & {
+  totalReviewers: number;
+};
+
+export function getOverallAnalyticsRequest() {
+  return apiRequest<OverallAnalyticsResponse>('/ratings/overall');
+}
+
+export function getUserAnalyticsRequest(userId: string) {
+  return apiRequest<UserAnalyticsResponse>(`/ratings/user/${userId}`);
+}
+
 function buildUrl(path: string) {
   if (/^https?:\/\//.test(path)) {
     return path;

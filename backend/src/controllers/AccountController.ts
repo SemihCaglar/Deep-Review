@@ -575,7 +575,7 @@ export class AccountController {
   }
 
   private static isCoordinatorOrAdmin(user: User) {
-    return user.role === UserRole.Coordinator || user.role === UserRole.GlobalAdmin || user.role === UserRole.LocalAdmin;
+    return user.role === UserRole.Coordinator;
   }
 
   private static serializeAccount(member: User, options: { includeInterests?: boolean } = {}) {

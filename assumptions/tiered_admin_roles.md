@@ -1,47 +1,45 @@
-# Tiered Admin Hierarchy & Multi-Lab Security Decisions
+# Admin Role — Simplified Single-Admin Architecture
 
-This document tracks the key architectural decisions, assumptions, and constraints implemented during the transition from a singular admin system to the **Tiered Admin Hierarchy** (Global Admin vs. Local Admin).
+This document captures the transition from the two-tier `GlobalAdmin` / `LocalAdmin` model to a single `Admin` role, and records all resulting design decisions.
 
-## Core Architectural Decisions
+## Summary of Change
 
-### 1. Role Splitting via Single Table Inheritance (STI)
-- **Decision**: The deprecated `Admin` role was replaced with `GlobalAdmin` and `LocalAdmin`. Both were implemented as `ChildEntity` classes extending the base `User` entity.
-- **Rationale**: This leverages TypeORM's Single Table Inheritance, maintaining consistency with how `Coordinator` and `LabMember` are modeled without requiring complex joins or intermediate tables.
-- **Constraint**: Because STI utilizes a single `type`/`role` discriminator column per row, a single database record *cannot* be instantiated as multiple entity types simultaneously.
+The original tiered hierarchy (`GlobalAdmin` + `LocalAdmin`) has been replaced with a single `Admin` role. Local-admin responsibilities (lab signup approval, member management, lab topic management) have been transferred to **Coordinators**. Admins manage the system globally and have no involvement in day-to-day lab research activities.
 
-### 2. Strict Role Separation (Coordinator vs. Local Admin)
-- **Decision**: If a lab's Coordinator is also acting as the lab's Local Admin, they must maintain two distinct accounts (e.g., `coordinator@lab.com` and `localadmin@lab.com`).
-- **Rationale**: Due to the STI constraint mentioned above, merging the "management persona" (LocalAdmin) with the "research persona" (Coordinator) would require tearing down the STI structure or creating complex multi-role bitmaps. Keeping them separate enforces a strict context boundary (Admin Dashboard vs. Research Dashboard).
-- **Assumption**: Users are willing to switch logins to perform administrative/configuration tasks versus daily research activities.
+---
 
-### 3. One-to-One Lab Management
-- **Decision**: A `LocalAdmin` is mapped `OneToOne` to a `Lab`. Every lab has exactly one dedicated Local Admin.
-- **Assumption**: A single administrative account is sufficient to manage the configuration and membership of a specific lab.
+## Architectural Decisions
 
-### 4. Multiple Notification Contacts
-- **Decision**: Instead of creating multiple `LocalAdmin` accounts to distribute lab alerts, the `LocalAdmin` entity includes a `notificationEmails` array (stored as simple-json).
-- **Rationale**: Lab updates (like new signups) often need to notify a group of stakeholders (TAs, head professors, administrative staff) while only one person actually logs in to manage the system.
+### 1. Single Admin Role via STI
+- **Decision**: The `GlobalAdmin` and `LocalAdmin` child entities are replaced by a single `Admin` entity (`GlobalAdmin.ts` now exports the `Admin` class). `LocalAdmin.ts` has been emptied and is no longer registered with TypeORM.
+- **DB migration**: Existing `GlobalAdmin` rows were updated to `role = 'Admin'`, `type = 'Admin'`. Existing `LocalAdmin` rows were deleted.
+- **Enum**: `UserRole.GlobalAdmin` and `UserRole.LocalAdmin` are removed. `UserRole.Admin` is the single admin value.
 
-## Workflow & Security Scope
+### 2. Admin Scope — Everything System-Level
+- **Decision**: Admins can do everything at the system level.
+- **Capabilities**: Create/delete labs, assign coordinators to labs, full user pool management (lock/unlock/delete any account), view global audit logs, configure system-wide default policies and email templates, manage topics for any lab.
+- **No research features**: Admins have no access to papers, rounds, review assignments, or the reviewer leaderboard. The sidebar for admin users shows only: Dashboard, Profile, Admin Dashboard.
 
-### 5. Lab-Targeted Signups
-- **Decision**: The signup form now includes a public dropdown to select a specific lab, saving the choice as `requestedLabId`.
-- **Assumption**: A user knows which lab they are joining at the time of registration. Global/unassigned users are not supported in the standard flow.
+### 3. Coordinator Scope — Own Lab Only
+- **Decision**: Coordinators manage their own lab exclusively.
+- **Capabilities**: Approve or reject signup requests for their lab, manage lab members, manage lab topics, view/update lab-level policies and templates, use the reviewer leaderboard for their lab.
+- **Signup approval**: The existing `POST /account/approve/:id` and `POST /account/reject/:id` routes (coordinator-gated) are the canonical approval flow. The old admin-level lab signup approval routes (`/admin/pending-signups`, `/admin/approve-signup/:id`, `/admin/remove-member`) have been removed.
 
-### 6. Delegated Approval Logic
-- **Decision**: Local Admins are responsible for approving users into their respective labs. When a Local Admin approves a user, that user is simultaneously granted system-wide access and automatically linked to the lab they requested.
-- **Assumption**: The Local Admin is the ultimate authority on who should be allowed into their specific research environment. 
+### 4. Notification Emails Removed
+- **Decision**: The `notificationEmails` array (previously on `LocalAdmin`) is removed entirely. The `LocalAdmin` entity no longer exists, and no replacement for this feature is planned at this time.
 
-### 7. Strict Local Admin Data Isolation
-- **Decision**: The backend heavily restricts Local Admin operations. They can *only* interact with data tied to their lab.
-- **Scope**:
-  - **Signups**: Can only see pending users who requested their lab.
-  - **Members**: Can only remove members from their own lab.
-  - **Topics**: Can only modify topics linked to their lab.
-  - **Policies & Templates**: Can only read and update overrides specific to their lab.
-- **Assumption**: Strict data isolation is required so that one lab's administrator cannot accidentally or maliciously alter another lab's configuration or access their papers.
+### 5. One Coordinator per Lab
+- **Decision**: Unchanged. Every lab still has exactly one coordinator. Assignment is done by an Admin via `POST /admin/labs/coordinator`.
 
-### 8. Global Admin Responsibilities
-- **Decision**: Global Admins manage the macro-architecture of the system.
-- **Scope**: Includes creating/deleting labs, assigning Coordinators to labs, full user pool management (locking/unlocking/deleting any account), viewing global audit logs, and configuring system-wide default policies.
-- **Assumption**: Global Admins act as platform maintainers and do not require granular, lab-specific dashboards for daily tasks like topic management or reviewer assignment.
+### 6. Lab-Targeted Signups
+- **Decision**: Unchanged. The signup form includes a lab selection dropdown. Coordinators approve members into their own lab.
+
+---
+
+## Role Summary
+
+| Role | Manages | Research Features |
+|---|---|---|
+| `Admin` | Labs, all users, system policies, templates, audit logs, topics (all labs) | None |
+| `Coordinator` | Own lab (approvals, members, topics, policies/templates for their lab) | Full (papers, rounds, assignments, leaderboard) |
+| `LabMember` | Own profile, interests, blackout periods | Full (reviews, papers) |

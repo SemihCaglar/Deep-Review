@@ -7,6 +7,8 @@
     "start": "ts-node src/index.ts",
     "dev": "ts-node src/index.ts",
     "seed": "ts-node src/seed.ts",
+    "seed:analytics": "ts-node src/seedAnalytics.ts",
+    "test:analytics": "ts-node src/testAnalytics.ts",
     "test": "jest --runInBand --forceExit"
   },
   "jest": {

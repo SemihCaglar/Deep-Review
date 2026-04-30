@@ -2,32 +2,38 @@
 
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@/components/context/UserContext';
-import { 
-  Users, 
-  Settings, 
-  FileText, 
-  Shield, 
-  Activity, 
-  Plus, 
-  Lock, 
-  Unlock, 
-  Trash2, 
-  Mail, 
+import {
+  Users,
+  Settings,
+  Mail,
+  Shield,
+  Activity,
+  Plus,
+  Lock,
+  Unlock,
+  Trash2,
   Globe,
   PlusSquare,
-  Search,
-  Filter,
   CheckCircle,
   XCircle,
-  ArrowRight
+  ArrowRight,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 
-type Tab = 'users' | 'labs' | 'topics' | 'templates' | 'policies' | 'logs' | 'members' | 'emails';
+type Tab = 'users' | 'labs' | 'topics' | 'templates' | 'policies' | 'logs';
+
+const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+  { id: 'users',     label: 'Users',           icon: Users },
+  { id: 'labs',      label: 'Labs',            icon: Globe },
+  { id: 'topics',    label: 'Topics',          icon: CheckCircle },
+  { id: 'templates', label: 'Email Templates', icon: Mail },
+  { id: 'policies',  label: 'System Policies', icon: Settings },
+  { id: 'logs',      label: 'Audit Logs',      icon: Activity },
+];
 
 export default function AdminPage() {
   const { user } = useUser();
-  const [activeTab, setActiveTab] = useState<Tab>(user.isGlobalAdmin ? 'users' : 'members');
+  const [activeTab, setActiveTab] = useState<Tab>('users');
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,24 +46,16 @@ export default function AdminPage() {
     setLoading(true);
     setError(null);
     try {
-      let endpoint = '';
-      switch (activeTab) {
-        case 'users': endpoint = '/admin/users'; break;
-        case 'labs': endpoint = '/admin/labs'; break;
-        case 'topics': endpoint = '/admin/labs'; break; // We list labs to pick one for global admin, but local admin? Actually we'll change TopicsTab to just use their lab
-        case 'templates': endpoint = '/admin/templates'; break;
-        case 'policies': endpoint = '/admin/policies'; break;
-        case 'logs': endpoint = '/admin/logs'; break;
-        case 'members': endpoint = '/admin/pending-signups'; break;
-        case 'emails': endpoint = ''; break; // Emails are fetched with the profile or we don't need to fetch if we have them, wait! We need to get LocalAdmin profile.
-      }
-      if (endpoint) {
-        const result = await apiRequest<any>(endpoint);
-        setData(result);
-      } else if (activeTab === 'emails') {
-        const result = await apiRequest<any>('/admin/notifications');
-        setData(result);
-      }
+      const endpoints: Record<Tab, string> = {
+        users:     '/admin/users',
+        labs:      '/admin/labs',
+        topics:    '/admin/labs',
+        templates: '/admin/templates',
+        policies:  '/admin/policies',
+        logs:      '/admin/logs',
+      };
+      const result = await apiRequest<any>(endpoints[activeTab]);
+      setData(result);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch data');
     } finally {
@@ -87,24 +85,11 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex overflow-x-auto pb-2 gap-2 border-b border-white/5">
-        {(user.isGlobalAdmin ? [
-          { id: 'users', label: 'Users', icon: Users },
-          { id: 'labs', label: 'Labs', icon: Globe },
-          { id: 'topics', label: 'Topics', icon: CheckCircle },
-          { id: 'templates', label: 'Email Templates', icon: Mail },
-          { id: 'policies', label: 'System Policies', icon: Settings },
-          { id: 'logs', label: 'Audit Logs', icon: Activity },
-        ] : user.isLocalAdmin ? [
-          { id: 'members', label: 'Lab Members', icon: Users },
-          { id: 'topics', label: 'Lab Topics', icon: CheckCircle },
-          { id: 'policies', label: 'Lab Policies', icon: Settings },
-          { id: 'emails', label: 'Notifications', icon: Mail },
-        ] : []).map((tab) => (
+        {TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as Tab)}
+            onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
@@ -126,115 +111,18 @@ export default function AdminPage() {
 
       {loading ? (
         <div className="flex items-center justify-center min-h-[40vh]">
-          <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+          <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
         </div>
       ) : (
         <div className="grid gap-6">
-          {activeTab === 'users' && <UsersTab users={data} refresh={fetchData} />}
-          {activeTab === 'labs' && <LabsTab labs={data} refresh={fetchData} />}
-          {activeTab === 'topics' && <TopicsTab labs={data} isLocalAdmin={!!user.isLocalAdmin} />}
+          {activeTab === 'users'     && <UsersTab     users={data}     refresh={fetchData} />}
+          {activeTab === 'labs'      && <LabsTab      labs={data}      refresh={fetchData} />}
+          {activeTab === 'topics'    && <TopicsTab    labs={data} />}
           {activeTab === 'templates' && <TemplatesTab templates={data} refresh={fetchData} />}
-          {activeTab === 'policies' && <PoliciesTab policies={data} refresh={fetchData} />}
-          {activeTab === 'logs' && <LogsTab logs={data} />}
-          {activeTab === 'members' && <MembersTab members={data} refresh={fetchData} />}
-          {activeTab === 'emails' && <EmailsTab data={data} />}
+          {activeTab === 'policies'  && <PoliciesTab  policies={data}  refresh={fetchData} />}
+          {activeTab === 'logs'      && <LogsTab      logs={data} />}
         </div>
       )}
-    </div>
-  );
-}
-
-function MembersTab({ members, refresh }: { members: any[]; refresh: () => void }) {
-  const handleApprove = async (id: string) => {
-    try {
-      await apiRequest(`/admin/approve-signup/${id}`, { method: 'POST' });
-      refresh();
-    } catch (err: any) { alert(err.message); }
-  };
-
-  const handleRemove = async (userId: string, labId: string) => {
-    if (!confirm('Remove user from lab?')) return;
-    try {
-      await apiRequest(`/admin/remove-member`, { method: 'POST', body: { userId, labId } });
-      refresh(); // Actually the members list is just pending signups, but maybe we should list both?
-    } catch (err: any) { alert(err.message); }
-  };
-
-  return (
-    <div className="glass rounded-2xl border border-white/10 p-6">
-      <h2 className="text-lg font-semibold text-white mb-4">Pending Lab Signups</h2>
-      <div className="space-y-2">
-        {members?.map((m: any) => (
-          <div key={m.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-            <div>
-              <p className="text-white font-medium">{m.name}</p>
-              <p className="text-slate-400 text-sm">{m.email}</p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => handleApprove(m.id)} className="px-4 py-2 bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg text-sm transition-colors">Approve</button>
-            </div>
-          </div>
-        ))}
-        {(!members || members.length === 0) && <p className="text-slate-400 italic">No pending signups.</p>}
-      </div>
-    </div>
-  );
-}
-
-function EmailsTab({ data }: { data: any }) {
-  const [emails, setEmails] = useState<string[]>([]);
-  const [newEmail, setNewEmail] = useState('');
-
-  useEffect(() => {
-    if (data?.emails) {
-      setEmails(data.emails);
-    }
-  }, [data]);
-
-  const handleSave = async () => {
-    try {
-      await apiRequest('/admin/notifications', { method: 'PUT', body: { emails } });
-      alert('Saved successfully');
-    } catch (err: any) { alert(err.message); }
-  };
-
-  const removeEmail = (index: number) => {
-    setEmails(emails.filter((_, i) => i !== index));
-  };
-
-  return (
-    <div className="glass rounded-2xl border border-white/10 p-6 max-w-xl">
-      <h2 className="text-lg font-semibold text-white mb-2">Notification Emails</h2>
-      <p className="text-sm text-slate-400 mb-6">These emails will receive alerts and notifications for this lab.</p>
-      
-      <div className="space-y-4 mb-6">
-        {emails.map((email, i) => (
-          <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10">
-            <span className="text-white">{email}</span>
-            <button onClick={() => removeEmail(i)} className="p-2 text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-2 mb-6">
-        <input 
-          type="email" 
-          value={newEmail} 
-          onChange={(e) => setNewEmail(e.target.value)}
-          placeholder="Add email address..."
-          className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-blue-500"
-        />
-        <button 
-          onClick={() => { if (newEmail) setEmails([...emails, newEmail]); setNewEmail(''); }}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm transition-colors"
-        >
-          Add
-        </button>
-      </div>
-
-      <button onClick={handleSave} className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-medium rounded-xl transition-colors">
-        Save Changes
-      </button>
     </div>
   );
 }
@@ -290,34 +178,30 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
                 </td>
                 <td className="px-6 py-4">
                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                    u.role === 'Admin' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                    u.role === 'Admin'       ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
                     u.role === 'Coordinator' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                    'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                                              'bg-slate-500/10 text-slate-400 border border-slate-500/20'
                   }`}>
                     {u.role}
                   </span>
                 </td>
                 <td className="px-6 py-4">
                   {u.lockedUntil ? (
-                    <span className="flex items-center gap-1.5 text-red-400 text-xs">
-                      <Lock className="w-3 h-3" /> Locked
-                    </span>
+                    <span className="flex items-center gap-1.5 text-red-400 text-xs"><Lock className="w-3 h-3" /> Locked</span>
                   ) : (
-                    <span className="flex items-center gap-1.5 text-green-400 text-xs">
-                      <CheckCircle className="w-3 h-3" /> Active
-                    </span>
+                    <span className="flex items-center gap-1.5 text-green-400 text-xs"><CheckCircle className="w-3 h-3" /> Active</span>
                   )}
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
-                    <button 
+                    <button
                       onClick={() => handleLock(u.id, !!u.lockedUntil)}
                       className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
-                      title={u.lockedUntil ? "Unlock" : "Lock"}
+                      title={u.lockedUntil ? 'Unlock' : 'Lock'}
                     >
                       {u.lockedUntil ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleDelete(u.id)}
                       className="p-2 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
                       title="Delete"
@@ -337,20 +221,15 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
 
 function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
   const [assigningLabId, setAssigningLabId] = useState<string | null>(null);
-  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [allCoordinators, setAllCoordinators] = useState<any[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [newLabName, setNewLabName] = useState('');
 
   useEffect(() => {
-    fetchUsers();
+    apiRequest<any[]>('/admin/users')
+      .then(users => setAllCoordinators(users.filter((u: any) => u.role === 'Coordinator')))
+      .catch(() => {});
   }, []);
-
-  const fetchUsers = async () => {
-    try {
-      const users = await apiRequest<any[]>('/admin/users');
-      setAllUsers(users.filter(u => u.role === 'Coordinator'));
-    } catch (err) {}
-  };
 
   const handleCreate = async () => {
     if (!newLabName.trim()) return;
@@ -373,9 +252,9 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
   const handleAssign = async (coordinatorId: string) => {
     if (!assigningLabId) return;
     try {
-      await apiRequest('/admin/labs/assign-coordinator', { 
-        method: 'POST', 
-        body: { labId: assigningLabId, coordinatorId } 
+      await apiRequest('/admin/labs/coordinator', {
+        method: 'POST',
+        body: { labId: assigningLabId, coordinatorId },
       });
       setAssigningLabId(null);
       refresh();
@@ -389,7 +268,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
           <div className="glass rounded-2xl border border-white/10 p-6 max-w-md w-full animate-in zoom-in-95 duration-200">
             <h3 className="text-lg font-semibold text-white mb-4">Assign Coordinator</h3>
             <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-              {allUsers.map(u => (
+              {allCoordinators.map(u => (
                 <button
                   key={u.id}
                   onClick={() => handleAssign(u.id)}
@@ -399,9 +278,9 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
                   <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400" />
                 </button>
               ))}
-              {allUsers.length === 0 && <p className="text-slate-500 italic text-center py-4">No coordinators found.</p>}
+              {allCoordinators.length === 0 && <p className="text-slate-500 italic text-center py-4">No coordinators found.</p>}
             </div>
-            <button 
+            <button
               onClick={() => setAssigningLabId(null)}
               className="w-full mt-6 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors"
             >
@@ -420,7 +299,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
               </div>
               <h3 className="text-white font-semibold mb-2">Create New Lab</h3>
               <p className="text-sm text-slate-500 mb-6">Set up a new isolated research environment.</p>
-              <button 
+              <button
                 onClick={() => setIsCreating(true)}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors"
               >
@@ -429,27 +308,17 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
             </>
           ) : (
             <div className="w-full space-y-4">
-              <input 
-                type="text" 
-                placeholder="Enter lab name..." 
+              <input
+                type="text"
+                placeholder="Enter lab name..."
                 value={newLabName}
                 onChange={(e) => setNewLabName(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 autoFocus
               />
               <div className="flex gap-2">
-                <button 
-                  onClick={handleCreate}
-                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors"
-                >
-                  Create
-                </button>
-                <button 
-                  onClick={() => setIsCreating(false)}
-                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors"
-                >
-                  Cancel
-                </button>
+                <button onClick={handleCreate} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors">Create</button>
+                <button onClick={() => setIsCreating(false)} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors">Cancel</button>
               </div>
             </div>
           )}
@@ -461,7 +330,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
               <div className="w-12 h-12 rounded-xl bg-blue-600/10 text-blue-400 flex items-center justify-center">
                 <Globe className="w-6 h-6" />
               </div>
-              <button 
+              <button
                 onClick={() => handleDelete(lab.id)}
                 className="p-2 rounded-lg hover:bg-red-500/10 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
               >
@@ -470,7 +339,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
             </div>
             <h3 className="text-white font-semibold text-lg">{lab.name}</h3>
             <p className="text-sm text-slate-500 mt-1 line-clamp-2">{lab.description || 'No description provided.'}</p>
-            
+
             <div className="mt-6 pt-6 border-t border-white/5">
               <div className="flex items-center justify-between text-xs mb-3">
                 <span className="text-slate-500 uppercase tracking-wider font-bold">Coordinator</span>
@@ -480,7 +349,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
                   <span className="text-red-400/70 font-medium italic">Unassigned</span>
                 )}
               </div>
-              <button 
+              <button
                 onClick={() => setAssigningLabId(lab.id)}
                 className="w-full py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
               >
@@ -495,7 +364,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
   );
 }
 
-function TopicsTab({ labs, isLocalAdmin }: { labs: any[], isLocalAdmin?: boolean }) {
+function TopicsTab({ labs }: { labs: any[] }) {
   const [selectedLabId, setSelectedLabId] = useState(labs?.[0]?.id || '');
   const [topics, setTopics] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -510,7 +379,7 @@ function TopicsTab({ labs, isLocalAdmin }: { labs: any[], isLocalAdmin?: boolean
     try {
       const result = await apiRequest<any[]>(`/labs/${selectedLabId}/topics`);
       setTopics(result);
-    } catch (err) { alert('Failed to fetch topics'); }
+    } catch { alert('Failed to fetch topics'); }
     finally { setLoading(false); }
   };
 
@@ -535,10 +404,10 @@ function TopicsTab({ labs, isLocalAdmin }: { labs: any[], isLocalAdmin?: boolean
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h2 className="text-lg font-semibold text-white">Lab Topics</h2>
-          <p className="text-sm text-slate-500">Manage research interests for specific labs.</p>
+          <p className="text-sm text-slate-500">Manage research interests for any lab.</p>
         </div>
-        <select 
-          value={selectedLabId} 
+        <select
+          value={selectedLabId}
           onChange={(e) => setSelectedLabId(e.target.value)}
           className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
@@ -549,14 +418,14 @@ function TopicsTab({ labs, isLocalAdmin }: { labs: any[], isLocalAdmin?: boolean
       </div>
 
       <div className="flex gap-2 mb-6">
-        <input 
-          type="text" 
-          placeholder="New topic name..." 
+        <input
+          type="text"
+          placeholder="New topic name..."
           value={newTopicName}
           onChange={(e) => setNewTopicName(e.target.value)}
           className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none"
         />
-        <button 
+        <button
           onClick={handleAdd}
           className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
         >
@@ -571,7 +440,7 @@ function TopicsTab({ labs, isLocalAdmin }: { labs: any[], isLocalAdmin?: boolean
           {topics.map(t => (
             <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-sm text-slate-300">
               {t.name}
-              <button 
+              <button
                 onClick={() => handleRemove(t.id)}
                 className="p-1 rounded-full hover:bg-red-500/20 text-slate-500 hover:text-red-400 transition-colors"
               >
@@ -605,15 +474,15 @@ function TemplatesTab({ templates, refresh }: { templates: any[]; refresh: () =>
           <div key={t.id} className="p-6">
             {editing?.id === t.id ? (
               <div className="space-y-4">
-                <input 
+                <input
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white"
                   value={editing.subject}
-                  onChange={(e) => setEditing({...editing, subject: e.target.value})}
+                  onChange={(e) => setEditing({ ...editing, subject: e.target.value })}
                 />
-                <textarea 
+                <textarea
                   className="w-full h-32 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white"
                   value={editing.body}
-                  onChange={(e) => setEditing({...editing, body: e.target.value})}
+                  onChange={(e) => setEditing({ ...editing, body: e.target.value })}
                 />
                 <div className="flex gap-2">
                   <button onClick={handleUpdate} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium">Save</button>
@@ -627,7 +496,7 @@ function TemplatesTab({ templates, refresh }: { templates: any[]; refresh: () =>
                   <p className="text-xs text-slate-500 mb-2">Subject: {t.subject}</p>
                   <p className="text-sm text-slate-400 line-clamp-2">{t.body}</p>
                 </div>
-                <button 
+                <button
                   onClick={() => setEditing(t)}
                   className="p-2 rounded-lg hover:bg-blue-600/10 text-slate-500 hover:text-blue-400 transition-colors"
                 >
@@ -666,7 +535,7 @@ function PoliciesTab({ policies, refresh }: { policies: any[]; refresh: () => vo
             </div>
             {editingId === p.id ? (
               <div className="flex gap-2">
-                <input 
+                <input
                   className="bg-white/5 border border-white/10 rounded-xl px-4 py-1 text-white text-sm"
                   value={editingValue}
                   onChange={(e) => setEditingValue(e.target.value)}
@@ -678,7 +547,7 @@ function PoliciesTab({ policies, refresh }: { policies: any[]; refresh: () => vo
             ) : (
               <div className="flex items-center gap-4">
                 <span className="text-blue-400 font-mono bg-blue-400/5 px-2 py-1 rounded border border-blue-400/20">{p.value}</span>
-                <button 
+                <button
                   onClick={() => { setEditingId(p.id); setEditingValue(p.value); }}
                   className="p-2 rounded-lg hover:bg-white/5 text-slate-500 hover:text-white"
                 >
