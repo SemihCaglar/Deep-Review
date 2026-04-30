@@ -80,6 +80,8 @@ export function mapStoredUserToLegacyUser(user: StoredAuthUser) {
     id: user.id,
     name: user.name,
     email: user.email,
-    isCoordinator: user.role === 'Coordinator' || user.role === 'Admin',
+    isCoordinator: user.role === 'Coordinator',
+    isAdmin: user.role === 'Admin',
+    labs: user.labs || [],
   };
 }

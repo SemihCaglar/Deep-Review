@@ -23,19 +23,19 @@ export function LabTopicManager({ labId, labName }: LabTopicManagerProps) {
 
   useEffect(() => {
     fetchTopics();
-  }, [labId]);
+  }, [fetchTopics]);
 
-  const fetchTopics = async () => {
+  const fetchTopics = React.useCallback(async () => {
     setLoading(true);
     try {
       const result = await apiRequest<Topic[]>(`/labs/${labId}/topics`);
       setTopics(result);
-    } catch (err) {
+    } catch {
       console.error('Failed to fetch topics');
     } finally {
       setLoading(false);
     }
-  };
+  }, [labId]);
 
   const handleAdd = async () => {
     if (!newTopicName.trim()) return;
@@ -46,8 +46,8 @@ export function LabTopicManager({ labId, labName }: LabTopicManagerProps) {
       });
       setNewTopicName('');
       fetchTopics();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'An error occurred');
     }
   };
 
@@ -56,8 +56,8 @@ export function LabTopicManager({ labId, labName }: LabTopicManagerProps) {
     try {
       await apiRequest(`/labs/${labId}/topics/${topicId}`, { method: 'DELETE' });
       fetchTopics();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'An error occurred');
     }
   };
 
@@ -70,8 +70,8 @@ export function LabTopicManager({ labId, labName }: LabTopicManagerProps) {
       });
       setEditingTopic(null);
       fetchTopics();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'An error occurred');
     }
   };
 

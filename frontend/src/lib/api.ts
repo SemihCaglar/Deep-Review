@@ -206,6 +206,145 @@ export function rejectSignupRequest(id: string) {
   });
 }
 
+export type PaperAuthor = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+export type Paper = {
+  id: string;
+  title: string;
+  abstract?: string;
+  abstractText?: string;
+  creationTime?: string;
+  targetVenue?: string;
+  status: string;
+  overleafLink?: string | null;
+  authorOrder?: string[] | null;
+  authors?: PaperAuthor[];
+  coordinators?: LabMember[];
+  topics?: TopicOption[];
+  history?: unknown[];
+};
+
+export type AuthoredPaper = Paper & {
+  creationTime?: string;
+  latestRoundNumber?: number | null;
+  latestRoundStatus?: string | null;
+  latestRoundDeadline?: string | null;
+  completedAssignments?: number;
+  totalAssignments?: number;
+};
+
+export type PaperHistoryDeclineRequest = {
+  id: string;
+  reason: string;
+  status: string;
+  requestedAt: string;
+};
+
+export type PaperHistoryExtension = {
+  id: string;
+  reason: string;
+  requestedDeadline: string;
+  approvedDeadline: string | null;
+  requestedAt: string;
+  status: string;
+};
+
+export type PaperHistoryAssignment = {
+  assignmentId: string;
+  reviewerId: string | null;
+  reviewerName: string | null;
+  reviewerEmail: string | null;
+  status: string;
+  deadline: string | null;
+  invitedAt: string;
+  acceptedAt: string | null;
+  submittedAt: string | null;
+  declineReason: string | null;
+  declineRequests: PaperHistoryDeclineRequest[];
+  extensions: PaperHistoryExtension[];
+};
+
+export type PaperHistoryRound = {
+  id: string;
+  roundNumber: number;
+  roundStatus: string;
+  deadline: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  assignments: PaperHistoryAssignment[];
+  artifacts: {
+    checklistItems: { id: string; description: string; isChecked: boolean }[];
+    aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
+  };
+};
+
+export type PaperHistory = {
+  id: string;
+  title: string;
+  status: string;
+  targetVenue: string;
+  overleafLink?: string | null;
+  authors: PaperAuthor[];
+  rounds: PaperHistoryRound[];
+};
+
+export type RegisterPaperPayload = {
+  title: string;
+  abstractText: string;
+  targetVenue: string;
+  topics: string[];
+  authors: string[]; // Ordered UUIDs of the authors
+  overleafLink?: string;
+};
+
+export function registerPaperRequest(payload: RegisterPaperPayload) {
+  return apiRequest<{ message: string; paper: Paper }>('/papers', {
+    method: 'POST',
+    body: payload,
+  });
+}
+
+export function getPaperByIdRequest(id: string) {
+  return apiRequest<Paper>(`/papers/${id}`);
+}
+
+export function getAllPapersRequest() {
+  return apiRequest<Paper[]>('/papers/all');
+}
+
+export function getMyWrittenPapersRequest() {
+  return apiRequest<AuthoredPaper[]>('/papers/my-written');
+}
+
+export function getPaperHistoryRequest(id: string) {
+  return apiRequest<PaperHistory>(`/papers/${id}/history`);
+}
+
+export function updatePaperAbstractRequest(id: string, abstract: string) {
+  return apiRequest<Paper>(`/papers/${id}/abstract`, {
+    method: 'PUT',
+    body: { abstract },
+  });
+}
+
+export function updatePaperTopicsRequest(id: string, topics: string[]) {
+  return apiRequest<Paper>(`/papers/${id}/topics-update`, {
+    method: 'PUT',
+    body: { topics },
+  });
+}
+
+export function updatePaperAuthorsRequest(id: string, authors: string[]) {
+  return apiRequest<Paper>(`/papers/${id}/authors`, {
+    method: 'PUT',
+    body: { authors },
+  });
+}
+
 export function getLabsRequest() {
   return apiRequest<Lab[]>('/labs');
 }
@@ -216,8 +355,8 @@ export type CoordinatedPaper = {
   id: string;
   title: string;
   status: string;
-  targetVenue: string;
   abstractText: string;
+  overleafLink: string | null;
 };
 
 export type PendingDeclineRequest = {
@@ -233,6 +372,15 @@ export type PendingExtensionRequest = {
   requestedAt: string;
 };
 
+export type ResolvedDeclineRequest = PendingDeclineRequest & {
+  status: 'Approved' | 'Rejected';
+};
+
+export type ResolvedExtensionRequest = PendingExtensionRequest & {
+  status: 'Approved' | 'Rejected';
+  approvedDeadline: string | null;
+};
+
 export type RoundAssignment = {
   id: string;
   status: string;
@@ -241,13 +389,19 @@ export type RoundAssignment = {
   reviewer: { id: string; name: string; email: string };
   pendingDeclineRequest: PendingDeclineRequest | null;
   pendingExtensionRequest: PendingExtensionRequest | null;
+  reviewSummary: { text: string | null; submittedAt: string } | null;
 };
 
 export type RoundWithAssignments = {
   id: string;
   roundNumber: number;
-  deadline: string;
-  status: 'Open' | 'Closed';
+  deadline: string | null;
+  status: 'Draft' | 'Open' | 'Completed';
+  targetVenue: string;
+  venueCategory: 'Conference' | 'Article';
+  submissionDeadline: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
   assignments: RoundAssignment[];
 };
 
@@ -256,10 +410,12 @@ export type MyAssignment = {
   status: string;
   deadline: string | null;
   invitationSent: boolean;
-  round: { id: string; roundNumber: number; deadline: string };
-  paper: { id: string; title: string; targetVenue: string; abstractText: string };
+  round: { id: string; roundNumber: number; deadline: string | null; submissionDeadline: string | null; targetVenue: string; venueCategory: string };
+  paper: { id: string; title: string; abstractText: string; overleafLink: string | null };
   pendingDeclineRequest: PendingDeclineRequest | null;
   pendingExtensionRequest: PendingExtensionRequest | null;
+  resolvedDeclineRequests: ResolvedDeclineRequest[];
+  resolvedExtensionRequests: ResolvedExtensionRequest[];
 };
 
 export type SuggestedReviewer = {
@@ -271,6 +427,13 @@ export type SuggestedReviewer = {
 
 export function getMyAssignmentsRequest() {
   return apiRequest<MyAssignment[]>('/assignments/my');
+}
+
+export function dismissRequestDecisionsRequest(declineRequestIds: string[], extensionRequestIds: string[]) {
+  return apiRequest<{ message: string; dismissedCount: number }>('/assignments/my/request-decisions/dismiss', {
+    method: 'POST',
+    body: { declineRequestIds, extensionRequestIds },
+  });
 }
 
 export function respondToInvitationRequest(assignmentId: string, response: 'accept' | 'decline', reason?: string) {
@@ -287,6 +450,13 @@ export function requestExtensionRequest(assignmentId: string, reason: string, re
   });
 }
 
+export function requestDeclineForAssignmentRequest(assignmentId: string, declineReason: string) {
+  return apiRequest<{ message: string; declineRequestId: string }>(`/responses/${assignmentId}/decline-request`, {
+    method: 'POST',
+    body: { declineReason },
+  });
+}
+
 export function completeReviewRequest(assignmentId: string, summary?: string) {
   return apiRequest<{ message: string; id: string; status: string }>('/responses/complete', {
     method: 'POST',
@@ -296,6 +466,13 @@ export function completeReviewRequest(assignmentId: string, summary?: string) {
 
 export function getMyCoordinatedPapersRequest() {
   return apiRequest<CoordinatedPaper[]>('/papers/my-coordinated');
+}
+
+export function updateOverleafLinkRequest(paperId: string, overleafLink: string) {
+  return apiRequest<{ message: string; overleafLink: string | null }>(`/papers/${paperId}/overleaf`, {
+    method: 'PUT',
+    body: { overleafLink },
+  });
 }
 
 export function getPaperRoundsRequest(paperId: string) {
@@ -333,6 +510,34 @@ export function updateAssignmentDeadlineRequest(assignmentId: string, deadline: 
   });
 }
 
+export function createRoundRequest(paperId: string, targetVenue: string, venueCategory: string, submissionDeadline?: string, deadline?: string) {
+  return apiRequest<{ id: string; status: string }>('/rounds', {
+    method: 'POST',
+    body: { paperId, targetVenue, venueCategory, ...(submissionDeadline ? { submissionDeadline } : {}), ...(deadline ? { deadline } : {}) },
+  });
+}
+
+export function startRoundRequest(roundId: string, coordinatorId: string) {
+  return apiRequest<{ id: string; status: string }>(`/rounds/${roundId}/start`, {
+    method: 'POST',
+    body: { coordinatorId },
+  });
+}
+
+export function editRoundDeadlineRequest(roundId: string, deadline: string) {
+  return apiRequest<{ id: string; deadline: string }>(`/rounds/${roundId}/deadline`, {
+    method: 'PUT',
+    body: { deadline },
+  });
+}
+
+export function reassignReviewerRequest(assignmentId: string, newReviewerId: string) {
+  return apiRequest<{ id: string; status: string; deadline: string | null; invitationSent: boolean; reviewer: { id: string; name: string; email: string } }>(`/assignments/${assignmentId}/reassign`, {
+    method: 'POST',
+    body: { newReviewerId },
+  });
+}
+
 export function processDeclineRequestApi(declineRequestId: string, decision: 'approve' | 'reject') {
   return apiRequest<{ message: string; assignmentStatus: string }>('/responses/process-decline', {
     method: 'POST',
@@ -345,6 +550,49 @@ export function processExtensionRequestApi(extensionId: string, decision: 'appro
     method: 'POST',
     body: { extensionId, decision, ...(approvedDeadline ? { approvedDeadline } : {}) },
   });
+}
+
+// ==== RATING ANALYTICS TYPES & FUNCTIONS ====
+
+export type ReviewerRanking = {
+  rank: number;
+  userId: string;
+  name: string;
+  email: string;
+  aggregateScore: number | null;
+  avgQualityScore: number | null;
+  avgQuantityScore: number | null;
+  avgTimeScore: number | null;
+  totalAssigned: number;
+  totalCompleted: number;
+  totalIncomplete: number;
+  totalDeclined: number;
+  ratingCount: number;
+};
+
+export type OverallAnalyticsSummary = {
+  totalReviewers: number;
+  avgAggregateScore: number | null;
+  highestScore: number | null;
+  lowestScore: number | null;
+  totalRatingsGiven: number;
+};
+
+export type OverallAnalyticsResponse = {
+  rankings: ReviewerRanking[];
+  summary: OverallAnalyticsSummary;
+};
+
+export type UserAnalyticsResponse = ReviewerRanking & {
+  totalReviewers: number;
+};
+
+export function getOverallAnalyticsRequest() {
+  return apiRequest<OverallAnalyticsResponse>('/ratings/overall');
+}
+
+export function getUserAnalyticsRequest(userId: string) {
+  return apiRequest<UserAnalyticsResponse>(`/ratings/user/${userId}`);
 }
 
 function buildUrl(path: string) {

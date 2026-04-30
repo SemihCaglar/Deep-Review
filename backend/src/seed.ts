@@ -2,12 +2,11 @@ import 'reflect-metadata';
 import { AppDataSource } from './data-source';
 import { IsNull } from 'typeorm';
 import { Coordinator } from './entities/Coordinator';
-import { LocalAdmin } from './entities/LocalAdmin';
-import { GlobalAdmin } from './entities/GlobalAdmin';
+import { Admin } from './entities/GlobalAdmin';
 import { Lab } from './entities/Lab';
 import { LabMember } from './entities/LabMember';
 import { Paper, PaperStatus } from './entities/Paper';
-import { Round, RoundStatus } from './entities/Round';
+import { Round, RoundStatus, VenueCategory } from './entities/Round';
 import { Assignment, AssignmentStatus } from './entities/Assignment';
 import { Topic } from './entities/Topic';
 import { ApprovalStatus, User, UserRole } from './entities/User';
@@ -53,10 +52,10 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   // 1. Topics
   const allTopics = await ensureDefaultTopics(topicRepo);
 
-  // 2. Global Admin
+  // 2. Admin
   const admin = await ensureUser(userRepo, {
     create: () => {
-      const u = new GlobalAdmin();
+      const u = new Admin();
       u.email = 'admin@bilsen.app';
       u.name = 'Global Administrator';
       return u;
@@ -81,22 +80,6 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     members: [coordinator],
     topics: allTopics.slice(0, 5),
   });
-
-  const localAdmin = await ensureUser(userRepo, {
-    create: () => {
-      const u = new LocalAdmin();
-      u.email = 'localadmin@cs319.bilkent.edu.tr';
-      u.name = 'CS319 Local Admin';
-      return u;
-    },
-    password: '123',
-  });
-  (localAdmin as LocalAdmin).notificationEmails = ['coordinator@cs319.bilkent.edu.tr', 'office@cs319.bilkent.edu.tr'];
-  (localAdmin as LocalAdmin).lab = lab;
-  await userRepo.save(localAdmin);
-
-  lab.localAdmin = localAdmin;
-  await labRepo.save(lab);
 
   // 5. System Policies & Templates
   await ensureDefaultPolicies(policyRepo);
@@ -144,10 +127,9 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       title: 'Test Paper for Review',
       abstractText: 'This is a test paper for development purposes.',
       creationTime: new Date(),
-      targetVenue: 'ICSE 2026',
       status: PaperStatus.HumanReview,
-      coordinators: [coordinator],
-      labs: [lab],
+      coordinators: [{ id: coordinator.id } as Coordinator],
+      labs: [{ id: lab.id } as Lab],
       authors: [],
     });
 
@@ -161,10 +143,13 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     const deadline = new Date();
     deadline.setDate(deadline.getDate() + 14);
     round = roundRepo.create({
-      paper,
+      paper: { id: paper.id } as Paper,
       roundNumber: 1,
       deadline,
       status: RoundStatus.Open,
+      targetVenue: 'ICSE 2026',
+      venueCategory: VenueCategory.Conference,
+      submissionDeadline: new Date(deadline.getTime() + 7 * 24 * 60 * 60 * 1000),
     });
     await roundRepo.save(round);
     console.log('✅ Round created');
@@ -174,8 +159,8 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   const existingAssignment = await assignRepo.findOne({ where: { round: { id: round.id }, reviewer: { id: reviewer.id } } });
   if (!existingAssignment) {
     const assignment = assignRepo.create({
-      round,
-      reviewer,
+      round: { id: round.id } as Round,
+      reviewer: { id: reviewer.id } as LabMember,
       status: AssignmentStatus.Invited,
       deadline: round.deadline,
     });

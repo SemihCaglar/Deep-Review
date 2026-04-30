@@ -32,8 +32,9 @@ This document tracks the key architectural decisions, assumptions, and constrain
 ## Security & Permissions
 
 ### 6. Admin Privileges
-- **Decision**: Admins can perform any action in any lab.
-- **Assumption**: Admins are trusted system maintainers.
+- **Decision**: Admins (`UserRole.Admin`) can perform any action in any lab and across the entire system.
+- **Note**: The former `GlobalAdmin` / `LocalAdmin` split has been removed. There is now only one admin role. See `tiered_admin_roles.md` for the full migration record.
+- **Assumption**: Admins are trusted system maintainers with no involvement in paper or review workflows.
 
 ### 7. Lab Member Permissions
 - **Decision**: Lab Members are allowed to add, remove, and "rename" (fork) topics within their own lab.

@@ -1,47 +1,81 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
-import { Round, RoundStatus } from '../entities/Round';
+import { Round, RoundStatus, VenueCategory } from '../entities/Round';
 import { Paper } from '../entities/Paper';
 import { User, UserRole } from '../entities/User';
 import { AssignmentStatus } from '../entities/Assignment';
 import { DeclineRequestStatus } from '../entities/DeclineRequest';
 import { ExtensionStatus } from '../entities/Extension';
+import { RoundService, RoundServiceError } from '../services/RoundService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class RoundController {
-  static async createReviewRound(req: Request, res: Response) {
+  static async createReviewRound(req: AuthenticatedRequest, res: Response) {
     try {
-      const { paperId, deadline, coordinatorId } = req.body;
-      if (!paperId || !deadline || !coordinatorId) {
-        return res.status(400).json({ message: 'Missing paperId, deadline, or coordinatorId' });
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
       }
-      if (isNaN(new Date(deadline).getTime())) {
+
+      const { paperId, targetVenue, venueCategory, submissionDeadline, deadline } = req.body;
+
+      if (!paperId || !targetVenue || !venueCategory) {
+        return res.status(400).json({ message: 'Missing required fields: paperId, targetVenue, venueCategory' });
+      }
+
+      if (!Object.values(VenueCategory).includes(venueCategory)) {
+        return res.status(400).json({ message: `venueCategory must be one of: ${Object.values(VenueCategory).join(', ')}` });
+      }
+
+      if (venueCategory === VenueCategory.Conference && !submissionDeadline) {
+        return res.status(400).json({ message: 'submissionDeadline is required for Conference rounds' });
+      }
+
+      if (submissionDeadline && isNaN(new Date(submissionDeadline).getTime())) {
+        return res.status(400).json({ message: 'Invalid submissionDeadline format' });
+      }
+
+      if (deadline && isNaN(new Date(deadline).getTime())) {
         return res.status(400).json({ message: 'Invalid deadline format' });
       }
 
-      const userRepo = AppDataSource.getRepository<User>('User');
-      const coordinator = await userRepo.findOne({ where: { id: coordinatorId } });
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      if (submissionDeadline && deadline) {
+        if (new Date(deadline).getTime() > new Date(submissionDeadline).getTime()) {
+          return res.status(400).json({ message: 'Round deadline cannot exceed the submission deadline' });
+        }
       }
 
       const paperRepo = AppDataSource.getRepository(Paper);
       const roundRepo = AppDataSource.getRepository(Round);
 
-      const paper = await paperRepo.findOne({ where: { id: paperId } });
-      if (!paper) {
-        return res.status(404).json({ message: 'Paper not found' });
+      const paper = await paperRepo.findOne({ where: { id: paperId }, relations: ['coordinators'] });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
+      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+
+      const activeRound = await roundRepo.findOne({
+        where: [
+          { paper: { id: paperId }, status: RoundStatus.Open },
+          { paper: { id: paperId }, status: RoundStatus.Draft },
+        ],
+      });
+      if (activeRound) {
+        return res.status(409).json({ message: 'A paper cannot have more than one active round. The current round must be Completed first.' });
       }
 
-      // Determine round number
       const existingRounds = await roundRepo.find({ where: { paper: { id: paperId } } });
-      const roundNumber = existingRounds.length + 1;
 
       const round = new Round();
       round.paper = paper;
-      round.deadline = new Date(deadline);
-      round.roundNumber = roundNumber;
-      round.status = RoundStatus.Open;
+      round.roundNumber = existingRounds.length + 1;
+      round.status = RoundStatus.Draft;
+      round.targetVenue = targetVenue;
+      round.venueCategory = venueCategory as VenueCategory;
+      round.submissionDeadline = submissionDeadline ? new Date(submissionDeadline) : null;
+      round.deadline = deadline ? new Date(deadline) : null;
+      round.startedAt = null;
+      round.completedAt = null;
 
       await roundRepo.save(round);
 
@@ -52,39 +86,64 @@ export class RoundController {
     }
   }
 
-  static async editRoundDeadline(req: Request, res: Response) {
+  static async editRoundDeadline(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
-      const { deadline, coordinatorId } = req.body;
-
-      if (!id) {
-        return res.status(400).json({ message: 'Missing round id' });
-      }
-      if (!deadline || !coordinatorId) {
-        return res.status(400).json({ message: 'Missing new deadline or coordinatorId' });
-      }
-      if (isNaN(new Date(deadline).getTime())) {
-        return res.status(400).json({ message: 'Invalid deadline format' });
-      }
-
-      const userRepo = AppDataSource.getRepository<User>('User');
-      const coordinator = await userRepo.findOne({ where: { id: coordinatorId } });
+      const coordinator = req.user;
       if (!coordinator || coordinator.role !== UserRole.Coordinator) {
         return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
       }
 
-      const roundRepo = AppDataSource.getRepository(Round);
-      const round = await roundRepo.findOne({ where: { id: id as string } });
+      const { id } = req.params;
+      const { deadline } = req.body;
 
-      if (!round) {
-        return res.status(404).json({ message: 'Round not found' });
+      if (!id) return res.status(400).json({ message: 'Missing round id' });
+      if (!deadline) return res.status(400).json({ message: 'Missing new deadline' });
+      if (isNaN(new Date(deadline).getTime())) return res.status(400).json({ message: 'Invalid deadline format' });
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.coordinators'],
+      });
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      const isOwner = round.paper.coordinators?.some(c => c.id === coordinator.id);
+      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+
+      if (round.status !== RoundStatus.Draft) {
+        return res.status(400).json({ message: 'Round deadline can only be changed while the round is in Draft status' });
       }
 
-      round.deadline = new Date(deadline);
+      const newDeadline = new Date(deadline);
+      if (round.submissionDeadline && newDeadline.getTime() > round.submissionDeadline.getTime()) {
+        return res.status(400).json({ message: 'Round deadline cannot exceed the submission deadline' });
+      }
+
+      round.deadline = newDeadline;
       await roundRepo.save(round);
 
       return res.status(200).json(round);
     } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async startRound(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { coordinatorId } = req.body;
+
+      if (!id || !coordinatorId) {
+        return res.status(400).json({ message: 'Missing round id or coordinatorId' });
+      }
+
+      const round = await RoundService.startRound(id as string, coordinatorId);
+      return res.status(200).json(round);
+    } catch (err) {
+      if (err instanceof RoundServiceError) {
+        return res.status(err.statusCode).json({ message: err.message });
+      }
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
     }
@@ -124,7 +183,7 @@ export class RoundController {
 
       for (const user of candidates) {
         // Admins and Coordinators cannot be reviewers
-        if (user.role === UserRole.GlobalAdmin || user.role === UserRole.LocalAdmin || user.role === UserRole.Coordinator) continue;
+        if (user.role === UserRole.Admin || user.role === UserRole.Coordinator) continue;
 
         // Enforce Intra-Lab boundaries
         const userLabIds = user.labs?.map(l => l.id) || [];
@@ -134,11 +193,9 @@ export class RoundController {
         // Hard COI: Author
         if (authorIds.includes(user.id)) continue;
 
-        // Already has an active (non-Cancelled) assignment in the current round
-        const hasActiveAssignment = round.assignments?.some(
-          a => a.reviewer.id === user.id && a.status !== AssignmentStatus.Cancelled
-        );
-        if (hasActiveAssignment) continue;
+        // Exclude anyone who has any assignment in this round (active or terminal)
+        const hasAnyAssignment = round.assignments?.some(a => a.reviewer.id === user.id);
+        if (hasAnyAssignment) continue;
 
         // Rule #8: Completed a review in a previous round → permanently ineligible for this paper
         let hasSubmittedPrior = false;
@@ -151,7 +208,7 @@ export class RoundController {
             if (assignment) {
               if (assignment.status === AssignmentStatus.Completed || assignment.submittedAt) {
                 hasSubmittedPrior = true;
-              } else if (assignment.status === AssignmentStatus.Accepted && !assignment.submittedAt) {
+              } else if ([AssignmentStatus.Accepted, AssignmentStatus.Overdue, AssignmentStatus.PendingExtension].includes(assignment.status) && !assignment.submittedAt) {
                 didNotSubmitPrior = true;
               }
             }
@@ -267,6 +324,7 @@ export class RoundController {
           'assignments.reviewer',
           'assignments.declineRequests',
           'assignments.extensions',
+          'assignments.reviewSummary',
         ],
         order: { roundNumber: 'ASC' },
       });
@@ -276,6 +334,11 @@ export class RoundController {
         roundNumber: round.roundNumber,
         deadline: round.deadline,
         status: round.status,
+        targetVenue: round.targetVenue,
+        venueCategory: round.venueCategory,
+        submissionDeadline: round.submissionDeadline,
+        startedAt: round.startedAt,
+        completedAt: round.completedAt,
         assignments: (round.assignments ?? []).map(a => ({
           id: a.id,
           status: a.status,
@@ -284,6 +347,7 @@ export class RoundController {
           reviewer: { id: a.reviewer.id, name: a.reviewer.name, email: a.reviewer.email },
           pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
           pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
+          reviewSummary: a.reviewSummary ? { text: a.reviewSummary.text, submittedAt: a.reviewSummary.submittedAt } : null,
         })),
       }));
 
@@ -301,11 +365,10 @@ export class RoundController {
     res.status(501).json({ message: 'Not Implemented' });
   }
   static async closeRound(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    // Rounds complete automatically when all assignment deadlines pass — no manual close needed.
+    res.status(410).json({ message: 'Rounds are completed automatically. Use POST /rounds/:id/start to start a round.' });
   }
-  static async startNextRound(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
-  }
+
   static async startAIReview(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }

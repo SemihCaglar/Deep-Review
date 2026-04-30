@@ -65,8 +65,6 @@ export class Assignment {
   @OneToOne('Rating', 'assignment', { nullable: true })
   rating: Rating;
 
-
-
   @OneToOne('ReviewerResponse', 'assignment', { nullable: true })
   response: ReviewerResponse | null;
 

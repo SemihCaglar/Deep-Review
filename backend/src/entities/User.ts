@@ -23,8 +23,7 @@ import type { Lab } from './Lab';
 export enum UserRole {
   LabMember = 'LabMember',
   Coordinator = 'Coordinator',
-  LocalAdmin = 'LocalAdmin',
-  GlobalAdmin = 'GlobalAdmin',
+  Admin = 'Admin',
 }
 
 export enum ApprovalStatus {
@@ -101,8 +100,6 @@ export abstract class User {
 
   @OneToMany('ReviewerResponse', 'reviewer')
   reviewerResponses: ReviewerResponse[];
-
-
 
   @OneToMany('BlackoutPeriod', 'member', { cascade: true })
   blackoutPeriods: BlackoutPeriod[];

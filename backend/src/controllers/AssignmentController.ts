@@ -1,12 +1,14 @@
 import { Response } from 'express';
-import { Not } from 'typeorm';
+import { In, Not } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
-import { DeclineRequestStatus } from '../entities/DeclineRequest';
-import { ExtensionStatus } from '../entities/Extension';
-import { Round } from '../entities/Round';
+import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest';
+import { Extension, ExtensionStatus } from '../entities/Extension';
+import { Round, RoundStatus } from '../entities/Round';
+import { Paper, PaperStatus } from '../entities/Paper';
 import { UserRole } from '../entities/User';
 import { sendEmail } from '../services/emailService';
+import { CoordinatorService, CoordinatorServiceError } from '../services/CoordinatorService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class AssignmentController {
@@ -45,14 +47,13 @@ export class AssignmentController {
 
         const reviewer = await userRepo.findOne({ where: { id: rId } });
         if (!reviewer) continue;
-        if (reviewer.role === UserRole.Coordinator || reviewer.role === UserRole.GlobalAdmin || reviewer.role === UserRole.LocalAdmin) continue;
+        if (reviewer.role === UserRole.Coordinator || reviewer.role === UserRole.Admin) continue;
 
-        // Skip if any active (non-Cancelled) assignment already exists for this reviewer on this round
+        // Skip if ANY assignment already exists for this reviewer on this round
         const activeExists = await assignRepo.findOne({
           where: {
             round: { id: roundId },
             reviewer: { id: rId },
-            status: Not(AssignmentStatus.Cancelled),
           },
         });
         if (activeExists) continue;
@@ -103,8 +104,11 @@ export class AssignmentController {
       const isOwner = round.paper.coordinators?.some(c => c.id === coordinator.id);
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
+      if (round.status !== RoundStatus.Open) {
+        return res.status(400).json({ message: 'Invitations can only be sent for Open rounds. Start the round first.' });
+      }
+
       const assignRepo = AppDataSource.getRepository(Assignment);
-      // Only send to Invited assignments that have not yet received an invitation email
       const pendingInvitations = await assignRepo.find({
         where: { round: { id: roundId }, status: AssignmentStatus.Invited, invitationSent: false },
         relations: ['reviewer'],
@@ -123,6 +127,14 @@ export class AssignmentController {
         await assignRepo.save(pendingInvitations);
       }
 
+      // Transition paper to HumanReview when first invitations are sent
+      const paper = round.paper;
+      if (pendingInvitations.length > 0 && paper.status !== PaperStatus.HumanReview) {
+        const paperRepo = AppDataSource.getRepository(Paper);
+        paper.status = PaperStatus.HumanReview;
+        await paperRepo.save(paper);
+      }
+
       return res.status(200).json({ message: `Invitations sent to ${pendingInvitations.length} reviewer(s)` });
     } catch (err) {
       console.error(err);
@@ -137,33 +149,183 @@ export class AssignmentController {
 
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignments = await assignRepo.find({
-        where: { reviewer: { id: user.id } },
+        where: {
+          reviewer: { id: user.id },
+          status: Not(AssignmentStatus.Cancelled),
+        },
         relations: ['round', 'round.paper', 'declineRequests', 'extensions'],
         order: { invitedAt: 'DESC' },
       });
 
-      const formatted = assignments.map(a => ({
-        id: a.id,
-        status: a.status,
-        deadline: a.deadline,
-        invitationSent: a.invitationSent,
-        round: {
-          id: a.round.id,
-          roundNumber: a.round.roundNumber,
-          deadline: a.round.deadline,
-        },
-        paper: {
-          id: a.round.paper.id,
-          title: a.round.paper.title,
-          targetVenue: a.round.paper.targetVenue,
-          abstractText: a.round.paper.abstractText,
-        },
-        pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
-        pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
-      }));
+      const detailsVisible = [
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingDecline,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.Completed,
+        AssignmentStatus.Overdue,
+      ];
+      const formatted = assignments.map(a => {
+        const resolvedDeclineRequests = (a.declineRequests ?? [])
+          .filter(d => d.status !== DeclineRequestStatus.Pending && !d.dismissedByReviewer)
+          .map(d => ({
+            id: d.id,
+            reason: d.reason,
+            status: d.status,
+            requestedAt: d.requestedAt,
+          }));
+
+        const resolvedExtensionRequests = (a.extensions ?? [])
+          .filter(e => e.status !== ExtensionStatus.Pending && !e.dismissedByReviewer)
+          .map(e => ({
+            id: e.id,
+            reason: e.reason,
+            status: e.status,
+            requestedDeadline: e.requestedDeadline,
+            approvedDeadline: e.approvedDeadline,
+            requestedAt: e.requestedAt,
+          }));
+
+        return {
+          id: a.id,
+          status: a.status,
+          deadline: a.deadline,
+          invitationSent: a.invitationSent,
+          round: {
+            id: a.round.id,
+            roundNumber: a.round.roundNumber,
+            deadline: a.round.deadline,
+            submissionDeadline: a.round.submissionDeadline ?? null,
+            targetVenue: a.round.targetVenue,
+            venueCategory: a.round.venueCategory,
+          },
+          paper: {
+            id: a.round.paper.id,
+            title: a.round.paper.title,
+            abstractText: a.round.paper.abstractText,
+            overleafLink: detailsVisible.includes(a.status) ? (a.round.paper.overleafLink ?? null) : null,
+          },
+          pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
+          pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
+          resolvedDeclineRequests,
+          resolvedExtensionRequests,
+        };
+      });
 
       return res.status(200).json(formatted);
     } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async dismissRequestDecisions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const declineRequestIds = Array.isArray(req.body?.declineRequestIds)
+        ? req.body.declineRequestIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [];
+      const extensionRequestIds = Array.isArray(req.body?.extensionRequestIds)
+        ? req.body.extensionRequestIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [];
+
+      if (declineRequestIds.length === 0 && extensionRequestIds.length === 0) {
+        return res.status(400).json({ message: 'No request decisions selected' });
+      }
+
+      const declineRepo = AppDataSource.getRepository(DeclineRequest);
+      const extensionRepo = AppDataSource.getRepository(Extension);
+      let dismissedCount = 0;
+
+      if (declineRequestIds.length > 0) {
+        const declineRequests = await declineRepo.find({
+          where: { id: In(declineRequestIds), assignment: { reviewer: { id: user.id } } },
+          relations: ['assignment', 'assignment.reviewer'],
+        });
+
+        const resolvedDeclines = declineRequests.filter(request => request.status !== DeclineRequestStatus.Pending);
+        for (const request of resolvedDeclines) {
+          request.dismissedByReviewer = true;
+        }
+        if (resolvedDeclines.length > 0) {
+          await declineRepo.save(resolvedDeclines);
+          dismissedCount += resolvedDeclines.length;
+        }
+      }
+
+      if (extensionRequestIds.length > 0) {
+        const extensionRequests = await extensionRepo.find({
+          where: { id: In(extensionRequestIds), assignment: { reviewer: { id: user.id } } },
+          relations: ['assignment', 'assignment.reviewer'],
+        });
+
+        const resolvedExtensions = extensionRequests.filter(request => request.status !== ExtensionStatus.Pending);
+        for (const request of resolvedExtensions) {
+          request.dismissedByReviewer = true;
+        }
+        if (resolvedExtensions.length > 0) {
+          await extensionRepo.save(resolvedExtensions);
+          dismissedCount += resolvedExtensions.length;
+        }
+      }
+
+      return res.status(200).json({ message: `${dismissedCount} request decision(s) removed from dashboard`, dismissedCount });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async reassignReviewer(req: AuthenticatedRequest, res: Response) {
+    try {
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      }
+
+      const oldAssignmentId = req.params.id as string;
+      const { newReviewerId } = req.body;
+
+      if (!newReviewerId) {
+        return res.status(400).json({ message: 'Missing newReviewerId' });
+      }
+
+      const assignRepo = AppDataSource.getRepository(Assignment);
+      const assignment = await assignRepo.findOne({
+        where: { id: oldAssignmentId },
+        relations: ['round', 'round.paper', 'round.paper.labs'],
+      });
+      if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+
+      const labId = assignment.round.paper.labs?.[0]?.id;
+      if (!labId) {
+        return res.status(400).json({ message: 'Paper has no lab associated' });
+      }
+
+      const newAssignment = await CoordinatorService.reassignReviewer(
+        oldAssignmentId,
+        newReviewerId,
+        { coordinatorId: coordinator.id, labId },
+      );
+
+      // Send the invite email immediately (reassign = cancel + re-invite atomically)
+      if (newAssignment.reviewer) {
+        await sendEmail(
+          newAssignment.reviewer,
+          'You have been invited to review a paper',
+          `Hello ${newAssignment.reviewer.name},\n\nYou have been invited to review a paper. Please log in to accept or decline.\n\nDeadline: ${newAssignment.deadline?.toISOString() ?? 'TBD'}`,
+        );
+        const assignRepo = AppDataSource.getRepository(Assignment);
+        await assignRepo.update(newAssignment.id, { invitationSent: true });
+        newAssignment.invitationSent = true;
+      }
+
+      return res.status(201).json(newAssignment);
+    } catch (err) {
+      if (err instanceof CoordinatorServiceError) {
+        return res.status(err.statusCode).json({ message: err.message });
+      }
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
     }
@@ -184,7 +346,7 @@ export class AssignmentController {
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
         where: { id },
-        relations: ['round', 'round.paper', 'round.paper.coordinators'],
+        relations: ['round', 'round.paper', 'round.paper.coordinators', 'declineRequests', 'extensions'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
 
@@ -192,9 +354,31 @@ export class AssignmentController {
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
       assignment.status = AssignmentStatus.Cancelled;
+      const declinedRequestsToSave = assignment.declineRequests?.filter(request => request.status === DeclineRequestStatus.Pending) ?? [];
+      declinedRequestsToSave.forEach(request => {
+        if (request.status === DeclineRequestStatus.Pending) {
+          request.status = DeclineRequestStatus.Rejected;
+        }
+      });
+      const extensionsToSave = assignment.extensions?.filter(request => request.status === ExtensionStatus.Pending) ?? [];
+      extensionsToSave.forEach(request => {
+        if (request.status === ExtensionStatus.Pending) {
+          request.status = ExtensionStatus.Rejected;
+        }
+      });
       await assignRepo.save(assignment);
+      if (declinedRequestsToSave.length > 0) {
+        await AppDataSource.getRepository(DeclineRequest).save(declinedRequestsToSave);
+      }
+      if (extensionsToSave.length > 0) {
+        await AppDataSource.getRepository(Extension).save(extensionsToSave);
+      }
 
-      return res.status(200).json({ message: 'Assignment cancelled', id: assignment.id });
+      return res.status(200).json({
+        message: 'Assignment cancelled',
+        id: assignment.id,
+        roundId: assignment.round.id,
+      });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -223,7 +407,18 @@ export class AssignmentController {
       const isOwner = assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
-      assignment.deadline = new Date(deadline);
+      const newDeadline = new Date(deadline);
+      const round = assignment.round;
+      const ceiling = round.venueCategory === 'Conference' && round.submissionDeadline
+        ? round.submissionDeadline
+        : round.deadline;
+
+      if (ceiling && newDeadline.getTime() > ceiling.getTime()) {
+        const label = round.venueCategory === 'Conference' ? 'the submission deadline' : 'the round deadline';
+        return res.status(400).json({ message: `Assignment deadline cannot exceed ${label}` });
+      }
+
+      assignment.deadline = newDeadline;
       await assignRepo.save(assignment);
 
       return res.status(200).json({ id: assignment.id, deadline: assignment.deadline });

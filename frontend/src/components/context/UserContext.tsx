@@ -78,10 +78,8 @@ function readAuthUserFromStorage(): User | null {
             id: parsedUser.id,
             name: parsedUser.name,
             email: parsedUser.email,
-            isCoordinator: parsedUser.role === 'Coordinator' || parsedUser.role === 'GlobalAdmin',
-            isAdmin: parsedUser.role === 'GlobalAdmin' || parsedUser.role === 'LocalAdmin',
-            isGlobalAdmin: parsedUser.role === 'GlobalAdmin',
-            isLocalAdmin: parsedUser.role === 'LocalAdmin',
+            isCoordinator: parsedUser.role === 'Coordinator',
+            isAdmin: parsedUser.role === 'Admin',
             labs: parsedUser.labs || [],
         };
     } catch (e) {

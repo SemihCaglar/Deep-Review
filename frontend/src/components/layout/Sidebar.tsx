@@ -18,21 +18,28 @@ export default function Sidebar() {
     };
 
     const getNavItems = () => {
+            if (user.isAdmin) {
+            return [
+                { name: 'My Dashboard', href: '/dashboard', icon: Home },
+                { name: 'My Profile', href: '/profile', icon: UserCircle2 },
+                { name: 'Admin Dashboard', href: '/admin', icon: Shield },
+            ];
+        }
+
         const base = [
             { name: 'My Dashboard', href: '/dashboard', icon: Home },
             { name: 'My Profile', href: '/profile', icon: UserCircle2 },
             { name: 'Lab Members', href: '/lab-members', icon: Users },
             ...(user.isCoordinator ? [{ name: 'Pending Approvals', href: '/pending-approvals', icon: UserCheck }] : []),
-            { name: 'My Authored Papers', href: '/papers?filter=authored', icon: FileText },
-            ...(user.isAdmin ? [{ name: 'Admin Dashboard', href: '/admin', icon: Shield }] : []),
         ];
 
         if (!user.isCoordinator) {
+            base.push({ name: 'My Authored Papers', href: '/papers?filter=authored', icon: FileText });
             base.push({ name: 'My Assigned Reviews', href: '/my-reviews', icon: CheckCircle });
+            base.push({ name: 'Register Paper', href: '/register', icon: PlusSquare });
         } else {
             base.push({ name: 'All Papers (System)', href: '/papers', icon: FileText });
             base.push({ name: 'Round Management', href: '/rounds', icon: ClipboardList });
-            base.push({ name: 'Register Paper', href: '/register', icon: PlusSquare });
         }
 
         return base;
@@ -55,7 +62,7 @@ export default function Sidebar() {
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-200 truncate">{user.name}</p>
                         <p className="text-xs text-slate-500 truncate">
-                            {user.isGlobalAdmin ? 'Global Admin' : user.isLocalAdmin ? 'Local Admin' : user.isCoordinator ? 'Coordinator' : 'Standard User'}
+                            {user.isAdmin ? 'Admin' : user.isCoordinator ? 'Coordinator' : 'Standard User'}
                         </p>
                     </div>
                 </div>

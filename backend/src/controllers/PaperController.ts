@@ -4,11 +4,11 @@ import { Paper } from '../entities/Paper';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { RoundStatus } from '../entities/Round';
 import { UserRole } from '../entities/User';
-import { LocalAdmin } from '../entities/LocalAdmin';
-import type { AuthenticatedRequest } from '../types/auth';
 import { In } from 'typeorm';
 import { PaperService } from '../services/PaperService';
 import { RegisterPaperDto } from '../dtos/PaperDto';
+import { AuthenticatedRequest } from '../types/auth';
+import { Coordinator } from '../entities/Coordinator';
 
 /** Safely extracts a single string from a query param (which Express types as string | string[]). */
 function queryString(value: unknown): string | undefined {
@@ -18,25 +18,58 @@ function queryString(value: unknown): string | undefined {
 }
 
 export class PaperController {
-  static async registerPaper(req: Request, res: Response) {
+  static async registerPaper(req: AuthenticatedRequest, res: Response) {
     try {
       const dto = req.body as RegisterPaperDto;
-      
-      // We leave authorId undefined for now until your teammate completes JWT.
-      const authorId = undefined; // e.g. req.user?.id
+      const creator = req.user;
 
-      const paper = await PaperService.registerPaper(dto, authorId);
+      if (!creator) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      if (!dto.title || !dto.abstractText || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
+        return res.status(400).json({ message: 'Missing required fields' });
+      }
+
+      const paper = await PaperService.registerPaper(dto, creator);
 
       return res.status(201).json({
         message: 'Paper successfully saved as Draft',
         paper
       });
     } catch (e: any) {
+      if (e.message && e.message.includes('invalid')) {
+        return res.status(400).json({ error: e.message });
+      }
       return res.status(500).json({ error: e.message || 'Internal Server Error' });
     }
   }
-  static async setTopics(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async getPaperById(req: Request<{ id: string }>, res: Response) {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      const paper = await PaperService.getPaperById(id);
+      if (!paper) {
+        return res.status(404).json({ message: 'Paper not found' });
+      }
+      res.status(200).json(paper);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+  static async setTopics(req: Request<{ id: string }>, res: Response) {
+    try {
+      const { id } = req.params;
+      const { topics } = req.body;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      const paper = await PaperService.updateTopics(id, topics);
+      res.status(200).json(paper);
+    } catch (e: any) {
+      if (e.message === 'Paper not found') {
+        return res.status(404).json({ message: e.message });
+      }
+      res.status(500).json({ error: e.message });
+    }
   }
   static async uploadManuscript(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
@@ -44,11 +77,33 @@ export class PaperController {
   static async linkParentPapers(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
-  static async updateAbstract(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async updateAbstract(req: Request<{ id: string }>, res: Response) {
+    try {
+      const { id } = req.params;
+      const { abstract } = req.body;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      const paper = await PaperService.updateAbstract(id, abstract);
+      res.status(200).json(paper);
+    } catch (e: any) {
+      if (e.message === 'Paper not found') {
+        return res.status(404).json({ message: e.message });
+      }
+      res.status(500).json({ error: e.message });
+    }
   }
-  static async updateTopics(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async updateTopics(req: Request<{ id: string }>, res: Response) {
+    try {
+      const { id } = req.params;
+      const { topics } = req.body;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      const paper = await PaperService.updateTopics(id, topics);
+      res.status(200).json(paper);
+    } catch (e: any) {
+      if (e.message === 'Paper not found') {
+        return res.status(404).json({ message: e.message });
+      }
+      res.status(500).json({ error: e.message });
+    }
   }
 
   /**
@@ -111,7 +166,6 @@ export class PaperController {
         id: paper.id,
         title: paper.title,
         status: paper.status,
-        targetVenue: paper.targetVenue,
         latestRound: latestRoundSummary,
       });
     } catch (e: any) {
@@ -120,12 +174,12 @@ export class PaperController {
   }
 
   /**
-   * GET /papers/:id/history?userId=<uuid>
+   * GET /papers/:id/history
    *
    * Returns the full round-by-round review history for a specific paper.
-   * Response depth: rounds + assignments (reviewer info, summary, extension, rating).
-   * Excludes checklist items and AI review reports (available via dedicated endpoints).
-   * Access: coordinator of the paper OR any of its authors.
+   * Response depth: rounds + assignments, plus optional review artifacts.
+   * Excludes reviewer ratings and review summaries from the author-facing history.
+   * Access: coordinators can view every paper; lab members can view papers they authored.
    */
   static async getPaperHistory(req: Request, res: Response) {
     try {
@@ -141,13 +195,14 @@ export class PaperController {
         where: { id: paperId },
         relations: [
           'authors',
-          'coordinator',
+          'coordinators',
           'rounds',
           'rounds.assignments',
           'rounds.assignments.reviewer',
-          'rounds.assignments.reviewSummary',
-          'rounds.assignments.extension',
-          'rounds.assignments.rating',
+          'rounds.assignments.extensions',
+          'rounds.assignments.declineRequests',
+          'rounds.checklistItems',
+          'rounds.aiReviewReports',
           'labs',
           'labs.coordinator',
         ],
@@ -155,68 +210,88 @@ export class PaperController {
 
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isExplicitCoordinator = paper.coordinators?.some(c => c.id === userId) ?? false;
-      const isLabCoordinator = paper.labs?.some(lab => lab.coordinator?.id === userId) ?? false;
       const isAuthor = paper.authors?.some(a => a.id === userId) ?? false;
-      const isReviewer =
-        paper.rounds?.some(r =>
-          r.assignments?.some(a => a.reviewer?.id === userId)
-        ) ?? false;
-
-      const isAdmin = authReq.user.role === UserRole.GlobalAdmin || authReq.user.role === UserRole.LocalAdmin;
+      const isAdmin = authReq.user.role === UserRole.Admin;
       const isCoordinator = authReq.user.role === UserRole.Coordinator;
 
-      if (!isExplicitCoordinator && !isLabCoordinator && !isAuthor && !isReviewer && !isAdmin && !isCoordinator) {
+      if (!isCoordinator && !isAuthor && !isAdmin) {
         return res.status(403).json({ message: 'Forbidden' });
       }
+
+      const latestRound = (paper.rounds ?? [])
+        .slice()
+        .sort((a, b) => b.roundNumber - a.roundNumber)[0] ?? null;
 
       const rounds = (paper.rounds ?? [])
         .slice()
         .sort((a, b) => a.roundNumber - b.roundNumber)
         .map(round => ({
+          id: round.id,
           roundNumber: round.roundNumber,
           roundStatus: round.status,
           deadline: round.deadline,
           startedAt: round.startedAt,
-          closedAt: round.closedAt,
-          assignments: (round.assignments ?? []).map(assignment => ({
+          completedAt: round.completedAt,
+          assignments: (round.assignments ?? [])
+            .slice()
+            .sort((a, b) => a.invitedAt.getTime() - b.invitedAt.getTime())
+            .map(assignment => ({
             assignmentId: assignment.id,
             reviewerId: assignment.reviewer?.id ?? null,
             reviewerName: assignment.reviewer?.name ?? null,
+            reviewerEmail: assignment.reviewer?.email ?? null,
             status: assignment.status,
             deadline: assignment.deadline,
             invitedAt: assignment.invitedAt,
             acceptedAt: assignment.acceptedAt,
             submittedAt: assignment.submittedAt,
             declineReason: assignment.declineReason,
-            summary: assignment.reviewSummary
-              ? {
-                text: assignment.reviewSummary.text,
-                submittedAt: assignment.reviewSummary.submittedAt,
-              }
-              : null,
-            extension: assignment.extensions?.[0]
-              ? {
-                requestedDeadline: assignment.extensions[0].requestedDeadline,
-                approvedDeadline: assignment.extensions[0].approvedDeadline,
-                status: assignment.extensions[0].status,
-              }
-              : null,
-            rating: assignment.rating
-              ? {
-                qualityScore: assignment.rating.qualityScore,
-                quantityScore: assignment.rating.quantityScore,
-                timeScore: assignment.rating.timeScore,
-              }
-              : null,
+            declineRequests: (assignment.declineRequests ?? [])
+              .slice()
+              .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+              .map(request => ({
+                id: request.id,
+                reason: request.reason,
+                status: request.status,
+                requestedAt: request.requestedAt,
+              })),
+            extensions: (assignment.extensions ?? [])
+              .slice()
+              .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+              .map(extension => ({
+                id: extension.id,
+                reason: extension.reason,
+                requestedDeadline: extension.requestedDeadline,
+                approvedDeadline: extension.approvedDeadline,
+                requestedAt: extension.requestedAt,
+                status: extension.status,
+              })),
           })),
+          artifacts: {
+            checklistItems: (round.checklistItems ?? []).map(item => ({
+              id: item.id,
+              description: item.description,
+              isChecked: item.isChecked,
+            })),
+            aiReviewReports: (round.aiReviewReports ?? []).map(report => ({
+              id: report.id,
+              generatedReportUrl: report.generatedReportUrl,
+              annotatedPdfUrl: report.annotatedPdfUrl,
+            })),
+          },
         }));
 
       return res.status(200).json({
         id: paper.id,
         title: paper.title,
         status: paper.status,
-        targetVenue: paper.targetVenue,
+        targetVenue: latestRound?.targetVenue ?? '',
+        overleafLink: paper.overleafLink,
+        authors: (paper.authors ?? []).map(author => ({
+          id: author.id,
+          name: author.name,
+          email: author.email,
+        })),
         rounds,
       });
     } catch (e: any) {
@@ -236,22 +311,38 @@ export class PaperController {
 
       const papers = await AppDataSource.getRepository(Paper).find({
         where: { authors: { id: authReq.user.id } },
-        relations: ['authors', 'topics', 'coordinator', 'rounds'],
+        relations: ['authors', 'topics', 'coordinators', 'rounds', 'rounds.assignments'],
       });
 
-      const result = papers.map(p => ({
-        id: p.id,
-        title: p.title,
-        status: p.status,
-        targetVenue: p.targetVenue,
-        creationTime: p.creationTime,
-        topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
-        authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name })),
-        coordinatorId: p.coordinators?.[0]?.id ?? null,
-        latestRoundNumber: p.rounds?.length
-          ? Math.max(...p.rounds.map(r => r.roundNumber))
-          : null,
-      }));
+      const result = papers.map(p => {
+        const latestRound = p.rounds?.length
+          ? p.rounds.slice().sort((a, b) => b.roundNumber - a.roundNumber)[0]
+          : null;
+
+        return {
+          id: p.id,
+          title: p.title,
+          status: p.status,
+          targetVenue: latestRound?.targetVenue ?? '',
+          abstractText: p.abstractText,
+          overleafLink: p.overleafLink,
+          creationTime: p.creationTime,
+          topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
+          authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name, email: a.email })),
+          coordinatorId: p.coordinators?.[0]?.id ?? null,
+          latestRoundNumber: latestRound?.roundNumber ?? null,
+          latestRoundStatus: latestRound?.status ?? null,
+          latestRoundDeadline: latestRound?.deadline ?? null,
+          completedAssignments: (p.rounds ?? []).reduce(
+            (count, round) => count + (round.assignments ?? []).filter(a => a.status === AssignmentStatus.Completed).length,
+            0,
+          ),
+          totalAssignments: (p.rounds ?? []).reduce(
+            (count, round) => count + (round.assignments ?? []).length,
+            0,
+          ),
+        };
+      });
 
       return res.status(200).json(result);
     } catch (e: any) {
@@ -306,7 +397,6 @@ export class PaperController {
         paperId: paper.id,
         title: paper.title,
         paperStatus: paper.status,
-        targetVenue: paper.targetVenue,
         topics: (paper.topics ?? []).map(t => ({ id: t.id, name: t.name })),
         latestAssignmentStatus: latestAssignment.status,
         latestRoundNumber: latestAssignment.round?.roundNumber ?? null,
@@ -350,7 +440,6 @@ export class PaperController {
         paperId: a.round.paper?.id ?? null,
         title: a.round.paper?.title ?? null,
         paperStatus: a.round.paper?.status ?? null,
-        targetVenue: a.round.paper?.targetVenue ?? null,
         topics: (a.round.paper?.topics ?? []).map(t => ({ id: t.id, name: t.name })),
         roundNumber: a.round.roundNumber,
         assignmentId: a.id,
@@ -382,9 +471,42 @@ export class PaperController {
         id: p.id,
         title: p.title,
         status: p.status,
-        targetVenue: p.targetVenue,
         abstractText: p.abstractText,
+        overleafLink: p.overleafLink ?? null,
       })));
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async updateOverleafLink(req: AuthenticatedRequest, res: Response) {
+    try {
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      }
+
+      const id = req.params.id as string;
+      const { overleafLink } = req.body;
+      if (typeof overleafLink !== 'string') {
+        return res.status(400).json({ message: 'overleafLink must be a string' });
+      }
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id },
+        relations: ['coordinators'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
+      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+
+      paper.overleafLink = overleafLink || null!;
+      await paperRepo.save(paper);
+
+      return res.status(200).json({ message: 'Overleaf link updated', overleafLink: paper.overleafLink ?? null });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -396,37 +518,64 @@ export class PaperController {
       const authReq = req as AuthenticatedRequest;
       if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
 
-      if (authReq.user.role === UserRole.GlobalAdmin) {
-        return res.status(403).json({ message: 'Global Admins cannot view papers' });
-      }
-
       const repo = AppDataSource.getRepository(Paper);
       let papers: Paper[];
 
-      if (authReq.user.role === UserRole.LocalAdmin) {
-        // Find papers for the lab managed by this LocalAdmin
-        const la = await AppDataSource.getRepository(LocalAdmin).findOne({ 
-          where: { id: authReq.user.id }, 
-          relations: ['lab'] 
+      if (authReq.user.role === UserRole.Admin) {
+        // Admins can see everything
+        papers = await repo.find({ relations: ['authors', 'topics'] });
+      } else if (authReq.user.role === UserRole.Coordinator) {
+        // Coordinators can see papers in their own lab
+        const coordinatorRepo = AppDataSource.getRepository(Coordinator);
+        const coordinator = await coordinatorRepo.findOne({
+          where: { id: authReq.user.id },
+          relations: ['lab']
         });
-        if (!la?.lab) return res.status(200).json([]);
+        
+        if (!coordinator?.lab) return res.status(200).json([]);
         
         papers = await repo.find({
-          where: { labs: { id: la.lab.id } },
-          relations: ['authors', 'labs']
+          where: { labs: { id: coordinator.lab.id } },
+          relations: ['authors', 'topics', 'labs']
         });
-      } else if (authReq.user.role === UserRole.Coordinator) {
-        // Already handled elsewhere or filter by lab coordinator?
-        // For now, allow all if coordinator, but ideally filter by lab.
-        papers = await repo.find({ relations: ['authors'] });
       } else {
-        // Standard users shouldn't really hit this global endpoint
         return res.status(403).json({ message: 'Access denied' });
       }
 
-      const result = papers.map(p => ({ ...p, authors: p.authors ? p.authors.map(a => a.id) : [] }));
-      res.status(200).json(result);
+      const sortedPapers = papers.map(paper => {
+        if (paper.authorOrder && paper.authors) {
+          const orderMap = new Map(paper.authorOrder.map((id, index) => [id, index]));
+          paper.authors.sort((a, b) => {
+            const orderA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999;
+            const orderB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999;
+            return orderA - orderB;
+          });
+        }
+        return {
+          ...paper,
+          authors: paper.authors?.map(a => ({ id: a.id, name: a.name, email: a.email })) || []
+        };
+      });
+
+      res.status(200).json(sortedPapers);
     } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  }
+  static async updateAuthors(req: Request<{ id: string }>, res: Response) {
+    try {
+      const { id } = req.params;
+      const { authors } = req.body;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      const paper = await PaperService.updateAuthors(id, authors);
+      res.status(200).json(paper);
+    } catch (e: any) {
+      if (e.message === 'Paper not found') {
+        return res.status(404).json({ message: e.message });
+      }
+      if (e.message && e.message.includes('invalid')) {
+        return res.status(400).json({ error: e.message });
+      }
       res.status(500).json({ error: e.message });
     }
   }

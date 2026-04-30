@@ -3,8 +3,7 @@ import { AppDataSource } from '../data-source';
 import { User, UserRole, ApprovalStatus } from '../entities/User';
 import { LabMember } from '../entities/LabMember';
 import { Coordinator } from '../entities/Coordinator';
-import { LocalAdmin } from '../entities/LocalAdmin';
-import { GlobalAdmin } from '../entities/GlobalAdmin';
+import { Admin } from '../entities/GlobalAdmin';
 import { Lab } from '../entities/Lab';
 import { AuditLog, AuditAction } from '../entities/AuditLog';
 import { SystemPolicy } from '../entities/SystemPolicy';
@@ -17,10 +16,7 @@ export class AdminController {
 
   static async getAllUsers(req: AuthenticatedRequest, res: Response) {
     const userRepo = AppDataSource.getRepository<User>('User');
-    const users = await userRepo.find({
-      order: { createdAt: 'DESC' },
-    });
-
+    const users = await userRepo.find({ order: { createdAt: 'DESC' } });
     return res.status(200).json(users);
   }
 
@@ -40,10 +36,8 @@ export class AdminController {
     let user: User;
     if (role === UserRole.Coordinator) {
       user = new Coordinator();
-    } else if (role === UserRole.GlobalAdmin) {
-      user = new GlobalAdmin();
-    } else if (role === UserRole.LocalAdmin) {
-      user = new LocalAdmin();
+    } else if (role === UserRole.Admin) {
+      user = new Admin();
     } else {
       user = new LabMember();
     }
@@ -51,7 +45,7 @@ export class AdminController {
     user.name = name.trim();
     user.email = email.trim().toLowerCase();
     user.passwordHash = await hashPassword(password);
-    user.approvalStatus = ApprovalStatus.Approved; // Admin-created users are auto-approved
+    user.approvalStatus = ApprovalStatus.Approved;
     user.approvalReviewedAt = new Date();
 
     await userRepo.save(user);
@@ -68,7 +62,7 @@ export class AdminController {
 
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    user.lockedUntil = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000); // 100 years
+    user.lockedUntil = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
     await userRepo.save(user);
 
     await AdminController.logAction(req, AuditAction.LOCK_USER, 'User', user.id);
@@ -106,102 +100,15 @@ export class AdminController {
     return res.status(200).json({ message: 'User deleted' });
   }
 
-  // ==== LOCAL ADMIN ACTIONS ====
-
-  static async getPendingLabSignups(req: AuthenticatedRequest, res: Response) {
-    if (req.user!.role !== UserRole.LocalAdmin && req.user!.role !== UserRole.GlobalAdmin) {
-      return res.status(403).json({ message: 'Forbidden' });
-    }
-
-    const userRepo = AppDataSource.getRepository(User);
-    const localAdminRepo = AppDataSource.getRepository(LocalAdmin);
-    
-    let labId: string | undefined;
-    if (req.user!.role === UserRole.LocalAdmin) {
-      const la = await localAdminRepo.findOne({ where: { id: req.user!.id }, relations: ['lab'] });
-      labId = la?.lab?.id;
-    }
-
-    const query = userRepo.createQueryBuilder('user')
-      .where('user.approvalStatus = :status', { status: ApprovalStatus.Pending })
-      .leftJoinAndSelect('user.requestedLab', 'requestedLab');
-
-    if (labId) {
-      query.andWhere('requestedLab.id = :labId', { labId });
-    }
-
-    const pending = await query.getMany();
-    return res.status(200).json(pending);
-  }
-
-  static async approveLabSignup(req: AuthenticatedRequest, res: Response) {
-    const userId = req.params.id as string;
-    const userRepo = AppDataSource.getRepository(User);
-    const user = await userRepo.findOne({ where: { id: userId }, relations: ['requestedLab', 'labs'] });
-
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // Check permissions
-    if (req.user!.role === UserRole.LocalAdmin) {
-      const la = await AppDataSource.getRepository(LocalAdmin).findOne({ where: { id: req.user!.id }, relations: ['lab'] });
-      if (!user.requestedLab || user.requestedLab.id !== la?.lab?.id) {
-        return res.status(403).json({ message: 'Forbidden' });
-      }
-    }
-
-    user.approvalStatus = ApprovalStatus.Approved;
-    user.approvalReviewedAt = new Date();
-    
-    // Add to lab members if it's a lab signup
-    if (user.requestedLab) {
-      if (!user.labs) user.labs = [];
-      user.labs.push(user.requestedLab);
-    }
-
-    await userRepo.save(user);
-    await AdminController.logAction(req, AuditAction.CREATE_USER, 'User', userId, 'Approved signup');
-
-    return res.status(200).json(user);
-  }
-
-  static async removeUserFromLab(req: AuthenticatedRequest, res: Response) {
-    const { userId, labId } = req.body ?? {};
-    const userRepo = AppDataSource.getRepository(User);
-    const labRepo = AppDataSource.getRepository(Lab);
-
-    const user = await userRepo.findOne({ where: { id: userId }, relations: ['labs'] });
-    const lab = await labRepo.findOne({ where: { id: labId } });
-
-    if (!user || !lab) return res.status(404).json({ message: 'User or Lab not found' });
-
-    // Check permissions
-    if (req.user!.role === UserRole.LocalAdmin) {
-      const la = await AppDataSource.getRepository(LocalAdmin).findOne({ where: { id: req.user!.id }, relations: ['lab'] });
-      if (lab.id !== la?.lab?.id) return res.status(403).json({ message: 'Forbidden' });
-    }
-
-    user.labs = (user.labs ?? []).filter(l => l.id !== lab.id);
-    await userRepo.save(user);
-
-    await AdminController.logAction(req, AuditAction.DELETE_USER, 'User', userId, `Removed from lab ${lab.name}`);
-
-    return res.status(200).json({ message: 'User removed from lab' });
-  }
-
   // ==== LAB MANAGEMENT ====
 
   static async getAllLabs(req: AuthenticatedRequest, res: Response) {
     const labRepo = AppDataSource.getRepository(Lab);
-    if (req.user!.role === UserRole.LocalAdmin) {
-      const la = await AppDataSource.getRepository(LocalAdmin).findOne({ where: { id: req.user!.id }, relations: ['lab'] });
-      return res.status(200).json(la?.lab ? [la.lab] : []);
-    }
-    const labs = await labRepo.find({ relations: ['coordinator', 'localAdmin'] });
+    const labs = await labRepo.find({ relations: ['coordinator'] });
     return res.status(200).json(labs);
   }
 
   static async createLab(req: AuthenticatedRequest, res: Response) {
-    if (req.user!.role !== UserRole.GlobalAdmin) return res.status(403).json({ message: 'Forbidden' });
     const { name, description } = req.body ?? {};
     if (!name) return res.status(400).json({ message: 'Lab name is required' });
 
@@ -215,7 +122,6 @@ export class AdminController {
   }
 
   static async deleteLab(req: AuthenticatedRequest, res: Response) {
-    if (req.user!.role !== UserRole.GlobalAdmin) return res.status(403).json({ message: 'Forbidden' });
     const id = req.params.id as string;
     const labRepo = AppDataSource.getRepository(Lab);
     const lab = await labRepo.findOne({ where: { id } });
@@ -227,32 +133,6 @@ export class AdminController {
     await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Lab', id, `Deleted lab: ${lab.name}`);
 
     return res.status(200).json({ message: 'Lab deleted' });
-  }
-
-  static async getNotificationEmails(req: AuthenticatedRequest, res: Response) {
-    if (req.user!.role !== UserRole.LocalAdmin) return res.status(403).json({ message: 'Only Local Admins can view their lab notifications' });
-    
-    const laRepo = AppDataSource.getRepository(LocalAdmin);
-    const la = await laRepo.findOne({ where: { id: req.user!.id } });
-    if (!la) return res.status(404).json({ message: 'Local Admin not found' });
-
-    return res.status(200).json({ emails: la.notificationEmails || [] });
-  }
-
-  static async updateNotificationEmails(req: AuthenticatedRequest, res: Response) {
-    if (req.user!.role !== UserRole.LocalAdmin) return res.status(403).json({ message: 'Only Local Admins can manage their lab notifications' });
-    
-    const { emails } = req.body ?? {};
-    if (!Array.isArray(emails)) return res.status(400).json({ message: 'emails must be an array of strings' });
-
-    const laRepo = AppDataSource.getRepository(LocalAdmin);
-    const la = await laRepo.findOne({ where: { id: req.user!.id } });
-    if (!la) return res.status(404).json({ message: 'Local Admin not found' });
-
-    la.notificationEmails = emails;
-    await laRepo.save(la);
-
-    return res.status(200).json({ message: 'Notification emails updated', emails });
   }
 
   static async assignCoordinator(req: AuthenticatedRequest, res: Response) {
@@ -281,18 +161,9 @@ export class AdminController {
 
   static async getPolicies(req: AuthenticatedRequest, res: Response) {
     const policyRepo = AppDataSource.getRepository(SystemPolicy);
-    const query = policyRepo.createQueryBuilder('policy').leftJoinAndSelect('policy.lab', 'lab');
-    
-    if (req.user!.role === UserRole.LocalAdmin) {
-      const la = await AppDataSource.getRepository(LocalAdmin).findOne({ where: { id: req.user!.id }, relations: ['lab'] });
-      if (la?.lab) {
-        query.where('lab.id = :labId', { labId: la.lab.id });
-      } else {
-        query.where('1 = 0'); // No lab assigned, return empty
-      }
-    }
-
-    const policies = await query.getMany();
+    const policies = await policyRepo.createQueryBuilder('policy')
+      .leftJoinAndSelect('policy.lab', 'lab')
+      .getMany();
     return res.status(200).json(policies);
   }
 
@@ -304,13 +175,6 @@ export class AdminController {
 
     if (!policy) return res.status(404).json({ message: 'Policy not found' });
 
-    if (req.user!.role === UserRole.LocalAdmin) {
-      const la = await AppDataSource.getRepository(LocalAdmin).findOne({ where: { id: req.user!.id }, relations: ['lab'] });
-      if (!policy.lab || policy.lab.id !== la?.lab?.id) {
-        return res.status(403).json({ message: 'Forbidden: You can only edit policies for your own lab' });
-      }
-    }
-
     policy.value = value;
     await policyRepo.save(policy);
 
@@ -321,18 +185,9 @@ export class AdminController {
 
   static async getTemplates(req: AuthenticatedRequest, res: Response) {
     const templateRepo = AppDataSource.getRepository(Template);
-    const query = templateRepo.createQueryBuilder('template').leftJoinAndSelect('template.lab', 'lab');
-
-    if (req.user!.role === UserRole.LocalAdmin) {
-      const la = await AppDataSource.getRepository(LocalAdmin).findOne({ where: { id: req.user!.id }, relations: ['lab'] });
-      if (la?.lab) {
-        query.where('lab.id = :labId', { labId: la.lab.id });
-      } else {
-        query.where('1 = 0');
-      }
-    }
-
-    const templates = await query.getMany();
+    const templates = await templateRepo.createQueryBuilder('template')
+      .leftJoinAndSelect('template.lab', 'lab')
+      .getMany();
     return res.status(200).json(templates);
   }
 
@@ -343,13 +198,6 @@ export class AdminController {
     const template = await templateRepo.findOne({ where: { id }, relations: ['lab'] });
 
     if (!template) return res.status(404).json({ message: 'Template not found' });
-
-    if (req.user!.role === UserRole.LocalAdmin) {
-      const la = await AppDataSource.getRepository(LocalAdmin).findOne({ where: { id: req.user!.id }, relations: ['lab'] });
-      if (!template.lab || template.lab.id !== la?.lab?.id) {
-        return res.status(403).json({ message: 'Forbidden: You can only edit templates for your own lab' });
-      }
-    }
 
     if (subject !== undefined) template.subject = subject;
     if (body !== undefined) template.body = body;
@@ -365,24 +213,12 @@ export class AdminController {
 
   static async getSystemLogs(req: AuthenticatedRequest, res: Response) {
     const logRepo = AppDataSource.getRepository(AuditLog);
-    
-    let labId: string | undefined;
-    if (req.user!.role === UserRole.LocalAdmin) {
-      const la = await AppDataSource.getRepository(LocalAdmin).findOne({ where: { id: req.user!.id }, relations: ['lab'] });
-      labId = la?.lab?.id;
-    }
-
-    const query = logRepo.createQueryBuilder('log')
+    const logs = await logRepo.createQueryBuilder('log')
       .leftJoinAndSelect('log.actor', 'actor')
       .leftJoinAndSelect('log.lab', 'lab')
       .orderBy('log.createdAt', 'DESC')
-      .take(200);
-
-    if (labId) {
-      query.where('lab.id = :labId', { labId });
-    }
-
-    const logs = await query.getMany();
+      .take(200)
+      .getMany();
     return res.status(200).json(logs);
   }
 
