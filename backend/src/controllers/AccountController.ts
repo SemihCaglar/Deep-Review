@@ -10,7 +10,6 @@ import { Coordinator } from '../entities/Coordinator';
 import {
   accountSecurityPolicy,
   clearLoginLockout,
-
   createPasswordResetToken,
   hashPasswordResetToken,
   hashPassword,
@@ -19,6 +18,7 @@ import {
   registerSuccessfulLogin,
   verifyPassword,
 } from '../services/accountSecurity';
+import { sendEmail } from '../services/emailService';
 import { generateAuthToken } from '../services/tokenService';
 import type { AuthenticatedRequest } from '../types/auth';
 
@@ -195,7 +195,6 @@ export class AccountController {
   }
   static async sendPasswordReset(req: Request, res: Response) {
     const { email } = req.body ?? {};
-    let rawResetToken: string | null = null;
 
     if (typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({ message: 'email is required' });
@@ -207,19 +206,49 @@ export class AccountController {
     const user = await userRepo.findOne({ where: { email: normalizedEmail } });
 
     if (user) {
-      const resetToken = createPasswordResetToken();
-      rawResetToken = resetToken;
-      const token = tokenRepo.create({
-        tokenHash: hashPasswordResetToken(resetToken),
-        expiresAt: new Date(Date.now() + accountSecurityPolicy.passwordResetTokenTtlMs),
-        usedAt: null,
-        user,
-      });
+      const frontendBaseUrl = process.env.FRONTEND_BASE_URL?.replace(/\/$/, '');
+      const emailDeliveryConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 
-      await tokenRepo.save(token);
+      if (!frontendBaseUrl) {
+        console.error('[password-reset] FRONTEND_BASE_URL is not configured; reset email was not sent.');
+      } else if (!emailDeliveryConfigured) {
+        console.error('[password-reset] SMTP is not configured; reset email was not sent.');
+      } else {
+        let savedToken: PasswordResetToken | null = null;
+
+        try {
+          const rawResetToken = createPasswordResetToken();
+          const resetLink = `${frontendBaseUrl}/reset-password?token=${rawResetToken}`;
+          const token = tokenRepo.create({
+            tokenHash: hashPasswordResetToken(rawResetToken),
+            expiresAt: new Date(Date.now() + accountSecurityPolicy.passwordResetTokenTtlMs),
+            usedAt: null,
+            user,
+          });
+          const subject = 'Reset your BILSEN password';
+          const body =
+            `Hello ${user.name},\n\n` +
+            `We received a request to reset your BILSEN password.\n\n` +
+            `Reset your password using this link:\n${resetLink}\n\n` +
+            `If you did not request this change, you can safely ignore this email.`;
+
+          savedToken = await tokenRepo.save(token);
+          await sendEmail(user, subject, body);
+        } catch (error) {
+          console.error('[password-reset] Failed to prepare or send reset email.', error);
+
+          if (savedToken) {
+            try {
+              await tokenRepo.remove(savedToken);
+            } catch (cleanupError) {
+              console.error('[password-reset] Failed to remove unsent reset token.', cleanupError);
+            }
+          }
+        }
+      }
     }
 
-    return AccountController.passwordResetRequestAccepted(res, rawResetToken);
+    return AccountController.passwordResetRequestAccepted(res);
   }
   static async resetPassword(req: Request, res: Response) {
     const { token, newPassword } = req.body ?? {};
@@ -620,17 +649,10 @@ export class AccountController {
     return res.status(401).json({ message: 'Invalid email or password' });
   }
 
-  private static passwordResetRequestAccepted(res: Response, resetToken: string | null = null) {
-    const responseBody: { message: string; resetToken?: string } = {
+  private static passwordResetRequestAccepted(res: Response) {
+    return res.status(200).json({
       message: 'If an account exists for that email, a password reset link will be sent',
-    };
-
-    if (process.env.NODE_ENV !== 'production' && resetToken) {
-      console.log(`[password-reset] Development reset token: ${resetToken}`);
-      responseBody.resetToken = resetToken;
-    }
-
-    return res.status(200).json(responseBody);
+    });
   }
 
   private static isUniqueConstraintError(error: unknown): boolean {
