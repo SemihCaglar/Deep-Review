@@ -62,6 +62,12 @@ function formatDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function todayInputValue() {
+  const today = new Date();
+  const timezoneOffsetMs = today.getTimezoneOffset() * 60 * 1000;
+  return new Date(today.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+}
+
 // ── Assignment row ────────────────────────────────────────────────────────────
 
 function AssignmentRow({
@@ -196,6 +202,7 @@ function AssignmentRow({
             type="date"
             value={newDeadline}
             onChange={e => setNewDeadline(e.target.value)}
+            min={todayInputValue()}
             max={roundDeadline ? new Date(roundDeadline).toISOString().split('T')[0] : undefined}
             className="bg-background border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
           />
@@ -271,6 +278,7 @@ function AssignmentRow({
                     type="date"
                     value={approvedDeadline}
                     onChange={e => setApprovedDeadline(e.target.value)}
+                    min={todayInputValue()}
                     max={roundDeadline ? new Date(roundDeadline).toISOString().split('T')[0] : undefined}
                     className="bg-background border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                   />
@@ -510,7 +518,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                      </div>
                   ) : (
                      <div className="flex items-center gap-2">
-                        <input type="date" value={draftDeadline} onChange={(e) => setDraftDeadline(e.target.value)} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
+                        <input type="date" value={draftDeadline} onChange={(e) => setDraftDeadline(e.target.value)} min={todayInputValue()} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
                         <button onClick={handleEditDeadline} disabled={savingDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white">Save</button>
                         <button onClick={() => setEditingDeadline(false)} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
                      </div>
@@ -889,6 +897,7 @@ export default function RoundsPage() {
                         type="date"
                         value={newRoundSubDeadline}
                         onChange={(e) => setNewRoundSubDeadline(e.target.value)}
+                        min={todayInputValue()}
                         className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
                       />
                     </div>
@@ -899,6 +908,7 @@ export default function RoundsPage() {
                      type="date"
                      value={newRoundDeadline}
                      onChange={(e) => setNewRoundDeadline(e.target.value)}
+                     min={todayInputValue()}
                      max={newRoundVenueCat === 'Conference' && newRoundSubDeadline ? newRoundSubDeadline : undefined}
                      className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
                    />

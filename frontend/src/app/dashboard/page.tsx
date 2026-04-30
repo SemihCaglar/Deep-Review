@@ -2,10 +2,12 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { AlertCircle, CheckCircle, Clock, FileText, UserCheck, type LucideIcon } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, FileText, Trash2, UserCheck, type LucideIcon } from 'lucide-react';
 import {
   ApiError,
+  dismissRequestDecisionsRequest,
   getMyCoordinatedPapersRequest,
+  getMyAssignmentsRequest,
   getPaperRoundsRequest,
   getPendingSignupsRequest,
 } from '@/lib/api';
@@ -22,6 +24,18 @@ type PendingReviewerRequest = {
   reason: string;
 };
 
+type ReviewerRequestDecision = {
+  id: string;
+  type: 'Decline' | 'Extension';
+  status: 'Approved' | 'Rejected';
+  paperTitle: string;
+  roundNumber: number;
+  reason: string;
+  requestedDeadline?: string;
+  approvedDeadline?: string | null;
+  requestedAt: string;
+};
+
 type DashboardStat = {
   label: string;
   value: string | number;
@@ -31,6 +45,11 @@ type DashboardStat = {
   href?: string;
 };
 
+function formatDate(value: string | null) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 export default function DashboardPage() {
   const { user } = useUser();
   const [pendingCount, setPendingCount] = React.useState(0);
@@ -38,6 +57,10 @@ export default function DashboardPage() {
   const [pendingError, setPendingError] = React.useState('');
   const [reviewerRequests, setReviewerRequests] = React.useState<PendingReviewerRequest[]>([]);
   const [reviewerRequestsError, setReviewerRequestsError] = React.useState('');
+  const [requestDecisions, setRequestDecisions] = React.useState<ReviewerRequestDecision[]>([]);
+  const [requestDecisionsError, setRequestDecisionsError] = React.useState('');
+  const [selectedDecisionIds, setSelectedDecisionIds] = React.useState<Set<string>>(new Set());
+  const [isDeletingDecisions, setIsDeletingDecisions] = React.useState(false);
 
   const loadPendingSignups = React.useCallback(async () => {
     if (!user.isCoordinator) {
@@ -110,10 +133,102 @@ export default function DashboardPage() {
     }
   }, [user.isCoordinator]);
 
+  const loadRequestDecisions = React.useCallback(async () => {
+    if (user.isCoordinator) {
+      return;
+    }
+
+    setRequestDecisionsError('');
+
+    try {
+      const assignments = await getMyAssignmentsRequest();
+      const decisions = assignments.flatMap(assignment => {
+        const declineDecisions = assignment.resolvedDeclineRequests.map(request => ({
+          id: request.id,
+          type: 'Decline' as const,
+          status: request.status,
+          paperTitle: assignment.paper.title,
+          roundNumber: assignment.round.roundNumber,
+          reason: request.reason,
+          requestedAt: request.requestedAt,
+        }));
+
+        const extensionDecisions = assignment.resolvedExtensionRequests.map(request => ({
+          id: request.id,
+          type: 'Extension' as const,
+          status: request.status,
+          paperTitle: assignment.paper.title,
+          roundNumber: assignment.round.roundNumber,
+          reason: request.reason,
+          requestedDeadline: request.requestedDeadline,
+          approvedDeadline: request.approvedDeadline,
+          requestedAt: request.requestedAt,
+        }));
+
+        return [...declineDecisions, ...extensionDecisions];
+      });
+
+      decisions.sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+      setRequestDecisions(decisions);
+      setSelectedDecisionIds(prev => {
+        const visibleIds = new Set(decisions.map(decision => decision.id));
+        return new Set(Array.from(prev).filter(id => visibleIds.has(id)));
+      });
+    } catch (caughtError) {
+      setRequestDecisionsError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load request decisions.');
+    }
+  }, [user.isCoordinator]);
+
+  const toggleDecisionSelection = (id: string) => {
+    setSelectedDecisionIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllDecisions = () => {
+    const visibleDecisionIds = requestDecisions.slice(0, 5).map(decision => decision.id);
+    setSelectedDecisionIds(prev => {
+      if (visibleDecisionIds.every(id => prev.has(id))) {
+        return new Set();
+      }
+      return new Set(visibleDecisionIds);
+    });
+  };
+
+  const handleDismissSelectedDecisions = async () => {
+    if (selectedDecisionIds.size === 0) {
+      return;
+    }
+
+    setIsDeletingDecisions(true);
+    setRequestDecisionsError('');
+
+    try {
+      const selectedDecisions = requestDecisions.filter(decision => selectedDecisionIds.has(decision.id));
+      const declineIds = selectedDecisions.filter(decision => decision.type === 'Decline').map(decision => decision.id);
+      const extensionIds = selectedDecisions.filter(decision => decision.type === 'Extension').map(decision => decision.id);
+
+      await dismissRequestDecisionsRequest(declineIds, extensionIds);
+      setSelectedDecisionIds(new Set());
+      await loadRequestDecisions();
+    } catch (caughtError) {
+      setRequestDecisionsError(caughtError instanceof ApiError ? caughtError.message : 'Failed to remove selected request decisions.');
+    } finally {
+      setIsDeletingDecisions(false);
+    }
+  };
+
   React.useEffect(() => {
     loadPendingSignups();
     loadReviewerRequests();
-  }, [loadPendingSignups, loadReviewerRequests]);
+    loadRequestDecisions();
+  }, [loadPendingSignups, loadReviewerRequests, loadRequestDecisions]);
 
   const stats: DashboardStat[] = user.isCoordinator
     ? [
@@ -125,6 +240,9 @@ export default function DashboardPage() {
         { label: 'Profile Access', value: 'Ready', icon: FileText, color: 'text-blue-400', bg: 'bg-blue-500/10' },
         { label: 'Review Access', value: 'Open', icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10' },
       ];
+  const visibleRequestDecisions = requestDecisions.slice(0, 5);
+  const allVisibleDecisionsSelected = visibleRequestDecisions.length > 0
+    && visibleRequestDecisions.every(decision => selectedDecisionIds.has(decision.id));
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -205,6 +323,79 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-400 mt-1">{request.reviewerName}: {request.reason}</p>
                 </div>
               ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {!user.isCoordinator && (
+        <section className="glass rounded-2xl border border-white/5 p-6">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-blue-400" />
+              Request Decisions
+            </h2>
+            <div className="flex items-center gap-3">
+              {requestDecisions.length > 0 && (
+                <>
+                  <button
+                    onClick={toggleAllDecisions}
+                    className="text-xs font-medium text-slate-400 hover:text-slate-200 transition-colors"
+                  >
+                    {allVisibleDecisionsSelected ? 'Clear selection' : 'Select all'}
+                  </button>
+                  <button
+                    onClick={handleDismissSelectedDecisions}
+                    disabled={selectedDecisionIds.size === 0 || isDeletingDecisions}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {isDeletingDecisions ? 'Removing...' : `Remove selected${selectedDecisionIds.size > 0 ? ` (${selectedDecisionIds.size})` : ''}`}
+                  </button>
+                </>
+              )}
+              <Link href="/my-reviews" className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors">
+                Open my reviews
+              </Link>
+            </div>
+          </div>
+
+          {requestDecisionsError ? (
+            <p className="text-sm text-red-400">{requestDecisionsError}</p>
+          ) : requestDecisions.length === 0 ? (
+            <p className="text-sm text-slate-500">No extension or decline request decisions yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {visibleRequestDecisions.map(decision => {
+                const isApproved = decision.status === 'Approved';
+                return (
+                  <div key={decision.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedDecisionIds.has(decision.id)}
+                          onChange={() => toggleDecisionSelection(decision.id)}
+                          aria-label={`Select ${decision.type} request decision for ${decision.paperTitle}`}
+                          className="h-4 w-4 rounded border-white/20 bg-background accent-blue-500"
+                        />
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${isApproved ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                          {decision.type} request {isApproved ? 'accepted' : 'declined'}
+                        </span>
+                        <span className="text-xs text-slate-500">Round {decision.roundNumber}</span>
+                      </div>
+                    </div>
+                    <p className="text-sm font-semibold text-white">{decision.paperTitle}</p>
+                    <p className="text-xs text-slate-400 mt-1">{decision.reason}</p>
+                    {decision.type === 'Extension' && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Requested: {formatDate(decision.requestedDeadline ?? null)}
+                        {decision.approvedDeadline ? ` · Approved: ${formatDate(decision.approvedDeadline)}` : ''}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>

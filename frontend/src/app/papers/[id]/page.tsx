@@ -8,6 +8,12 @@ import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest } from '@/lib/api';
 
+function todayInputValue() {
+    const today = new Date();
+    const timezoneOffsetMs = today.getTimezoneOffset() * 60 * 1000;
+    return new Date(today.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+}
+
 export default function PaperDetails({ params }: { params: { id: string } }) {
     const { user } = useUser();
     const [paper, setPaper] = useState<Paper | null>(null);
@@ -527,6 +533,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         type="date"
                                         value={localDeadline}
                                         onChange={(e) => setLocalDeadline(e.target.value)}
+                                        min={todayInputValue()}
                                         className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
                                     />
                                     <button
@@ -616,16 +623,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 Run AI Analysis
                             </button>
                         </>
-                    )}
-
-                    {canEditAuthors && (
-                        <button 
-                            onClick={() => setIsEditingAuthors(true)}
-                            className="w-full px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 mt-2"
-                        >
-                            <Edit className="w-4 h-4 text-slate-400" />
-                            Edit Authors & Order
-                        </button>
                     )}
 
                     {/* Reviewer Actions */}
@@ -901,7 +898,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 </div>
                             ) : (
                                 <>
-                                    {(paper.authors?.length ?? 0) > 0 ? (paper.authors ?? []).map((author: any, index: number) => {
+                                    {(paper.authors?.length ?? 0) > 0 ? (paper.authors ?? []).map((author: any) => {
                                         return (
                                             <div key={author.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
                                                 <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-semibold text-sm border border-blue-500/20 shrink-0">

@@ -372,6 +372,15 @@ export type PendingExtensionRequest = {
   requestedAt: string;
 };
 
+export type ResolvedDeclineRequest = PendingDeclineRequest & {
+  status: 'Approved' | 'Rejected';
+};
+
+export type ResolvedExtensionRequest = PendingExtensionRequest & {
+  status: 'Approved' | 'Rejected';
+  approvedDeadline: string | null;
+};
+
 export type RoundAssignment = {
   id: string;
   status: string;
@@ -405,6 +414,8 @@ export type MyAssignment = {
   paper: { id: string; title: string; abstractText: string; overleafLink: string | null };
   pendingDeclineRequest: PendingDeclineRequest | null;
   pendingExtensionRequest: PendingExtensionRequest | null;
+  resolvedDeclineRequests: ResolvedDeclineRequest[];
+  resolvedExtensionRequests: ResolvedExtensionRequest[];
 };
 
 export type SuggestedReviewer = {
@@ -416,6 +427,13 @@ export type SuggestedReviewer = {
 
 export function getMyAssignmentsRequest() {
   return apiRequest<MyAssignment[]>('/assignments/my');
+}
+
+export function dismissRequestDecisionsRequest(declineRequestIds: string[], extensionRequestIds: string[]) {
+  return apiRequest<{ message: string; dismissedCount: number }>('/assignments/my/request-decisions/dismiss', {
+    method: 'POST',
+    body: { declineRequestIds, extensionRequestIds },
+  });
 }
 
 export function respondToInvitationRequest(assignmentId: string, response: 'accept' | 'decline', reason?: string) {

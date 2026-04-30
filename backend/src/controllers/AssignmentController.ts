@@ -1,9 +1,9 @@
 import { Response } from 'express';
-import { Not } from 'typeorm';
+import { In, Not } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
-import { DeclineRequestStatus } from '../entities/DeclineRequest';
-import { ExtensionStatus } from '../entities/Extension';
+import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest';
+import { Extension, ExtensionStatus } from '../entities/Extension';
 import { Round, RoundStatus } from '../entities/Round';
 import { Paper, PaperStatus } from '../entities/Paper';
 import { UserRole } from '../entities/User';
@@ -164,30 +164,113 @@ export class AssignmentController {
         AssignmentStatus.Completed,
         AssignmentStatus.Overdue,
       ];
-      const formatted = assignments.map(a => ({
-        id: a.id,
-        status: a.status,
-        deadline: a.deadline,
-        invitationSent: a.invitationSent,
-        round: {
-          id: a.round.id,
-          roundNumber: a.round.roundNumber,
-          deadline: a.round.deadline,
-          submissionDeadline: a.round.submissionDeadline ?? null,
-          targetVenue: a.round.targetVenue,
-          venueCategory: a.round.venueCategory,
-        },
-        paper: {
-          id: a.round.paper.id,
-          title: a.round.paper.title,
-          abstractText: a.round.paper.abstractText,
-          overleafLink: detailsVisible.includes(a.status) ? (a.round.paper.overleafLink ?? null) : null,
-        },
-        pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
-        pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
-      }));
+      const formatted = assignments.map(a => {
+        const resolvedDeclineRequests = (a.declineRequests ?? [])
+          .filter(d => d.status !== DeclineRequestStatus.Pending && !d.dismissedByReviewer)
+          .map(d => ({
+            id: d.id,
+            reason: d.reason,
+            status: d.status,
+            requestedAt: d.requestedAt,
+          }));
+
+        const resolvedExtensionRequests = (a.extensions ?? [])
+          .filter(e => e.status !== ExtensionStatus.Pending && !e.dismissedByReviewer)
+          .map(e => ({
+            id: e.id,
+            reason: e.reason,
+            status: e.status,
+            requestedDeadline: e.requestedDeadline,
+            approvedDeadline: e.approvedDeadline,
+            requestedAt: e.requestedAt,
+          }));
+
+        return {
+          id: a.id,
+          status: a.status,
+          deadline: a.deadline,
+          invitationSent: a.invitationSent,
+          round: {
+            id: a.round.id,
+            roundNumber: a.round.roundNumber,
+            deadline: a.round.deadline,
+            submissionDeadline: a.round.submissionDeadline ?? null,
+            targetVenue: a.round.targetVenue,
+            venueCategory: a.round.venueCategory,
+          },
+          paper: {
+            id: a.round.paper.id,
+            title: a.round.paper.title,
+            abstractText: a.round.paper.abstractText,
+            overleafLink: detailsVisible.includes(a.status) ? (a.round.paper.overleafLink ?? null) : null,
+          },
+          pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
+          pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
+          resolvedDeclineRequests,
+          resolvedExtensionRequests,
+        };
+      });
 
       return res.status(200).json(formatted);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async dismissRequestDecisions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const declineRequestIds = Array.isArray(req.body?.declineRequestIds)
+        ? req.body.declineRequestIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [];
+      const extensionRequestIds = Array.isArray(req.body?.extensionRequestIds)
+        ? req.body.extensionRequestIds.filter((id: unknown): id is string => typeof id === 'string')
+        : [];
+
+      if (declineRequestIds.length === 0 && extensionRequestIds.length === 0) {
+        return res.status(400).json({ message: 'No request decisions selected' });
+      }
+
+      const declineRepo = AppDataSource.getRepository(DeclineRequest);
+      const extensionRepo = AppDataSource.getRepository(Extension);
+      let dismissedCount = 0;
+
+      if (declineRequestIds.length > 0) {
+        const declineRequests = await declineRepo.find({
+          where: { id: In(declineRequestIds), assignment: { reviewer: { id: user.id } } },
+          relations: ['assignment', 'assignment.reviewer'],
+        });
+
+        const resolvedDeclines = declineRequests.filter(request => request.status !== DeclineRequestStatus.Pending);
+        for (const request of resolvedDeclines) {
+          request.dismissedByReviewer = true;
+        }
+        if (resolvedDeclines.length > 0) {
+          await declineRepo.save(resolvedDeclines);
+          dismissedCount += resolvedDeclines.length;
+        }
+      }
+
+      if (extensionRequestIds.length > 0) {
+        const extensionRequests = await extensionRepo.find({
+          where: { id: In(extensionRequestIds), assignment: { reviewer: { id: user.id } } },
+          relations: ['assignment', 'assignment.reviewer'],
+        });
+
+        const resolvedExtensions = extensionRequests.filter(request => request.status !== ExtensionStatus.Pending);
+        for (const request of resolvedExtensions) {
+          request.dismissedByReviewer = true;
+        }
+        if (resolvedExtensions.length > 0) {
+          await extensionRepo.save(resolvedExtensions);
+          dismissedCount += resolvedExtensions.length;
+        }
+      }
+
+      return res.status(200).json({ message: `${dismissedCount} request decision(s) removed from dashboard`, dismissedCount });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });

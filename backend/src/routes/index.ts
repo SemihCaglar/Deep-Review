@@ -75,6 +75,7 @@ router.post('/ai/validate', AIReviewController.validateAIOutput);
 
 // ==== ASSIGNMENT ROUTES ====
 router.get('/assignments/my', authenticateRequest, AssignmentController.getMyAssignments);
+router.post('/assignments/my/request-decisions/dismiss', authenticateRequest, AssignmentController.dismissRequestDecisions);
 router.post('/assignments', authenticateRequest, AssignmentController.assignReviewers);
 router.post('/assignments/invite', authenticateRequest, AssignmentController.sendInvitations);
 router.post('/assignments/remind', authenticateRequest, AssignmentController.sendReminders);

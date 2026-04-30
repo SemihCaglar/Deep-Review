@@ -35,6 +35,18 @@ function dueLabel(deadline: string | null) {
   return `${diffDays} days left`;
 }
 
+function todayInputValue() {
+  const today = new Date();
+  const timezoneOffsetMs = today.getTimezoneOffset() * 60 * 1000;
+  return new Date(today.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+}
+
+function laterDateInputValue(a: string, b: string) {
+  if (!a) return b;
+  if (!b) return a;
+  return new Date(a).getTime() > new Date(b).getTime() ? a : b;
+}
+
 function statusColor(status: string) {
   switch (status) {
     case 'Invited':    return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
@@ -134,6 +146,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
   const assignDeadlineDate = effectiveDeadline
     ? new Date(effectiveDeadline).toISOString().split('T')[0]
     : '';
+  const minExtDate = laterDateInputValue(assignDeadlineDate, todayInputValue());
 
   // Max date for extension picker: submissionDeadline if Conference, otherwise +5 days from current deadline
   const maxExtDate = (() => {
@@ -145,6 +158,19 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
     base.setDate(base.getDate() + 5);
     return base.toISOString().split('T')[0];
   })();
+  const canWorkOnReview = ['Accepted', 'PendingExtension', 'PendingDecline', 'Overdue'].includes(assignment.status);
+  const canRequestExtension = ['Accepted', 'PendingExtension', 'Overdue'].includes(assignment.status) && !assignment.pendingDeclineRequest;
+  const declinePendingNotice = assignment.pendingDeclineRequest ? (
+    <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
+      <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+      <div>
+        <p className="text-xs font-semibold text-amber-400">Decline request sent to coordinator - pending coordinator approval</p>
+        <p className="text-xs text-slate-400 mt-0.5">Waiting for coordinator to approve or reject your request to decline.</p>
+        <p className="text-xs text-slate-500 mt-0.5">&quot;{assignment.pendingDeclineRequest.reason}&quot;</p>
+        <p className="text-xs text-slate-600 mt-1">You can submit a new request - it will replace this one.</p>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="glass rounded-2xl border border-white/5 overflow-hidden">
@@ -275,20 +301,10 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
             </div>
           )}
 
-          {/* Pending decline — waiting for coordinator */}
-          {(assignment.status === 'Invited' || assignment.status === 'PendingDecline') && assignment.pendingDeclineRequest && (
-            <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
-              <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs font-semibold text-amber-400">Decline request sent to coordinator</p>
-                <p className="text-xs text-slate-400 mt-0.5">Waiting for coordinator to approve or reject your request to decline.</p>
-                <p className="text-xs text-slate-400">&quot;{assignment.pendingDeclineRequest.reason}&quot;</p>
-              </div>
-            </div>
-          )}
+          {declinePendingNotice}
 
           {/* ── Accepted / PendingExtension / PendingDecline / Overdue actions ── */}
-          {(['Accepted', 'PendingExtension', 'PendingDecline', 'Overdue'].includes(assignment.status)) && (
+          {canWorkOnReview && (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
                 <button
@@ -298,14 +314,16 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                 >
                   <CheckCircle className="w-4 h-4" /> Submit Review
                 </button>
-                <button
-                  onClick={() => { setShowExtForm(v => !v); setShowCompleteForm(false); setShowLateDeclineForm(false); setError(''); }}
-                  disabled={busy}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 disabled:opacity-50 transition-colors"
-                >
-                  <Clock className="w-4 h-4" />
-                  {assignment.pendingExtensionRequest ? 'Update Extension Request' : 'Request Extension'}
-                </button>
+                {canRequestExtension && (
+                  <button
+                    onClick={() => { setShowExtForm(v => !v); setShowCompleteForm(false); setShowLateDeclineForm(false); setError(''); }}
+                    disabled={busy}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 disabled:opacity-50 transition-colors"
+                  >
+                    <Clock className="w-4 h-4" />
+                    {assignment.pendingExtensionRequest ? 'Update Extension Request' : 'Request Extension'}
+                  </button>
+                )}
                 <button
                   onClick={() => { setShowLateDeclineForm(v => !v); setShowCompleteForm(false); setShowExtForm(false); setError(''); }}
                   disabled={busy}
@@ -315,18 +333,6 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                   {assignment.pendingDeclineRequest ? 'Update Decline Request' : 'Request to Decline'}
                 </button>
               </div>
-
-              {/* Decline pending info */}
-              {assignment.pendingDeclineRequest && !showLateDeclineForm && (
-                <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
-                  <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs font-semibold text-amber-400">Decline request pending coordinator approval</p>
-                    <p className="text-xs text-slate-500 mt-0.5">&quot;{assignment.pendingDeclineRequest.reason}&quot;</p>
-                    <p className="text-xs text-slate-600 mt-1">You can submit a new request — it will replace this one.</p>
-                  </div>
-                </div>
-              )}
 
               {/* Extension pending info */}
               {assignment.pendingExtensionRequest && !showExtForm && (
@@ -384,7 +390,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                       type="date"
                       value={extDate}
                       onChange={e => setExtDate(e.target.value)}
-                      min={assignDeadlineDate}
+                      min={minExtDate}
                       max={maxExtDate}
                       className="bg-background border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                     />
