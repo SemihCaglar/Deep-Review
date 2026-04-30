@@ -89,6 +89,7 @@ router.get('/papers/:id/history', authenticateRequest, PaperController.getPaperH
 router.put('/papers/:id/topics', authenticateRequest, PaperController.setTopics);
 router.put('/papers/:id/topics-update', authenticateRequest, PaperController.updateTopics);
 router.put('/papers/:id/abstract', authenticateRequest, PaperController.updateAbstract);
+router.put('/papers/:id/venue', authenticateRequest, PaperController.updateTargetVenue);
 router.put('/papers/:id/authors', authenticateRequest, PaperController.updateAuthors);
 router.put('/papers/:id/status', authenticateRequest, PaperController.updatePaperStatus);
 router.post('/papers/:id/manuscript', authenticateRequest, PaperController.uploadManuscript);

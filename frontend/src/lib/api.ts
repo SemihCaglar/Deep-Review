@@ -338,6 +338,13 @@ export function updatePaperAbstractRequest(id: string, abstract: string) {
   });
 }
 
+export function updatePaperVenueRequest(id: string, targetVenue: string) {
+  return apiRequest<Paper>(`/papers/${id}/venue`, {
+    method: 'PUT',
+    body: { targetVenue },
+  });
+}
+
 export function updatePaperTopicsRequest(id: string, topics: string[]) {
   return apiRequest<Paper>(`/papers/${id}/topics-update`, {
     method: 'PUT',

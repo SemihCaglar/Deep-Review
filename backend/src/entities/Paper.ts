@@ -25,6 +25,9 @@ export class Paper {
   @Column('text')
   abstractText: string;
 
+  @Column({ nullable: true })
+  targetVenue: string;
+
   @Column()
   creationTime: Date;
 

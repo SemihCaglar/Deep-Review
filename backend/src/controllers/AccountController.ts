@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { In } from 'typeorm';
+import { In, Not } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { LabMember } from '../entities/LabMember';
 import { PasswordResetToken } from '../entities/PasswordResetToken';
@@ -365,7 +365,10 @@ export class AccountController {
 
     const userRepo = AppDataSource.getRepository<User>('User');
     const approvedUsers = await userRepo.find({
-      where: { approvalStatus: ApprovalStatus.Approved },
+      where: { 
+        approvalStatus: ApprovalStatus.Approved,
+        role: Not(UserRole.Admin)
+      },
       order: { name: 'ASC' },
     });
 

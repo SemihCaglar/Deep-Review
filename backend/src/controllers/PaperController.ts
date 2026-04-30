@@ -27,8 +27,26 @@ export class PaperController {
         return res.status(401).json({ message: 'Authentication required' });
       }
 
-      if (!dto.title || !dto.abstractText || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
-        return res.status(400).json({ message: 'Missing required fields' });
+      // Validation
+      const errors: string[] = [];
+      if (!dto.title?.trim()) errors.push('Title is required');
+      if (!dto.abstractText?.trim()) errors.push('Abstract text is required');
+      if (!dto.targetVenue?.trim()) errors.push('Target venue is required');
+      if (!dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
+        errors.push('At least one topic must be selected');
+      }
+
+      // Optional URL validation
+      const urlRegex = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
+      if (dto.overleafLink && !urlRegex.test(dto.overleafLink)) {
+        errors.push('Invalid Overleaf link format');
+      }
+      if (dto.overleafGitUrl && !urlRegex.test(dto.overleafGitUrl)) {
+        errors.push('Invalid Overleaf Git URL format');
+      }
+
+      if (errors.length > 0) {
+        return res.status(400).json({ message: 'Validation failed', errors });
       }
 
       const paper = await PaperService.registerPaper(dto, creator);
@@ -77,13 +95,73 @@ export class PaperController {
   static async linkParentPapers(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
-  static async updateAbstract(req: Request<{ id: string }>, res: Response) {
+  static async updateAbstract(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const id = req.params.id as string;
       const { abstract } = req.body;
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Unauthorized' });
+
+      if (typeof abstract !== 'string' || !abstract.trim()) {
+        return res.status(400).json({ message: 'abstract must be a non-empty string' });
+      }
+
       if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-      const paper = await PaperService.updateAbstract(id, abstract);
-      res.status(200).json(paper);
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id },
+        relations: ['authors', 'coordinators'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const isAuthor = paper.authors?.some(a => a.id === user.id);
+      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
+      const isAdmin = user.role === UserRole.Admin;
+
+      if (!isAuthor && !isCoordinator && !isAdmin) {
+        return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
+      }
+
+      const updatedPaper = await PaperService.updateAbstract(id, abstract);
+      res.status(200).json(updatedPaper);
+    } catch (e: any) {
+      if (e.message === 'Paper not found') {
+        return res.status(404).json({ message: e.message });
+      }
+      res.status(500).json({ error: e.message });
+    }
+  }
+  static async updateTargetVenue(req: AuthenticatedRequest, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const { targetVenue } = req.body;
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Unauthorized' });
+
+      if (typeof targetVenue !== 'string' || !targetVenue.trim()) {
+        return res.status(400).json({ message: 'targetVenue must be a non-empty string' });
+      }
+
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id },
+        relations: ['authors', 'coordinators'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const isAuthor = paper.authors?.some(a => a.id === user.id);
+      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
+      const isAdmin = user.role === UserRole.Admin;
+
+      if (!isAuthor && !isCoordinator && !isAdmin) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+
+      const updatedPaper = await PaperService.updateTargetVenue(id, targetVenue);
+      res.status(200).json(updatedPaper);
     } catch (e: any) {
       if (e.message === 'Paper not found') {
         return res.status(404).json({ message: e.message });
@@ -236,37 +314,37 @@ export class PaperController {
             .slice()
             .sort((a, b) => a.invitedAt.getTime() - b.invitedAt.getTime())
             .map(assignment => ({
-            assignmentId: assignment.id,
-            reviewerId: assignment.reviewer?.id ?? null,
-            reviewerName: assignment.reviewer?.name ?? null,
-            reviewerEmail: assignment.reviewer?.email ?? null,
-            status: assignment.status,
-            deadline: assignment.deadline,
-            invitedAt: assignment.invitedAt,
-            acceptedAt: assignment.acceptedAt,
-            submittedAt: assignment.submittedAt,
-            declineReason: assignment.declineReason,
-            declineRequests: (assignment.declineRequests ?? [])
-              .slice()
-              .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
-              .map(request => ({
-                id: request.id,
-                reason: request.reason,
-                status: request.status,
-                requestedAt: request.requestedAt,
-              })),
-            extensions: (assignment.extensions ?? [])
-              .slice()
-              .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
-              .map(extension => ({
-                id: extension.id,
-                reason: extension.reason,
-                requestedDeadline: extension.requestedDeadline,
-                approvedDeadline: extension.approvedDeadline,
-                requestedAt: extension.requestedAt,
-                status: extension.status,
-              })),
-          })),
+              assignmentId: assignment.id,
+              reviewerId: assignment.reviewer?.id ?? null,
+              reviewerName: assignment.reviewer?.name ?? null,
+              reviewerEmail: assignment.reviewer?.email ?? null,
+              status: assignment.status,
+              deadline: assignment.deadline,
+              invitedAt: assignment.invitedAt,
+              acceptedAt: assignment.acceptedAt,
+              submittedAt: assignment.submittedAt,
+              declineReason: assignment.declineReason,
+              declineRequests: (assignment.declineRequests ?? [])
+                .slice()
+                .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+                .map(request => ({
+                  id: request.id,
+                  reason: request.reason,
+                  status: request.status,
+                  requestedAt: request.requestedAt,
+                })),
+              extensions: (assignment.extensions ?? [])
+                .slice()
+                .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())
+                .map(extension => ({
+                  id: extension.id,
+                  reason: extension.reason,
+                  requestedDeadline: extension.requestedDeadline,
+                  approvedDeadline: extension.approvedDeadline,
+                  requestedAt: extension.requestedAt,
+                  status: extension.status,
+                })),
+            })),
           artifacts: {
             checklistItems: (round.checklistItems ?? []).map(item => ({
               id: item.id,
@@ -485,10 +563,8 @@ export class PaperController {
 
   static async updateOverleafLink(req: AuthenticatedRequest, res: Response) {
     try {
-      const coordinator = req.user;
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
-      }
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Unauthorized' });
 
       const id = req.params.id as string;
       const { overleafLink } = req.body;
@@ -499,12 +575,17 @@ export class PaperController {
       const paperRepo = AppDataSource.getRepository(Paper);
       const paper = await paperRepo.findOne({
         where: { id },
-        relations: ['coordinators'],
+        relations: ['coordinators', 'authors'],
       });
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
-      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
+      const isAuthor = paper.authors?.some(a => a.id === user.id);
+      const isAdmin = user.role === UserRole.Admin;
+
+      if (!isCoordinator && !isAuthor && !isAdmin) {
+        return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
+      }
 
       paper.overleafLink = overleafLink || null!;
       await paperRepo.save(paper);
@@ -518,10 +599,8 @@ export class PaperController {
 
   static async updateOverleafGitUrl(req: AuthenticatedRequest, res: Response) {
     try {
-      const coordinator = req.user;
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
-      }
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Unauthorized' });
 
       const id = req.params.id as string;
       const { overleafGitUrl } = req.body;
@@ -532,12 +611,17 @@ export class PaperController {
       const paperRepo = AppDataSource.getRepository(Paper);
       const paper = await paperRepo.findOne({
         where: { id },
-        relations: ['coordinators'],
+        relations: ['coordinators', 'authors'],
       });
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
-      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
+      const isAuthor = paper.authors?.some(a => a.id === user.id);
+      const isAdmin = user.role === UserRole.Admin;
+
+      if (!isCoordinator && !isAuthor && !isAdmin) {
+        return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
+      }
 
       paper.overleafGitUrl = overleafGitUrl || null!;
       await paperRepo.save(paper);
@@ -567,9 +651,9 @@ export class PaperController {
           where: { id: authReq.user.id },
           relations: ['lab']
         });
-        
+
         if (!coordinator?.lab) return res.status(200).json([]);
-        
+
         papers = await repo.find({
           where: { labs: { id: coordinator.lab.id } },
           relations: ['authors', 'topics', 'labs']
