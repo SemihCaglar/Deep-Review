@@ -1,0 +1,19 @@
+{
+  "name": "ai_content",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "test_api.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@azure/identity": "^4.13.1",
+    "axios": "^1.15.2",
+    "js-yaml": "^4.1.1",
+    "openai": "^6.35.0"
+  }
+}
