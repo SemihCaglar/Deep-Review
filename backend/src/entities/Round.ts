@@ -77,4 +77,16 @@ export class Round {
 
   @OneToMany('AIReviewReport', 'round')
   aiReviewReports: AIReviewReport[];
+
+  @Column({ type: 'simple-json', nullable: true })
+  aiReviewReport: any;
+
+  @Column({ type: 'simple-json', nullable: true })
+  complianceReport: any;
+
+  @Column({ nullable: true })
+  annotatedPdfUrl: string;
+
+  @Column({ nullable: true })
+  sourceZipUrl: string;
 }
