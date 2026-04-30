@@ -64,5 +64,4 @@ export class ReviewerResponse {
   @ManyToOne('Lab', 'reviewerResponses', { nullable: true, onDelete: 'SET NULL' })
   lab: Lab | null;
 
-
 }

@@ -368,10 +368,10 @@ export class AssignmentController {
       });
       await assignRepo.save(assignment);
       if (declinedRequestsToSave.length > 0) {
-        await AppDataSource.getRepository('DeclineRequest').save(declinedRequestsToSave);
+        await AppDataSource.getRepository(DeclineRequest).save(declinedRequestsToSave);
       }
       if (extensionsToSave.length > 0) {
-        await AppDataSource.getRepository('Extension').save(extensionsToSave);
+        await AppDataSource.getRepository(Extension).save(extensionsToSave);
       }
 
       return res.status(200).json({

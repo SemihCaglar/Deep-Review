@@ -63,9 +63,7 @@ function formatDate(d: string | null) {
 }
 
 function todayInputValue() {
-  const today = new Date();
-  const timezoneOffsetMs = today.getTimezoneOffset() * 60 * 1000;
-  return new Date(today.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+  return new Date().toISOString().split('T')[0];
 }
 
 // ── Assignment row ────────────────────────────────────────────────────────────

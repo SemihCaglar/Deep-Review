@@ -5,23 +5,29 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { ChevronRight, FileText, Search, Loader2, Clock, CheckCircle2 } from 'lucide-react';
-import { AuthoredPaper, getAllPapersRequest, getMyWrittenPapersRequest, PaperAuthor, TopicOption } from '@/lib/api';
+import { AuthoredPaper, getAllPapersRequest, getMyWrittenPapersRequest, PaperAuthor, TopicOption, Paper } from '@/lib/api';
 
 export default function PapersList() {
     const { user } = useUser();
     const searchParams = useSearchParams();
     const filter = searchParams.get('filter');
 
-    const [allPapers, setAllPapers] = useState<AuthoredPaper[]>([]);
+    const [allPapers, setAllPapers] = useState<(Paper | AuthoredPaper)[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (!user.id) {
+            setLoading(false);
+            setAllPapers([]);
+            return;
+        }
         const fetchPapers = async () => {
+            setLoading(true);
             try {
                 const data = filter === 'authored'
                     ? await getMyWrittenPapersRequest()
                     : await getAllPapersRequest();
-                setAllPapers(data as AuthoredPaper[]);
+                setAllPapers(data);
             } catch (err) {
                 console.error('Failed to fetch papers:', err);
                 setAllPapers([]);
@@ -30,23 +36,18 @@ export default function PapersList() {
             }
         };
         fetchPapers();
-    }, [filter]);
+    }, [filter, user.id]);
 
     const currentUserId = String(user.id || '');
-    const isAuthoredByCurrentUser = (paper: AuthoredPaper) =>
+    const isAuthoredByCurrentUser = (paper: Paper | AuthoredPaper) =>
         Boolean(currentUserId && paper.authors?.some((author: PaperAuthor) => author.id === currentUserId));
     const getAuthorName = (author: PaperAuthor) => author.name;
-    const getPaperAbstract = (paper: AuthoredPaper) =>
+    const getPaperAbstract = (paper: Paper | AuthoredPaper) =>
         paper.abstractText || paper.abstract || '';
 
     const getPapers = () => {
         if (filter === 'authored') {
             return allPapers.filter(isAuthoredByCurrentUser);
-        }
-        if (filter === 'reviews') {
-            // Currently displays all assignment contexts until Round relations are mapped
-            // We explicitly exclude authored papers from the reviews list
-            return allPapers.filter(p => !isAuthoredByCurrentUser(p)); 
         }
         // Default system view (only accessible via sidebar if Coordinator)
         return allPapers;
@@ -54,13 +55,11 @@ export default function PapersList() {
 
     const getTitle = () => {
         if (filter === 'authored') return 'My Authored Papers';
-        if (filter === 'reviews') return 'My Assigned Reviews';
         return 'System Papers';
     };
 
     const getSubtitle = () => {
         if (filter === 'authored') return 'Manage your submitted manuscripts.';
-        if (filter === 'reviews') return 'Papers you have been invited to review.';
         return 'Manage and assign papers across the system.';
     };
 
@@ -154,7 +153,7 @@ export default function PapersList() {
                                                 </span>
                                             ))}
                                         </div>
-                                        {filter === 'authored' && (
+                                        {filter === 'authored' && 'latestRoundNumber' in paper && (
                                             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                                                 <span className="inline-flex items-center gap-1.5">
                                                     <Clock className="w-3.5 h-3.5" />

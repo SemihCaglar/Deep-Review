@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
-import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest } from '@/lib/api';
+import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError } from '@/lib/api';
 
 function todayInputValue() {
     const today = new Date();
@@ -77,7 +77,17 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 } catch (historyErr) {
                     console.error('Failed to fetch paper history', historyErr);
                     setPaperHistory(null);
-                    setHistoryError('Paper history is not available for this account.');
+                    if (historyErr instanceof ApiError) {
+                        if (historyErr.status === 403) {
+                            setHistoryError('You do not have permission to view the history of this paper.');
+                        } else if (historyErr.status === 404) {
+                            setHistoryError('Paper history not found.');
+                        } else {
+                            setHistoryError(historyErr.message || 'Failed to load paper history.');
+                        }
+                    } else {
+                        setHistoryError('An unexpected error occurred while fetching paper history.');
+                    }
                 }
             } catch (err) {
                 console.error('Failed to fetch paper details', err);
@@ -116,7 +126,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     let backHref = '/papers';
     if (!user.isCoordinator) {
         if (myAssignment) {
-            backHref = '/papers?filter=reviews';
+            backHref = '/my-reviews';
         } else if (isAuthor) {
             backHref = '/papers?filter=authored';
         }
@@ -326,7 +336,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             </p>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2 text-xs">
-                                            <span className={`px-2.5 py-1 rounded-full border ${round.roundStatus === 'Closed' ? 'bg-slate-500/10 text-slate-400 border-slate-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                                            <span className={`px-2.5 py-1 rounded-full border ${round.roundStatus === 'Completed' ? 'bg-slate-500/10 text-slate-400 border-slate-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
                                                 {round.roundStatus}
                                             </span>
                                             <span className="px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-slate-300">
@@ -562,7 +572,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     {/* Coordinator Draft Actions */}
                     {user.isCoordinator && effectivePaperStatus === 'Draft' && (
                         <Link
-                            href={`/papers/${paper.id}/assign?mode=start-round`}
+                            href={`/rounds?paper=${paper.id}`}
                             className="w-full px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
                         >
                             <Play className="w-4 h-4" />
@@ -574,7 +584,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     {user.isCoordinator && effectivePaperStatus === 'In Review' && (
                         <>
                             <Link
-                                href={`/papers/${paper.id}/assign`}
+                                href={`/rounds?paper=${paper.id}`}
                                 className="w-full px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
                             >
                                 <UserPlus className="w-4 h-4" />

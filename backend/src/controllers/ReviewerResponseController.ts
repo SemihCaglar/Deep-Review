@@ -307,8 +307,10 @@ export class ReviewerResponseController {
         await assignRepo.save(declineRequest.assignment);
       } else {
         declineRequest.status = DeclineRequestStatus.Rejected;
-        declineRequest.assignment.status = AssignmentStatus.Accepted;
-        declineRequest.assignment.acceptedAt = declineRequest.assignment.acceptedAt ?? new Date();
+        const wasPreviouslyAccepted = declineRequest.assignment.acceptedAt != null;
+        declineRequest.assignment.status = wasPreviouslyAccepted
+          ? AssignmentStatus.Accepted
+          : AssignmentStatus.Invited;
         declineRequest.assignment.declineReason = null;
         await assignRepo.save(declineRequest.assignment);
       }

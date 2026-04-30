@@ -272,7 +272,7 @@ export type PaperHistoryRound = {
   id: string;
   roundNumber: number;
   roundStatus: string;
-  deadline: string;
+  deadline: string | null;
   startedAt: string | null;
   completedAt: string | null;
   assignments: PaperHistoryAssignment[];
@@ -288,7 +288,7 @@ export type PaperHistory = {
   status: string;
   targetVenue: string;
   overleafLink?: string | null;
-  authors: LabMember[];
+  authors: PaperAuthor[];
   rounds: PaperHistoryRound[];
 };
 
