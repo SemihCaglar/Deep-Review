@@ -1,4 +1,4 @@
-import { AIReviewService } from '../src/services/AIReviewService';
+import { AIReviewService } from '../src/ai_content/services/AIReviewService';
 
 async function runTest() {
   console.log("=== Starting System Test for AI Review Pipeline ===");
@@ -16,5 +16,6 @@ async function runTest() {
     console.error("=== Test Failed ===", error);
   }
 }
-
-runTest();
+if (require.main === module) {
+  runTest().catch(console.error);
+}

@@ -61,7 +61,15 @@ Each annotation in the array MUST have:
 
 Return ONLY the JSON. No markdown ticks.`;
       
-      const aiResponse = await AzureOpenAIClient.sendPrompt(systemPrompt, `Here is the paper content:\n${paperContent}`);
+      // Truncate paperContent to avoid hitting API limits
+      const maxContentLength = 80000;
+      let contentToSend = paperContent;
+      if (paperContent.length > maxContentLength) {
+        console.warn(`[AIReviewService] Paper content exceeds ${maxContentLength} characters, truncating.`);
+        contentToSend = paperContent.substring(0, maxContentLength) + "\n...[TRUNCATED]...";
+      }
+      
+      const aiResponse = await AzureOpenAIClient.sendPrompt(systemPrompt, `Here is the paper content:\n${contentToSend}`);
       let reviewData;
       try {
         const cleanedText = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();

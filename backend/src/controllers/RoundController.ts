@@ -413,11 +413,11 @@ export class RoundController {
       }
 
       // Execute AI Pipeline
-      const { AIReviewService } = require('../services/AIReviewService');
+      const { AIReviewService } = require('../ai_content/services/AIReviewService');
       const result = await AIReviewService.generateAIReview(round.paper.id, round.id, overleafGitUrl, coordinatorToken);
 
       // Persist results
-      round.aiReviewReport = result.aiReviewReport;
+      round.aiReviewReport = result;
       round.annotatedPdfUrl = result.annotatedPdfUrl;
       round.sourceZipUrl = result.sourceZipUrl;
       await roundRepo.save(round);
@@ -441,7 +441,7 @@ export class RoundController {
       if (!round) return res.status(404).json({ message: 'Round not found' });
       if (!round.targetVenue) return res.status(400).json({ message: 'Round has no target venue configured' });
 
-      const { AIReviewService } = require('../services/AIReviewService');
+      const { AIReviewService } = require('../ai_content/services/AIReviewService');
       const rules = await AIReviewService.getVenueRules(round.targetVenue);
 
       return res.status(200).json(rules);
@@ -467,6 +467,10 @@ export class RoundController {
       });
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      if (round.status !== 'Completed') {
+        return res.status(400).json({ message: 'Compliance check can only be run after the review round is Completed.' });
+      }
 
       // Authorization: Only Authors or Coordinators can trigger
       const isAuthor = round.paper.authors?.some(a => a.id === user.id);
@@ -494,7 +498,7 @@ export class RoundController {
         return res.status(400).json({ message: 'Missing venueRules in request body. Fetch rules first and pass them.' });
       }
 
-      const { ComplianceService } = require('../services/ComplianceService');
+      const { ComplianceService } = require('../ai_content/services/ComplianceService');
       const complianceReport = await ComplianceService.verifyCompliance(
         round.paper.id,
         overleafGitUrl,

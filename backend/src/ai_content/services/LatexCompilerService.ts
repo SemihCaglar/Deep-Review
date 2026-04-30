@@ -71,10 +71,9 @@ export class LatexCompilerService {
 
     try {
       if (engine === 'tectonic') {
-        // Tectonic is self-contained: auto-downloads missing packages on the fly.
-        // The -Z shell-escape flag supports minted/todonotes packages.
+        // Security: Avoid using -Z shell-escape for untrusted code to prevent RCE.
         await execAsync(
-          `tectonic -Z shell-escape "${mainFilename}"`,
+          `tectonic "${mainFilename}"`,
           { cwd: workDir, timeout: COMPILATION_TIMEOUT_MS }
         );
 

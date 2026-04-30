@@ -45,7 +45,7 @@ export class ComplianceService {
       throw err;
     } finally {
       // 5. Cleanup
-      OverleafGitService.cleanup(tempDir);
+      await OverleafGitService.cleanup(tempDir);
     }
   }
 

@@ -27,6 +27,9 @@ export class OverleafGitService {
     // Stub: simulate cloning delay
     await new Promise(resolve => setTimeout(resolve, 500));
     
+    // Stub: create a dummy main.tex so compilation doesn't fail
+    fs.writeFileSync(path.join(tempDir, 'main.tex'), '\\documentclass{article}\n\\begin{document}\nHello World\n\\end{document}\n');
+    
     // In actual implementation:
     // await execAsync(`git clone https://x-token-auth:${token}@${cleanUrl} ${tempDir}`);
     
@@ -85,18 +88,22 @@ export class OverleafGitService {
   /**
    * Recursively reads all .tex files in the directory.
    */
-  static readAllTexFiles(dir: string, fileList: { filename: string; content: string; fullPath: string }[] = []): { filename: string; content: string; fullPath: string }[] {
+  static readAllTexFiles(
+    dir: string, 
+    fileList: { filename: string; content: string; fullPath: string }[] = [],
+    baseDir: string = dir
+  ): { filename: string; content: string; fullPath: string }[] {
     const files = fs.readdirSync(dir);
     
     for (const file of files) {
       const fullPath = path.join(dir, file);
       if (fs.statSync(fullPath).isDirectory()) {
         if (file === '.git') continue; // Skip git dir
-        this.readAllTexFiles(fullPath, fileList);
+        this.readAllTexFiles(fullPath, fileList, baseDir);
       } else if (file.endsWith('.tex')) {
         const content = fs.readFileSync(fullPath, 'utf8');
         // We use relative path as filename so AI knows nested structures
-        const relativePath = path.relative(dir, fullPath);
+        const relativePath = path.relative(baseDir, fullPath);
         fileList.push({ filename: relativePath, content, fullPath });
       }
     }
