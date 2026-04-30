@@ -6,6 +6,7 @@ import { PasswordResetToken } from '../entities/PasswordResetToken';
 import { Topic } from '../entities/Topic';
 import { ApprovalStatus, User, UserRole } from '../entities/User';
 import { Lab } from '../entities/Lab';
+import { Coordinator } from '../entities/Coordinator';
 import {
   accountSecurityPolicy,
   clearLoginLockout,
@@ -96,7 +97,7 @@ export class AccountController {
     const normalizedEmail = email.trim().toLowerCase();
     const user = await userRepo.findOne({ 
       where: { email: normalizedEmail },
-      relations: ['labs']
+      relations: ['labs', 'lab'] as any
     });
 
     if (!user) {
@@ -270,7 +271,7 @@ export class AccountController {
     const userRepo = AppDataSource.getRepository<User>('User');
     const user = await userRepo.findOne({
       where: { id: authenticatedUser.id },
-      relations: { interests: true },
+      relations: ['interests', 'labs', 'lab'] as any,
     });
 
     if (!user) {
@@ -593,11 +594,15 @@ export class AccountController {
   }
 
   private static serializeAccount(member: User, options: { includeInterests?: boolean } = {}) {
-    const labs = member.labs || [];
-    // If it's a coordinator, we should also include their managed lab if not already there
-    // But since labs is ManyToMany and lab is OneToOne on Coordinator, 
-    // we assume the seeder/logic keeps them in sync if needed, or we just map both.
+    const labs = [...(member.labs || [])];
     
+    // If it's a coordinator, we should also include their managed lab if not already there
+    if (member.role === UserRole.Coordinator && (member as any).lab) {
+      const coordinatedLab = (member as any).lab;
+      if (!labs.find(l => l.id === coordinatedLab.id)) {
+        labs.push(coordinatedLab);
+      }
+    }
     const account = {
       id: member.id,
       name: member.name,

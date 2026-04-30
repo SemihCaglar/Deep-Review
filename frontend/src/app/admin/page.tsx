@@ -370,10 +370,6 @@ function TopicsTab({ labs }: { labs: any[] }) {
   const [loading, setLoading] = useState(false);
   const [newTopicName, setNewTopicName] = useState('');
 
-  useEffect(() => {
-    if (selectedLabId) fetchTopics();
-  }, [selectedLabId]);
-
   const fetchTopics = async () => {
     setLoading(true);
     try {
@@ -382,6 +378,10 @@ function TopicsTab({ labs }: { labs: any[] }) {
     } catch { alert('Failed to fetch topics'); }
     finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    if (selectedLabId) fetchTopics();
+  }, [selectedLabId]);
 
   const handleAdd = async () => {
     if (!newTopicName.trim()) return;
