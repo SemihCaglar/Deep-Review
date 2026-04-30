@@ -206,30 +206,45 @@ export class AccountController {
     const user = await userRepo.findOne({ where: { email: normalizedEmail } });
 
     if (user) {
-      const rawResetToken = createPasswordResetToken();
-      const token = tokenRepo.create({
-        tokenHash: hashPasswordResetToken(rawResetToken),
-        expiresAt: new Date(Date.now() + accountSecurityPolicy.passwordResetTokenTtlMs),
-        usedAt: null,
-        user,
-      });
-
-      await tokenRepo.save(token);
-
       const frontendBaseUrl = process.env.FRONTEND_BASE_URL?.replace(/\/$/, '');
+      const emailDeliveryConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 
-      if (frontendBaseUrl) {
-        const resetLink = `${frontendBaseUrl}/reset-password?token=${rawResetToken}`;
-        const subject = 'Reset your BILSEN password';
-        const body =
-          `Hello ${user.name},\n\n` +
-          `We received a request to reset your BILSEN password.\n\n` +
-          `Reset your password using this link:\n${resetLink}\n\n` +
-          `If you did not request this change, you can safely ignore this email.`;
-
-        await sendEmail(user, subject, body);
-      } else {
+      if (!frontendBaseUrl) {
         console.error('[password-reset] FRONTEND_BASE_URL is not configured; reset email was not sent.');
+      } else if (!emailDeliveryConfigured) {
+        console.error('[password-reset] SMTP is not configured; reset email was not sent.');
+      } else {
+        let savedToken: PasswordResetToken | null = null;
+
+        try {
+          const rawResetToken = createPasswordResetToken();
+          const resetLink = `${frontendBaseUrl}/reset-password?token=${rawResetToken}`;
+          const token = tokenRepo.create({
+            tokenHash: hashPasswordResetToken(rawResetToken),
+            expiresAt: new Date(Date.now() + accountSecurityPolicy.passwordResetTokenTtlMs),
+            usedAt: null,
+            user,
+          });
+          const subject = 'Reset your BILSEN password';
+          const body =
+            `Hello ${user.name},\n\n` +
+            `We received a request to reset your BILSEN password.\n\n` +
+            `Reset your password using this link:\n${resetLink}\n\n` +
+            `If you did not request this change, you can safely ignore this email.`;
+
+          savedToken = await tokenRepo.save(token);
+          await sendEmail(user, subject, body);
+        } catch (error) {
+          console.error('[password-reset] Failed to prepare or send reset email.', error);
+
+          if (savedToken) {
+            try {
+              await tokenRepo.remove(savedToken);
+            } catch (cleanupError) {
+              console.error('[password-reset] Failed to remove unsent reset token.', cleanupError);
+            }
+          }
+        }
       }
     }
 
