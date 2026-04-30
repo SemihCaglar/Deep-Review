@@ -19,7 +19,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [paper, setPaper] = useState<Paper | null>(null);
     const [loading, setLoading] = useState(true);
     const [availableTopics, setAvailableTopics] = useState<TopicOption[]>([]);
-    
+
     const [isArchiving, setIsArchiving] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
     const [showDeclineForm, setShowDeclineForm] = useState(false);
@@ -81,7 +81,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 if (activeRound) {
                     setLocalDeadline(activeRound.deadline || '');
                 }
-                
+
                 // Fetch lab members for author editing
                 const membersRes = await getLabMembersRequest();
                 setAvailableUsers(membersRes.users);
@@ -261,7 +261,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         const newAuthors = [...localAuthors];
         const targetIndex = direction === 'up' ? index - 1 : index + 1;
         if (targetIndex < 0 || targetIndex >= newAuthors.length) return;
-        
+
         [newAuthors[index], newAuthors[targetIndex]] = [newAuthors[targetIndex], newAuthors[index]];
         setLocalAuthors(newAuthors);
     };
@@ -356,10 +356,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         try {
             // Fetch venue rules first
             const venueRules = await getVenueRulesRequest(roundId);
-            
+
             // Pass them to compliance check
             await runComplianceCheckRequest(roundId, venueRules);
-            
+
             // Refresh paper history
             const historyData = await getPaperHistoryRequest(params.id);
             setPaperHistory(historyData);
@@ -516,12 +516,12 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     <div className="p-5 border-t border-white/5 bg-black/10">
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                                             <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Post-Review Phase & Artifacts</h4>
-                                            
+
                                             {/* AI Actions */}
                                             {round.roundStatus === 'Completed' && (user.isCoordinator || user.id === paper.authors?.[0]?.id || paper.authors?.some(a => a.id === user.id)) && (
                                                 <div className="flex gap-2">
                                                     <button
-                                                        onClick={() => handleRunComplianceCheck(round.id, paperHistory?.targetVenue || paper.targetVenue)}
+                                                        onClick={() => handleRunComplianceCheck(round.id, paperHistory?.targetVenue || paper.targetVenue || '')}
                                                         disabled={runningCompliance === round.id || runningAI === round.id}
                                                         className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/20 text-xs font-medium rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
                                                     >
@@ -1210,7 +1210,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 </button>
                             )}
                         </h3>
-                         <div className="space-y-4">
+                        <div className="space-y-4">
                             {isEditingAuthors ? (
                                 <div className="space-y-6">
                                     <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
@@ -1230,7 +1230,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             </button>
                                         ))}
                                     </div>
-                                    
+
                                     <div className="pt-4 border-t border-white/10 space-y-2">
                                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Order</h4>
                                         {localAuthors.map((id, index) => {
