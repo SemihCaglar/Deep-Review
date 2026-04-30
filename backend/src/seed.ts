@@ -2,8 +2,7 @@ import 'reflect-metadata';
 import { AppDataSource } from './data-source';
 import { IsNull } from 'typeorm';
 import { Coordinator } from './entities/Coordinator';
-import { LocalAdmin } from './entities/LocalAdmin';
-import { GlobalAdmin } from './entities/GlobalAdmin';
+import { Admin } from './entities/GlobalAdmin';
 import { Lab } from './entities/Lab';
 import { LabMember } from './entities/LabMember';
 import { Paper, PaperStatus } from './entities/Paper';
@@ -53,10 +52,10 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   // 1. Topics
   const allTopics = await ensureDefaultTopics(topicRepo);
 
-  // 2. Global Admin
+  // 2. Admin
   const admin = await ensureUser(userRepo, {
     create: () => {
-      const u = new GlobalAdmin();
+      const u = new Admin();
       u.email = 'admin@bilsen.app';
       u.name = 'Global Administrator';
       return u;
@@ -81,22 +80,6 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     members: [coordinator],
     topics: allTopics.slice(0, 5),
   });
-
-  const localAdmin = await ensureUser(userRepo, {
-    create: () => {
-      const u = new LocalAdmin();
-      u.email = 'localadmin@cs319.bilkent.edu.tr';
-      u.name = 'CS319 Local Admin';
-      return u;
-    },
-    password: '123',
-  });
-  (localAdmin as LocalAdmin).notificationEmails = ['coordinator@cs319.bilkent.edu.tr', 'office@cs319.bilkent.edu.tr'];
-  (localAdmin as LocalAdmin).lab = lab;
-  await userRepo.save(localAdmin);
-
-  lab.localAdmin = localAdmin;
-  await labRepo.save(lab);
 
   // 5. System Policies & Templates
   await ensureDefaultPolicies(policyRepo);

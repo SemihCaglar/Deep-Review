@@ -10,7 +10,7 @@ import { ReviewerResponseController } from '../controllers/ReviewerResponseContr
 import { RoundController } from '../controllers/RoundController';
 import { SearchController } from '../controllers/SearchController';
 import { TopicController } from '../controllers/TopicController';
-import { authenticateRequest, requireAdmin } from '../middleware/auth';
+import { authenticateRequest, requireAdmin, requireCoordinator } from '../middleware/auth';
 
 const router = Router();
 
@@ -51,13 +51,6 @@ router.get('/admin/templates', authenticateRequest, requireAdmin, AdminControlle
 router.put('/admin/templates/:id', authenticateRequest, requireAdmin, AdminController.updateTemplate);
 
 router.get('/admin/logs', authenticateRequest, requireAdmin, AdminController.getSystemLogs);
-
-// ==== LOCAL ADMIN ROUTES ====
-router.get('/admin/pending-signups', authenticateRequest, requireAdmin, AdminController.getPendingLabSignups);
-router.post('/admin/approve-signup/:id', authenticateRequest, requireAdmin, AdminController.approveLabSignup);
-router.post('/admin/remove-member', authenticateRequest, requireAdmin, AdminController.removeUserFromLab);
-router.get('/admin/notifications', authenticateRequest, requireAdmin, AdminController.getNotificationEmails);
-router.put('/admin/notifications', authenticateRequest, requireAdmin, AdminController.updateNotificationEmails);
 
 // ==== LAB-SPECIFIC TOPIC ROUTES ====
 router.get('/labs/:labId/topics', authenticateRequest, TopicController.getLabTopics);
@@ -105,8 +98,8 @@ router.get('/papers/all', authenticateRequest, PaperController.getAllPapers);
 
 // ==== RATING ANALYTICS ROUTES ====
 router.post('/ratings', authenticateRequest, RatingAnalyticsController.rateReviewer);
-router.get('/ratings/overall', RatingAnalyticsController.getOverallAnalytics);
-router.get('/ratings/user/:id', RatingAnalyticsController.getUserAnalytics);
+router.get('/ratings/overall', authenticateRequest, requireCoordinator, RatingAnalyticsController.getOverallAnalytics);
+router.get('/ratings/user/:id', authenticateRequest, requireCoordinator, RatingAnalyticsController.getUserAnalytics);
 
 // ==== REVIEWER RESPONSE ROUTES ====
 router.patch('/responses/:id/accept', authenticateRequest, ReviewerResponseController.acceptInvitation);

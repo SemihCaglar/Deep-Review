@@ -4,7 +4,6 @@ import { Paper } from '../entities/Paper';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { RoundStatus } from '../entities/Round';
 import { UserRole } from '../entities/User';
-import { LocalAdmin } from '../entities/LocalAdmin';
 import { In } from 'typeorm';
 import { PaperService } from '../services/PaperService';
 import { RegisterPaperDto } from '../dtos/PaperDto';
@@ -215,7 +214,7 @@ export class PaperController {
           r.assignments?.some(a => a.reviewer?.id === userId)
         ) ?? false;
 
-      const isAdmin = authReq.user.role === UserRole.GlobalAdmin || authReq.user.role === UserRole.LocalAdmin;
+      const isAdmin = authReq.user.role === UserRole.Admin;
       const isCoordinator = authReq.user.role === UserRole.Coordinator;
 
       if (!isExplicitCoordinator && !isLabCoordinator && !isAuthor && !isReviewer && !isAdmin && !isCoordinator) {
@@ -448,26 +447,14 @@ export class PaperController {
       const authReq = req as AuthenticatedRequest;
       if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
 
-      if (authReq.user.role === UserRole.GlobalAdmin) {
-        return res.status(403).json({ message: 'Global Admins cannot view papers' });
+      if (authReq.user.role === UserRole.Admin) {
+        return res.status(403).json({ message: 'Admins cannot view papers' });
       }
 
       const repo = AppDataSource.getRepository(Paper);
       let papers: Paper[];
 
-      if (authReq.user.role === UserRole.LocalAdmin) {
-        // Find papers for the lab managed by this LocalAdmin
-        const la = await AppDataSource.getRepository(LocalAdmin).findOne({ 
-          where: { id: authReq.user.id }, 
-          relations: ['lab'] 
-        });
-        if (!la?.lab) return res.status(200).json([]);
-        
-        papers = await repo.find({
-          where: { labs: { id: la.lab.id } },
-          relations: ['authors', 'labs']
-        });
-      } else if (authReq.user.role === UserRole.Coordinator) {
+      if (authReq.user.role === UserRole.Coordinator) {
         // Already handled elsewhere or filter by lab coordinator?
         // For now, allow all if coordinator, but ideally filter by lab.
         papers = await repo.find({ relations: ['authors'] });

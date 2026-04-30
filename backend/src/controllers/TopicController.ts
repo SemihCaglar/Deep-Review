@@ -4,7 +4,6 @@ import { AppDataSource } from '../data-source';
 import { Topic } from '../entities/Topic';
 import { Lab } from '../entities/Lab';
 import { UserRole, User } from '../entities/User';
-import { LocalAdmin } from '../entities/LocalAdmin';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class TopicController {
@@ -127,12 +126,8 @@ export class TopicController {
   }
 
   private static async checkLabAccess(userId: string, labId: string, role: string): Promise<boolean> {
-    if (role === UserRole.GlobalAdmin) return false;
-    if (role === UserRole.LocalAdmin) {
-      const la = await AppDataSource.getRepository(LocalAdmin).findOne({ where: { id: userId }, relations: ['lab'] });
-      return la?.lab?.id === labId;
-    }
-    
+    if (role === UserRole.Admin) return true;
+
     // Check if user is member/coordinator of this lab
     const labRepo = AppDataSource.getRepository(Lab);
     const lab = await labRepo.findOne({

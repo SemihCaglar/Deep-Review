@@ -23,10 +23,6 @@ export class Lab {
   @JoinColumn()
   coordinator: Coordinator;
 
-  @OneToOne('LocalAdmin', 'lab')
-  @JoinColumn()
-  localAdmin: any; // Using any to avoid circular import issues if needed, or typed properly
-
   @ManyToMany('Paper', 'labs')
   @JoinTable()
   papers: Paper[];

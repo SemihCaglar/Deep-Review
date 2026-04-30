@@ -48,8 +48,20 @@ export function requireAdmin(
   res: Response,
   next: NextFunction,
 ) {
-  if (!req.user || (req.user.role !== UserRole.GlobalAdmin && req.user.role !== UserRole.LocalAdmin)) {
+  if (!req.user || req.user.role !== UserRole.Admin) {
     return res.status(403).json({ message: 'Admin access required' });
+  }
+
+  return next();
+}
+
+export function requireCoordinator(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!req.user || req.user.role !== UserRole.Coordinator) {
+    return res.status(403).json({ message: 'Coordinator access required' });
   }
 
   return next();
