@@ -7,6 +7,12 @@ import { useUser } from '@/components/context/UserContext';
 import { MOCK_PAPERS, MOCK_USERS } from '@/lib/mockData';
 import { ArrowLeft, Search, UserPlus, FileCheck, CalendarIcon, Play } from 'lucide-react';
 
+function todayInputValue() {
+    const today = new Date();
+    const timezoneOffsetMs = today.getTimezoneOffset() * 60 * 1000;
+    return new Date(today.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+}
+
 export default function AssignReviewers({ params }: { params: { id: string } }) {
     const { user } = useUser();
     const router = useRouter();
@@ -89,6 +95,7 @@ export default function AssignReviewers({ params }: { params: { id: string } }) 
                                 required
                                 value={deadline}
                                 onChange={(e) => setDeadline(e.target.value)}
+                                min={todayInputValue()}
                                 className="w-full max-w-sm bg-background/50 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all font-mono"
                             />
                         </div>

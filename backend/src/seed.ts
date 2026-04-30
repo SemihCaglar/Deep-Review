@@ -145,8 +145,8 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       abstractText: 'This is a test paper for development purposes.',
       creationTime: new Date(),
       status: PaperStatus.HumanReview,
-      coordinators: [coordinator],
-      labs: [lab],
+      coordinators: [{ id: coordinator.id } as Coordinator],
+      labs: [{ id: lab.id } as Lab],
       authors: [],
     });
 
@@ -160,7 +160,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     const deadline = new Date();
     deadline.setDate(deadline.getDate() + 14);
     round = roundRepo.create({
-      paper,
+      paper: { id: paper.id } as Paper,
       roundNumber: 1,
       deadline,
       status: RoundStatus.Open,
@@ -176,8 +176,8 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   const existingAssignment = await assignRepo.findOne({ where: { round: { id: round.id }, reviewer: { id: reviewer.id } } });
   if (!existingAssignment) {
     const assignment = assignRepo.create({
-      round,
-      reviewer,
+      round: { id: round.id } as Round,
+      reviewer: { id: reviewer.id } as LabMember,
       status: AssignmentStatus.Invited,
       deadline: round.deadline,
     });

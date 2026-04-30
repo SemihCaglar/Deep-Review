@@ -31,6 +31,9 @@ export class Extension {
   })
   status: ExtensionStatus;
 
+  @Column({ default: false })
+  dismissedByReviewer: boolean;
+
   @ManyToOne(() => Assignment, assignment => assignment.extensions, { nullable: false, onDelete: 'CASCADE' })
   assignment: Assignment;
 }

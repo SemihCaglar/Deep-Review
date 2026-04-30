@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import {
   CoordinatedPaper,
@@ -33,6 +34,8 @@ function statusColor(status: string) {
     case 'Open':       return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
     case 'Invited':    return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
     case 'Accepted':   return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    case 'PendingDecline': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+    case 'PendingExtension': return 'bg-sky-500/10 text-sky-400 border-sky-500/20';
     case 'Declined':   return 'bg-red-500/10 text-red-400 border-red-500/20';
     case 'Completed':  return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
     case 'Cancelled':  return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
@@ -45,7 +48,11 @@ function statusColor(status: string) {
 function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${statusColor(status)}`}>
-      {status}
+      {status === 'PendingDecline'
+        ? 'Decline Requested'
+        : status === 'PendingExtension'
+          ? 'Extension Requested'
+          : status}
     </span>
   );
 }
@@ -53,6 +60,10 @@ function StatusBadge({ status }: { status: string }) {
 function formatDate(d: string | null) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function todayInputValue() {
+  return new Date().toISOString().split('T')[0];
 }
 
 // ── Assignment row ────────────────────────────────────────────────────────────
@@ -137,7 +148,7 @@ function AssignmentRow({
           {assignment.invitationSent && (
             <div className="flex items-center gap-1 text-xs text-emerald-500">
               <Mail className="w-3.5 h-3.5" />
-              Invited
+              Invitation sent
             </div>
           )}
         </div>
@@ -189,6 +200,7 @@ function AssignmentRow({
             type="date"
             value={newDeadline}
             onChange={e => setNewDeadline(e.target.value)}
+            min={todayInputValue()}
             max={roundDeadline ? new Date(roundDeadline).toISOString().split('T')[0] : undefined}
             className="bg-background border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
           />
@@ -264,6 +276,7 @@ function AssignmentRow({
                     type="date"
                     value={approvedDeadline}
                     onChange={e => setApprovedDeadline(e.target.value)}
+                    min={todayInputValue()}
                     max={roundDeadline ? new Date(roundDeadline).toISOString().split('T')[0] : undefined}
                     className="bg-background border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                   />
@@ -503,7 +516,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                      </div>
                   ) : (
                      <div className="flex items-center gap-2">
-                        <input type="date" value={draftDeadline} onChange={(e) => setDraftDeadline(e.target.value)} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
+                        <input type="date" value={draftDeadline} onChange={(e) => setDraftDeadline(e.target.value)} min={todayInputValue()} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
                         <button onClick={handleEditDeadline} disabled={savingDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white">Save</button>
                         <button onClick={() => setEditingDeadline(false)} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
                      </div>
@@ -619,6 +632,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
 
 export default function RoundsPage() {
   const { user } = useUser();
+  const searchParams = useSearchParams();
   const [papers, setPapers] = useState<CoordinatedPaper[]>([]);
   const [selectedPaperId, setSelectedPaperId] = useState<string | null>(null);
   const [rounds, setRounds] = useState<RoundWithAssignments[]>([]);
@@ -667,6 +681,16 @@ export default function RoundsPage() {
     setOverleafError('');
     loadRounds(paperId);
   };
+
+  useEffect(() => {
+    const paperId = searchParams.get('paper');
+    if (!paperId || loadingPapers || selectedPaperId === paperId) return;
+    if (!papers.some(paper => paper.id === paperId)) return;
+
+    setSelectedPaperId(paperId);
+    setRounds([]);
+    loadRounds(paperId);
+  }, [loadRounds, loadingPapers, papers, searchParams, selectedPaperId]);
 
   const handleSaveOverleaf = async () => {
     if (!selectedPaperId) return;
@@ -871,6 +895,7 @@ export default function RoundsPage() {
                         type="date"
                         value={newRoundSubDeadline}
                         onChange={(e) => setNewRoundSubDeadline(e.target.value)}
+                        min={todayInputValue()}
                         className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
                       />
                     </div>
@@ -881,6 +906,7 @@ export default function RoundsPage() {
                      type="date"
                      value={newRoundDeadline}
                      onChange={(e) => setNewRoundDeadline(e.target.value)}
+                     min={todayInputValue()}
                      max={newRoundVenueCat === 'Conference' && newRoundSubDeadline ? newRoundSubDeadline : undefined}
                      className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
                    />

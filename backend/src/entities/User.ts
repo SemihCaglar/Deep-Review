@@ -102,8 +102,6 @@ export abstract class User {
   @OneToMany('ReviewerResponse', 'reviewer')
   reviewerResponses: ReviewerResponse[];
 
-
-
   @OneToMany('BlackoutPeriod', 'member', { cascade: true })
   blackoutPeriods: BlackoutPeriod[];
 

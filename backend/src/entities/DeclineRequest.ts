@@ -22,6 +22,9 @@ export class DeclineRequest {
   })
   status: DeclineRequestStatus;
 
+  @Column({ default: false })
+  dismissedByReviewer: boolean;
+
   @CreateDateColumn({ type: 'datetime' })
   requestedAt: Date;
 

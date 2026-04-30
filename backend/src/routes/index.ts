@@ -75,6 +75,7 @@ router.post('/ai/validate', AIReviewController.validateAIOutput);
 
 // ==== ASSIGNMENT ROUTES ====
 router.get('/assignments/my', authenticateRequest, AssignmentController.getMyAssignments);
+router.post('/assignments/my/request-decisions/dismiss', authenticateRequest, AssignmentController.dismissRequestDecisions);
 router.post('/assignments', authenticateRequest, AssignmentController.assignReviewers);
 router.post('/assignments/invite', authenticateRequest, AssignmentController.sendInvitations);
 router.post('/assignments/remind', authenticateRequest, AssignmentController.sendReminders);
@@ -86,6 +87,10 @@ router.patch('/assignments/:id/process-extension', authenticateRequest, Coordina
 
 // ==== PAPER ROUTES ====
 router.get('/papers/my-coordinated', authenticateRequest, PaperController.getMyCoordinatedPapers);
+router.get('/papers/my-written', authenticateRequest, PaperController.getMyWrittenPapers);
+router.get('/papers/my-reviewed', authenticateRequest, PaperController.getMyReviewedPapers);
+router.get('/papers/my-current-reviewed', authenticateRequest, PaperController.getMyCurrentReviewedPapers);
+router.get('/papers/all', authenticateRequest, PaperController.getAllPapers);
 router.post('/papers', authenticateRequest, PaperController.registerPaper);
 
 router.get('/papers/:id', authenticateRequest, PaperController.getPaperById);
@@ -99,11 +104,6 @@ router.put('/papers/:id/authors', authenticateRequest, PaperController.updateAut
 router.put('/papers/:id/status', authenticateRequest, PaperController.updatePaperStatus);
 router.post('/papers/:id/manuscript', authenticateRequest, PaperController.uploadManuscript);
 router.post('/papers/:id/parents', authenticateRequest, PaperController.linkParentPapers);
-
-router.get('/papers/my-written', authenticateRequest, PaperController.getMyWrittenPapers);
-router.get('/papers/my-reviewed', authenticateRequest, PaperController.getMyReviewedPapers);
-router.get('/papers/my-current-reviewed', authenticateRequest, PaperController.getMyCurrentReviewedPapers);
-router.get('/papers/all', authenticateRequest, PaperController.getAllPapers);
 
 // ==== RATING ANALYTICS ROUTES ====
 router.post('/ratings', authenticateRequest, RatingAnalyticsController.rateReviewer);

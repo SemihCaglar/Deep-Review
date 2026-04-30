@@ -26,7 +26,7 @@ export class ReviewerResponseController {
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
         where: { id: assignmentId },
-        relations: ['reviewer'],
+        relations: ['reviewer', 'declineRequests'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
@@ -45,7 +45,12 @@ export class ReviewerResponseController {
 
       if (!reason) return res.status(400).json({ message: 'reason is required when declining' });
       const declineRepo = AppDataSource.getRepository(DeclineRequest);
-      const declineRequest = declineRepo.create({ assignment, reason, status: DeclineRequestStatus.Pending });
+      const existingPending = assignment.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending);
+      const declineRequest = existingPending ?? declineRepo.create({ assignment, status: DeclineRequestStatus.Pending });
+      declineRequest.reason = reason;
+      assignment.status = AssignmentStatus.PendingDecline;
+      assignment.declineReason = reason;
+      await assignRepo.save(assignment);
       await declineRepo.save(declineRequest);
 
       return res.status(201).json({
@@ -133,9 +138,10 @@ export class ReviewerResponseController {
         );
         if (assignment.status !== AssignmentStatus.PendingDecline) {
           assignment.status = AssignmentStatus.PendingDecline;
-          await assignRepo.save(assignment);
         }
       }
+      assignment.declineReason = reason;
+      await assignRepo.save(assignment);
 
       return res.status(isUpdate ? 200 : 201).json({
         message: isUpdate ? 'Decline request updated' : 'Decline request submitted and awaiting coordinator approval',
@@ -207,6 +213,11 @@ export class ReviewerResponseController {
       const pendingExtension = await extensionRepo.findOne({
         where: { assignment: { id: assignmentId }, status: ExtensionStatus.Pending },
       });
+      const canCreateRequest = assignment.status === AssignmentStatus.Accepted || assignment.status === AssignmentStatus.PendingDecline;
+      const canUpdatePendingRequest = [AssignmentStatus.PendingExtension, AssignmentStatus.PendingDecline].includes(assignment.status) && !!pendingExtension;
+      if (!canCreateRequest && !canUpdatePendingRequest) {
+        return res.status(400).json({ message: 'Assignment must be in Accepted, PendingExtension, or PendingDecline status to request an extension' });
+      }
 
       let extension: Extension;
       let isUpdate = false;
@@ -296,6 +307,12 @@ export class ReviewerResponseController {
         await assignRepo.save(declineRequest.assignment);
       } else {
         declineRequest.status = DeclineRequestStatus.Rejected;
+        const wasPreviouslyAccepted = declineRequest.assignment.acceptedAt != null;
+        declineRequest.assignment.status = wasPreviouslyAccepted
+          ? AssignmentStatus.Accepted
+          : AssignmentStatus.Invited;
+        declineRequest.assignment.declineReason = null;
+        await assignRepo.save(declineRequest.assignment);
       }
 
       await declineRepo.save(declineRequest);

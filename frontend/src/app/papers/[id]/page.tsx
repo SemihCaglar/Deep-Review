@@ -6,16 +6,21 @@ import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
-import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, TopicOption, getLabMembersRequest } from '@/lib/api';
+import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError } from '@/lib/api';
+
+function todayInputValue() {
+    const today = new Date();
+    const timezoneOffsetMs = today.getTimezoneOffset() * 60 * 1000;
+    return new Date(today.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+}
 
 export default function PaperDetails({ params }: { params: { id: string } }) {
     const { user } = useUser();
-    const [paper, setPaper] = useState<any>(null);
+    const [paper, setPaper] = useState<Paper | null>(null);
     const [loading, setLoading] = useState(true);
     const [availableTopics, setAvailableTopics] = useState<TopicOption[]>([]);
     
     const [isArchiving, setIsArchiving] = useState(false);
-    const [isStartingRound, setIsStartingRound] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
     const [showDeclineForm, setShowDeclineForm] = useState(false);
     const [showExtensionForm, setShowExtensionForm] = useState(false);
@@ -39,7 +44,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [localAbstract, setLocalAbstract] = useState('');
     const [localTopics, setLocalTopics] = useState<string[]>([]); // These will be IDs
     const [localDeadline, setLocalDeadline] = useState('');
-    const [localHistory, setLocalHistory] = useState<any[]>([]);
+    const [paperHistory, setPaperHistory] = useState<PaperHistory | null>(null);
+    const [historyError, setHistoryError] = useState('');
 
     useEffect(() => {
         const fetchData = async () => {
@@ -53,10 +59,36 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 setLocalTopics(paperData.topics?.map((t: any) => t.id) || []);
                 setLocalAuthors(paperData.authors?.map((a: any) => a.id) || []);
                 setAvailableTopics(topicsData);
+
+                // Set initial deadline from mock data if it matches
+                const activeRound = MOCK_ROUNDS.find(r => r.paperId === paperData.id && r.status === 'Open');
+                if (activeRound) {
+                    setLocalDeadline(activeRound.deadline || '');
+                }
                 
                 // Fetch lab members for author editing
                 const membersRes = await getLabMembersRequest();
                 setAvailableUsers(membersRes.users);
+
+                try {
+                    const historyData = await getPaperHistoryRequest(params.id);
+                    setPaperHistory(historyData);
+                    setHistoryError('');
+                } catch (historyErr) {
+                    console.error('Failed to fetch paper history', historyErr);
+                    setPaperHistory(null);
+                    if (historyErr instanceof ApiError) {
+                        if (historyErr.status === 403) {
+                            setHistoryError('You do not have permission to view the history of this paper.');
+                        } else if (historyErr.status === 404) {
+                            setHistoryError('Paper history not found.');
+                        } else {
+                            setHistoryError(historyErr.message || 'Failed to load paper history.');
+                        }
+                    } else {
+                        setHistoryError('An unexpected error occurred while fetching paper history.');
+                    }
+                }
             } catch (err) {
                 console.error('Failed to fetch paper details', err);
             } finally {
@@ -79,7 +111,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         return notFound();
     }
 
-    const isAuthor = paper.authors?.some((a: any) => a.id === user.id);
+    const isAuthor = paper.authors?.some(a => a.id === user.id);
     const canViewHistory = user.isCoordinator || isAuthor;
     const canEditAbstract = user.isCoordinator || isAuthor;
 
@@ -94,7 +126,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     let backHref = '/papers';
     if (!user.isCoordinator) {
         if (myAssignment) {
-            backHref = '/papers?filter=reviews';
+            backHref = '/my-reviews';
         } else if (isAuthor) {
             backHref = '/papers?filter=authored';
         }
@@ -122,14 +154,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }, 800);
     };
 
-    const handleStartRound = () => {
-        setIsStartingRound(true);
-        setTimeout(() => {
-            setLocalStatus('In Review');
-            setIsStartingRound(false);
-        }, 800);
-    };
-
     // Calculate effective assignment statuses including local mocks
     const getEffectiveAssignmentStatus = (assignmentId: string, reviewerId: string, originalStatus: string) => {
         if (reviewerId === user.id && localAssignmentStatus) {
@@ -148,17 +172,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         setIsSubmittingReview(true);
         setTimeout(() => {
             setLocalAssignmentStatus('Submitted');
-
-            // Add to history
-            const newEvent = {
-                id: `h-new-${Date.now()}`,
-                date: new Date().toISOString(),
-                message: `${user.name} submitted their review task`,
-                actorId: user.id,
-                type: 'ReviewAction' as 'StatusChange' | 'ReviewAction' | 'SystemAction'
-            };
-            setLocalHistory(prev => [...prev, newEvent]);
-
             setIsSubmittingReview(false);
         }, 800);
     };
@@ -231,6 +244,219 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
+    const formatDate = (value?: string | null) => {
+        if (!value) return 'Not set';
+        return new Date(value).toLocaleDateString();
+    };
+
+    const formatDateTime = (value?: string | null) => {
+        if (!value) return 'Not recorded';
+        const date = new Date(value);
+        return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    };
+
+    const getAssignmentStatusColor = (status: string) => {
+        switch (status) {
+            case 'Accepted':
+            case 'Completed':
+                return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+            case 'Declined':
+            case 'Cancelled':
+                return 'bg-red-500/10 text-red-400 border-red-500/20';
+            case 'PendingDecline':
+            case 'PendingExtension':
+            case 'Overdue':
+                return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+            case 'Reassigned':
+                return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+            default:
+                return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+        }
+    };
+
+    const renderPaperHistory = () => (
+        <div className="glass p-8 rounded-2xl border border-white/5">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
+                <div>
+                    <h2 className="text-xl font-semibold text-white">History & Activity Log</h2>
+                    <p className="text-sm text-slate-500 mt-1">
+                        {paperHistory?.title || paper.title} · {paperHistory?.targetVenue || paper.targetVenue}
+                    </p>
+                </div>
+                <span className={`w-fit px-2.5 py-1 rounded-full text-xs font-semibold border uppercase tracking-wider ${getStatusColor(paperHistory?.status || effectivePaperStatus)}`}>
+                    {paperHistory?.status || effectivePaperStatus}
+                </span>
+            </div>
+
+            {historyError && !paperHistory ? (
+                <p className="text-sm text-slate-500">{historyError}</p>
+            ) : !paperHistory?.rounds?.length ? (
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
+                    <p className="text-sm text-slate-500">No review rounds recorded yet.</p>
+                    {(paperHistory?.overleafLink || paper.overleafLink) && (
+                        <a
+                            href={(paperHistory?.overleafLink || paper.overleafLink) ?? ''}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-4 inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"
+                        >
+                            <ExternalLink className="w-4 h-4" />
+                            Open Overleaf Manuscript
+                        </a>
+                    )}
+                </div>
+            ) : (
+                <div className="space-y-5">
+                    {(paperHistory.overleafLink || paper.overleafLink) && (
+                        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                            <a
+                                href={(paperHistory.overleafLink || paper.overleafLink) ?? ''}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-2 text-sm text-blue-300 hover:text-blue-200"
+                            >
+                                <ExternalLink className="w-4 h-4" />
+                                Overleaf manuscript
+                            </a>
+                        </div>
+                    )}
+
+                    {paperHistory.rounds.map(round => {
+                        const checklistItems = round.artifacts?.checklistItems || [];
+                        const aiReports = round.artifacts?.aiReviewReports || [];
+
+                        return (
+                            <section key={round.id || round.roundNumber} className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+                                <div className="p-5 border-b border-white/5">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                            <h3 className="text-white font-semibold">Round {round.roundNumber}</h3>
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                Started: {formatDateTime(round.startedAt)} · Completed: {formatDateTime(round.completedAt)}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                                            <span className={`px-2.5 py-1 rounded-full border ${round.roundStatus === 'Completed' ? 'bg-slate-500/10 text-slate-400 border-slate-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                                                {round.roundStatus}
+                                            </span>
+                                            <span className="px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-slate-300">
+                                                Deadline: {formatDate(round.deadline)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="divide-y divide-white/5">
+                                    {round.assignments.length === 0 ? (
+                                        <p className="p-5 text-sm text-slate-500">No reviewers assigned in this round.</p>
+                                    ) : round.assignments.map(assignment => (
+                                        <div key={assignment.assignmentId} className="p-5">
+                                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                                                <div>
+                                                    <p className="text-sm font-medium text-white">
+                                                        {assignment.reviewerName || 'Unassigned reviewer'}
+                                                    </p>
+                                                    {assignment.reviewerEmail && (
+                                                        <p className="text-xs text-slate-500 mt-0.5">{assignment.reviewerEmail}</p>
+                                                    )}
+                                                </div>
+                                                <span className={`w-fit px-2.5 py-1 rounded-full text-xs font-medium border ${getAssignmentStatusColor(assignment.status)}`}>
+                                                    {assignment.status}
+                                                </span>
+                                            </div>
+
+                                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-400">
+                                                <span>Invited: {formatDateTime(assignment.invitedAt)}</span>
+                                                <span>Accepted: {formatDateTime(assignment.acceptedAt)}</span>
+                                                <span>Submitted: {formatDateTime(assignment.submittedAt)}</span>
+                                                <span>Assignment deadline: {formatDate(assignment.deadline)}</span>
+                                            </div>
+
+                                            {assignment.declineReason && (
+                                                <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                                                    <p className="text-xs font-semibold text-red-300">Decline reason</p>
+                                                    <p className="text-sm text-slate-300 mt-1">{assignment.declineReason}</p>
+                                                </div>
+                                            )}
+
+                                            {assignment.declineRequests.length > 0 && (
+                                                <div className="mt-4 space-y-2">
+                                                    {assignment.declineRequests.map(request => (
+                                                        <div key={request.id} className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                <p className="text-xs font-semibold text-red-300">Decline request</p>
+                                                                <span className="text-xs text-red-200">{request.status}</span>
+                                                            </div>
+                                                            <p className="text-sm text-slate-300 mt-1">{request.reason}</p>
+                                                            <p className="text-xs text-slate-500 mt-2">Requested: {formatDateTime(request.requestedAt)}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {assignment.extensions.length > 0 && (
+                                                <div className="mt-4 space-y-2">
+                                                    {assignment.extensions.map(extension => (
+                                                        <div key={extension.id} className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                                <p className="text-xs font-semibold text-amber-300">Extension request</p>
+                                                                <span className="text-xs text-amber-200">{extension.status}</span>
+                                                            </div>
+                                                            <p className="text-sm text-slate-300 mt-1">{extension.reason}</p>
+                                                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                                                                <span>Requested deadline: {formatDate(extension.requestedDeadline)}</span>
+                                                                <span>Approved deadline: {formatDate(extension.approvedDeadline)}</span>
+                                                                <span>Requested: {formatDateTime(extension.requestedAt)}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {(checklistItems.length > 0 || aiReports.length > 0) && (
+                                    <div className="p-5 border-t border-white/5 bg-black/10">
+                                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Artifacts</h4>
+                                        <div className="space-y-3">
+                                            {aiReports.map(report => (
+                                                <div key={report.id} className="flex flex-wrap items-center gap-3 text-sm">
+                                                    {report.generatedReportUrl && (
+                                                        <a href={report.generatedReportUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300">
+                                                            <ExternalLink className="w-4 h-4" />
+                                                            AI review report
+                                                        </a>
+                                                    )}
+                                                    {report.annotatedPdfUrl && (
+                                                        <a href={report.annotatedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300">
+                                                            <ExternalLink className="w-4 h-4" />
+                                                            Annotated PDF
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            {checklistItems.length > 0 && (
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    {checklistItems.map(item => (
+                                                        <div key={item.id} className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                                                            <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${item.isChecked ? 'text-emerald-400' : 'text-slate-600'}`} />
+                                                            <span className="text-sm text-slate-300">{item.description}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </section>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+
     return (
         <div className="max-w-5xl mx-auto py-4 animate-in fade-in duration-500 mb-20">
             <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-6">
@@ -248,7 +474,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     </div>
 
                     <div className="flex items-center gap-2 mb-4 flex-wrap group/topics cursor-pointer relative">
-                        {paper.topics?.map((topic: any) => (
+                        {paper.topics?.map((topic) => (
                             <span key={topic.id} className="px-2 py-1 rounded bg-white/10 text-slate-300 text-xs font-medium border border-white/5">
                                 {topic.name}
                             </span>
@@ -279,7 +505,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 <div className="flex justify-end gap-2">
                                     <button
                                         onClick={() => {
-                                            setLocalTopics(paper.topics?.map((t: any) => t.id) || []);
+                                            setLocalTopics(paper.topics?.map(t => t.id) || []);
                                             setIsEditingTopics(false);
                                         }}
                                         className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
@@ -317,6 +543,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         type="date"
                                         value={localDeadline}
                                         onChange={(e) => setLocalDeadline(e.target.value)}
+                                        min={todayInputValue()}
                                         className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
                                     />
                                     <button
@@ -345,7 +572,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     {/* Coordinator Draft Actions */}
                     {user.isCoordinator && effectivePaperStatus === 'Draft' && (
                         <Link
-                            href={`/papers/${paper.id}/assign?mode=start-round`}
+                            href={`/rounds?paper=${paper.id}`}
                             className="w-full px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
                         >
                             <Play className="w-4 h-4" />
@@ -357,7 +584,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     {user.isCoordinator && effectivePaperStatus === 'In Review' && (
                         <>
                             <Link
-                                href={`/papers/${paper.id}/assign`}
+                                href={`/rounds?paper=${paper.id}`}
                                 className="w-full px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
                             >
                                 <UserPlus className="w-4 h-4" />
@@ -406,16 +633,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 Run AI Analysis
                             </button>
                         </>
-                    )}
-
-                    {canEditAuthors && (
-                        <button 
-                            onClick={() => setIsEditingAuthors(true)}
-                            className="w-full px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white border border-white/10 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 mt-2"
-                        >
-                            <Edit className="w-4 h-4 text-slate-400" />
-                            Edit Authors & Order
-                        </button>
                     )}
 
                     {/* Reviewer Actions */}
@@ -610,7 +827,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 <div className="flex justify-end gap-2">
                                     <button
                                         onClick={() => {
-                                            setLocalAbstract(paper.abstractText);
+                                            setLocalAbstract(paper.abstractText || '');
                                             setIsEditingAbstract(false);
                                         }}
                                         className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
@@ -632,46 +849,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         )}
                     </div>
 
-                    {/* Timeline / Status Flow (Restricted) */}
-                    {canViewHistory && (
-                        <div className="glass p-8 rounded-2xl border border-white/5">
-                            <h2 className="text-xl font-semibold text-white mb-6">History & Activity Log</h2>
-
-                            <div className="space-y-6 relative before:absolute before:inset-0 before:ml-4 before:h-full before:w-0.5 before:bg-white/10">
-                                {localHistory.length === 0 ? (
-                                    <p className="text-sm text-slate-500 ml-10 relative">No history recorded yet.</p>
-                                ) : (
-                                    localHistory.map((event) => {
-                                        const dateObj = new Date(event.date);
-                                        const IconNode = event.type === 'SystemAction' ? <CheckCircle2 className="w-4 h-4" /> :
-                                            event.type === 'ReviewAction' ? <UserPlus className="w-4 h-4" /> :
-                                                <Play className="w-4 h-4" />;
-
-                                        const iconColors = event.type === 'SystemAction' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/20' :
-                                            event.type === 'ReviewAction' ? 'bg-purple-500/20 text-purple-400 border-purple-500/20' :
-                                                'bg-blue-500/20 text-blue-400 border-blue-500/20';
-
-                                        return (
-                                            <div key={event.id} className="relative flex items-start gap-5 group">
-                                                <div className="absolute left-4 top-10 w-0.5 h-full bg-white/10 group-last:hidden"></div>
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border z-10 ${iconColors}`}>
-                                                    {IconNode}
-                                                </div>
-                                                <div className="flex-1 bg-white/[0.02] border border-white/5 p-4 rounded-xl">
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <h4 className="text-white font-medium text-sm">{event.message}</h4>
-                                                        <span className="text-xs text-slate-500 font-mono">
-                                                            {dateObj.toLocaleDateString()} {dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })
-                                )}
-                            </div>
-                        </div>
-                    )}
+                    {canViewHistory && renderPaperHistory()}
                 </div>
 
                 <div className="space-y-6">
@@ -730,7 +908,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 </div>
                             ) : (
                                 <>
-                                    {paper.authors?.length > 0 ? paper.authors.map((author: any, index: number) => {
+                                    {(paper.authors?.length ?? 0) > 0 ? (paper.authors ?? []).map((author: any) => {
                                         return (
                                             <div key={author.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
                                                 <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-semibold text-sm border border-blue-500/20 shrink-0">

@@ -4,21 +4,29 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { ChevronRight, FileText, Search, Loader2 } from 'lucide-react';
-import { getAllPapersRequest } from '@/lib/api';
+import { ChevronRight, FileText, Search, Loader2, Clock, CheckCircle2 } from 'lucide-react';
+import { AuthoredPaper, getAllPapersRequest, getMyWrittenPapersRequest, PaperAuthor, TopicOption, Paper } from '@/lib/api';
 
 export default function PapersList() {
     const { user } = useUser();
     const searchParams = useSearchParams();
     const filter = searchParams.get('filter');
 
-    const [allPapers, setAllPapers] = useState<any[]>([]);
+    const [allPapers, setAllPapers] = useState<(Paper | AuthoredPaper)[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        if (!user.id) {
+            setLoading(false);
+            setAllPapers([]);
+            return;
+        }
         const fetchPapers = async () => {
+            setLoading(true);
             try {
-                const data = await getAllPapersRequest();
+                const data = filter === 'authored'
+                    ? await getMyWrittenPapersRequest()
+                    : await getAllPapersRequest();
                 setAllPapers(data);
             } catch (err) {
                 console.error('Failed to fetch papers:', err);
@@ -28,16 +36,18 @@ export default function PapersList() {
             }
         };
         fetchPapers();
-    }, []);
+    }, [filter, user.id]);
+
+    const currentUserId = String(user.id || '');
+    const isAuthoredByCurrentUser = (paper: Paper | AuthoredPaper) =>
+        Boolean(currentUserId && paper.authors?.some((author: PaperAuthor) => author.id === currentUserId));
+    const getAuthorName = (author: PaperAuthor) => author.name;
+    const getPaperAbstract = (paper: Paper | AuthoredPaper) =>
+        paper.abstractText || paper.abstract || '';
 
     const getPapers = () => {
         if (filter === 'authored') {
-            return allPapers.filter(p => p.authors?.some((a: any) => a.id === user.id));
-        }
-        if (filter === 'reviews') {
-            // Currently displays all assignment contexts until Round relations are mapped
-            // We explicitly exclude authored papers from the reviews list
-            return allPapers.filter(p => !p.authors?.some((a: any) => a.id === user.id)); 
+            return allPapers.filter(isAuthoredByCurrentUser);
         }
         // Default system view (only accessible via sidebar if Coordinator)
         return allPapers;
@@ -45,13 +55,11 @@ export default function PapersList() {
 
     const getTitle = () => {
         if (filter === 'authored') return 'My Authored Papers';
-        if (filter === 'reviews') return 'My Assigned Reviews';
         return 'System Papers';
     };
 
     const getSubtitle = () => {
         if (filter === 'authored') return 'Manage your submitted manuscripts.';
-        if (filter === 'reviews') return 'Papers you have been invited to review.';
         return 'Manage and assign papers across the system.';
     };
 
@@ -61,11 +69,22 @@ export default function PapersList() {
         switch (status) {
             case 'Draft': return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
             case 'In Review': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+            case 'HumanReview': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+            case 'AIReview': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+            case 'Completed': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Accepted': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Archived': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
             default: return 'bg-white/10 text-slate-300 border-white/20';
         }
     };
+
+    const formatDate = (value?: string | null) => {
+        if (!value) return 'No deadline';
+        return new Date(value).toLocaleDateString();
+    };
+
+    const getTopicLabel = (topic: TopicOption | string) => typeof topic === 'string' ? topic : topic.name;
+    const getTopicKey = (topic: TopicOption | string) => typeof topic === 'string' ? topic : topic.id;
 
     return (
         <div className="max-w-6xl mx-auto py-4 animate-in fade-in duration-500">
@@ -121,16 +140,37 @@ export default function PapersList() {
                                                 {paper.status}
                                             </span>
                                         </div>
-                                        <p className="text-sm text-slate-400 line-clamp-1 leading-relaxed mb-3">
-                                            <span className="font-semibold text-slate-300">Authors:</span> {paper.authors?.map((a: any) => typeof a === 'object' ? a.name : a).join(', ') || 'Unknown'}
+                                        <p className="text-sm text-slate-400 line-clamp-1 leading-relaxed mb-1">
+                                            <span className="font-semibold text-slate-300">Authors:</span> {paper.authors?.map(getAuthorName).join(', ') || 'Unknown'}
+                                        </p>
+                                        <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-3">
+                                            {getPaperAbstract(paper)}
                                         </p>
                                         <div className="flex items-center gap-2">
-                                            {(paper.topics || []).map((topic: any) => (
-                                                <span key={topic.id || topic} className="px-2 py-1 rounded bg-white/5 text-slate-400 text-[10px] font-medium uppercase tracking-wider">
-                                                    {topic.name || topic}
+                                            {(paper.topics || []).map((topic) => (
+                                                <span key={getTopicKey(topic)} className="px-2 py-1 rounded bg-white/5 text-slate-400 text-[10px] font-medium uppercase tracking-wider">
+                                                    {getTopicLabel(topic)}
                                                 </span>
                                             ))}
                                         </div>
+                                        {filter === 'authored' && 'latestRoundNumber' in paper && (
+                                            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                                                <span className="inline-flex items-center gap-1.5">
+                                                    <Clock className="w-3.5 h-3.5" />
+                                                    {paper.latestRoundNumber ? `Round ${paper.latestRoundNumber}` : 'No rounds yet'}
+                                                </span>
+                                                {paper.latestRoundStatus && (
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                        {paper.latestRoundStatus}
+                                                    </span>
+                                                )}
+                                                <span>Deadline: {formatDate(paper.latestRoundDeadline)}</span>
+                                                {typeof paper.totalAssignments === 'number' && (
+                                                    <span>{paper.completedAssignments || 0}/{paper.totalAssignments} reviews completed</span>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="shrink-0 flex items-center justify-center h-12 w-12 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all">
                                         <ChevronRight className="w-6 h-6" />

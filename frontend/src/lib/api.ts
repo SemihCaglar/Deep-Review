@@ -215,6 +215,7 @@ export type PaperAuthor = {
 export type Paper = {
   id: string;
   title: string;
+  abstract?: string;
   abstractText?: string;
   creationTime?: string;
   targetVenue?: string;
@@ -224,7 +225,71 @@ export type Paper = {
   authors?: PaperAuthor[];
   coordinators?: LabMember[];
   topics?: TopicOption[];
-  history?: any[];
+  history?: unknown[];
+};
+
+export type AuthoredPaper = Paper & {
+  creationTime?: string;
+  latestRoundNumber?: number | null;
+  latestRoundStatus?: string | null;
+  latestRoundDeadline?: string | null;
+  completedAssignments?: number;
+  totalAssignments?: number;
+};
+
+export type PaperHistoryDeclineRequest = {
+  id: string;
+  reason: string;
+  status: string;
+  requestedAt: string;
+};
+
+export type PaperHistoryExtension = {
+  id: string;
+  reason: string;
+  requestedDeadline: string;
+  approvedDeadline: string | null;
+  requestedAt: string;
+  status: string;
+};
+
+export type PaperHistoryAssignment = {
+  assignmentId: string;
+  reviewerId: string | null;
+  reviewerName: string | null;
+  reviewerEmail: string | null;
+  status: string;
+  deadline: string | null;
+  invitedAt: string;
+  acceptedAt: string | null;
+  submittedAt: string | null;
+  declineReason: string | null;
+  declineRequests: PaperHistoryDeclineRequest[];
+  extensions: PaperHistoryExtension[];
+};
+
+export type PaperHistoryRound = {
+  id: string;
+  roundNumber: number;
+  roundStatus: string;
+  deadline: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  assignments: PaperHistoryAssignment[];
+  artifacts: {
+    checklistItems: { id: string; description: string; isChecked: boolean }[];
+    aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
+  };
+};
+
+export type PaperHistory = {
+  id: string;
+  title: string;
+  status: string;
+  targetVenue: string;
+  overleafLink?: string | null;
+  authors: PaperAuthor[];
+  rounds: PaperHistoryRound[];
 };
 
 export type RegisterPaperPayload = {
@@ -249,6 +314,14 @@ export function getPaperByIdRequest(id: string) {
 
 export function getAllPapersRequest() {
   return apiRequest<Paper[]>('/papers/all');
+}
+
+export function getMyWrittenPapersRequest() {
+  return apiRequest<AuthoredPaper[]>('/papers/my-written');
+}
+
+export function getPaperHistoryRequest(id: string) {
+  return apiRequest<PaperHistory>(`/papers/${id}/history`);
 }
 
 export function updatePaperAbstractRequest(id: string, abstract: string) {
@@ -299,6 +372,15 @@ export type PendingExtensionRequest = {
   requestedAt: string;
 };
 
+export type ResolvedDeclineRequest = PendingDeclineRequest & {
+  status: 'Approved' | 'Rejected';
+};
+
+export type ResolvedExtensionRequest = PendingExtensionRequest & {
+  status: 'Approved' | 'Rejected';
+  approvedDeadline: string | null;
+};
+
 export type RoundAssignment = {
   id: string;
   status: string;
@@ -332,6 +414,8 @@ export type MyAssignment = {
   paper: { id: string; title: string; abstractText: string; overleafLink: string | null };
   pendingDeclineRequest: PendingDeclineRequest | null;
   pendingExtensionRequest: PendingExtensionRequest | null;
+  resolvedDeclineRequests: ResolvedDeclineRequest[];
+  resolvedExtensionRequests: ResolvedExtensionRequest[];
 };
 
 export type SuggestedReviewer = {
@@ -343,6 +427,13 @@ export type SuggestedReviewer = {
 
 export function getMyAssignmentsRequest() {
   return apiRequest<MyAssignment[]>('/assignments/my');
+}
+
+export function dismissRequestDecisionsRequest(declineRequestIds: string[], extensionRequestIds: string[]) {
+  return apiRequest<{ message: string; dismissedCount: number }>('/assignments/my/request-decisions/dismiss', {
+    method: 'POST',
+    body: { declineRequestIds, extensionRequestIds },
+  });
 }
 
 export function respondToInvitationRequest(assignmentId: string, response: 'accept' | 'decline', reason?: string) {
