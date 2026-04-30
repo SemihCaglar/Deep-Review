@@ -27,8 +27,26 @@ export class PaperController {
         return res.status(401).json({ message: 'Authentication required' });
       }
 
-      if (!dto.title || !dto.abstractText || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
-        return res.status(400).json({ message: 'Missing required fields' });
+      // Validation
+      const errors: string[] = [];
+      if (!dto.title?.trim()) errors.push('Title is required');
+      if (!dto.abstractText?.trim()) errors.push('Abstract text is required');
+      if (!dto.targetVenue?.trim()) errors.push('Target venue is required');
+      if (!dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
+        errors.push('At least one topic must be selected');
+      }
+
+      // Optional URL validation
+      const urlRegex = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
+      if (dto.overleafLink && !urlRegex.test(dto.overleafLink)) {
+        errors.push('Invalid Overleaf link format');
+      }
+      if (dto.overleafGitUrl && !urlRegex.test(dto.overleafGitUrl)) {
+        errors.push('Invalid Overleaf Git URL format');
+      }
+
+      if (errors.length > 0) {
+        return res.status(400).json({ message: 'Validation failed', errors });
       }
 
       const paper = await PaperService.registerPaper(dto, creator);
@@ -84,8 +102,8 @@ export class PaperController {
       const user = req.user;
       if (!user) return res.status(401).json({ message: 'Unauthorized' });
 
-      if (typeof abstract !== 'string') {
-        return res.status(400).json({ message: 'abstract must be a string' });
+      if (typeof abstract !== 'string' || !abstract.trim()) {
+        return res.status(400).json({ message: 'abstract must be a non-empty string' });
       }
 
       if (!id) return res.status(400).json({ message: 'Missing paper ID' });
@@ -106,6 +124,43 @@ export class PaperController {
       }
 
       const updatedPaper = await PaperService.updateAbstract(id, abstract);
+      res.status(200).json(updatedPaper);
+    } catch (e: any) {
+      if (e.message === 'Paper not found') {
+        return res.status(404).json({ message: e.message });
+      }
+      res.status(500).json({ error: e.message });
+    }
+  }
+  static async updateTargetVenue(req: AuthenticatedRequest, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const { targetVenue } = req.body;
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Unauthorized' });
+
+      if (typeof targetVenue !== 'string' || !targetVenue.trim()) {
+        return res.status(400).json({ message: 'targetVenue must be a non-empty string' });
+      }
+
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id },
+        relations: ['authors', 'coordinators'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const isAuthor = paper.authors?.some(a => a.id === user.id);
+      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
+      const isAdmin = user.role === UserRole.Admin;
+
+      if (!isAuthor && !isCoordinator && !isAdmin) {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+
+      const updatedPaper = await PaperService.updateTargetVenue(id, targetVenue);
       res.status(200).json(updatedPaper);
     } catch (e: any) {
       if (e.message === 'Paper not found') {

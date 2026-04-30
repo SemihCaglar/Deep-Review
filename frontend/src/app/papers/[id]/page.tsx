@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
-import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError, updateOverleafLinkRequest, updateOverleafGitUrlRequest } from '@/lib/api';
+import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError, updateOverleafLinkRequest, updateOverleafGitUrlRequest, updatePaperVenueRequest } from '@/lib/api';
 
 function todayInputValue() {
     const today = new Date();
@@ -53,6 +53,9 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [localGit, setLocalGit] = useState('');
     const [isSavingOverleaf, setIsSavingOverleaf] = useState(false);
     const [isSavingGit, setIsSavingGit] = useState(false);
+    const [isEditingVenue, setIsEditingVenue] = useState(false);
+    const [localVenue, setLocalVenue] = useState('');
+    const [isSavingVenue, setIsSavingVenue] = useState(false);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -63,6 +66,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 ]);
                 setPaper(paperData);
                 setLocalAbstract(paperData.abstractText || '');
+                setLocalVenue(paperData.targetVenue || '');
                 setLocalTopics(paperData.topics?.map((t: any) => t.id) || []);
                 setLocalAuthors(paperData.authors?.map((a: any) => a.id) || []);
                 setLocalOverleaf(paperData.overleafLink || '');
@@ -224,6 +228,21 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
             alert(err instanceof ApiError ? err.message : 'Failed to save');
         } finally {
             setIsSavingGit(false);
+        }
+    };
+
+    const handleSaveVenue = async () => {
+        if (!paper || !localVenue.trim()) return;
+        setIsSavingVenue(true);
+        try {
+            const updatedPaper = await updatePaperVenueRequest(paper.id, localVenue.trim());
+            setPaper(updatedPaper);
+            setIsEditingVenue(false);
+        } catch (err) {
+            console.error('Failed to update venue', err);
+            alert('Failed to update venue');
+        } finally {
+            setIsSavingVenue(false);
         }
     };
 
@@ -510,6 +529,50 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border uppercase tracking-wider ${getStatusColor(effectivePaperStatus)}`}>
                             {effectivePaperStatus}
                         </span>
+                    </div>
+
+                    {/* Target Venue */}
+                    <div className="flex items-center gap-2 mb-3">
+                        {isEditingVenue ? (
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={localVenue}
+                                    onChange={(e) => setLocalVenue(e.target.value)}
+                                    className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all w-64"
+                                    placeholder="Target Venue..."
+                                />
+                                <button
+                                    onClick={handleSaveVenue}
+                                    disabled={isSavingVenue}
+                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+                                >
+                                    {isSavingVenue ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setLocalVenue(paper.targetVenue || '');
+                                        setIsEditingVenue(false);
+                                    }}
+                                    className="px-2 py-1 text-xs text-slate-400 hover:text-white"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 group/venue">
+                                <span className="text-slate-400 text-sm">Target Venue:</span>
+                                <span className="text-blue-400 font-medium text-sm">{paper.targetVenue || 'Not specified'}</span>
+                                {canEditAbstract && (
+                                    <button
+                                        onClick={() => setIsEditingVenue(true)}
+                                        className="opacity-0 group-hover/venue:opacity-100 transition-opacity text-xs text-slate-500 hover:text-blue-400 p-1"
+                                    >
+                                        <Edit className="w-3 h-3" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-2 mb-4 flex-wrap group/topics cursor-pointer relative">
