@@ -49,3 +49,4 @@ yarn-error.log*
 
 db/test.sqlite
 semih/
+ai_content/secrets.yaml

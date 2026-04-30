@@ -280,6 +280,10 @@ export type PaperHistoryRound = {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
     aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
   };
+  aiReviewReport?: any | null;
+  complianceReport?: any | null;
+  annotatedPdfUrl?: string | null;
+  sourceZipUrl?: string | null;
 };
 
 export type PaperHistory = {
@@ -593,6 +597,27 @@ export function getOverallAnalyticsRequest() {
 
 export function getUserAnalyticsRequest(userId: string) {
   return apiRequest<UserAnalyticsResponse>(`/ratings/user/${userId}`);
+}
+
+// ==== AI POST-REVIEW API FUNCTIONS ====
+
+export function startAIReviewRequest(roundId: string) {
+  return apiRequest<{ message: string; data: any }>(`/rounds/${roundId}/ai`, {
+    method: 'POST'
+  });
+}
+
+export function runComplianceCheckRequest(roundId: string, venueRules: any) {
+  return apiRequest<{ message: string; data: any }>(`/rounds/${roundId}/compliance`, {
+    method: 'POST',
+    body: { venueRules }
+  });
+}
+
+export function getVenueRulesRequest(roundId: string) {
+  return apiRequest<any>(`/rounds/${roundId}/venue-rules`, {
+    method: 'GET'
+  });
 }
 
 function buildUrl(path: string) {

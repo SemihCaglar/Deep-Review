@@ -369,9 +369,153 @@ export class RoundController {
     res.status(410).json({ message: 'Rounds are completed automatically. Use POST /rounds/:id/start to start a round.' });
   }
 
-  static async startAIReview(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async startAIReview(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.authors', 'paper.coordinators', 'paper.labs']
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      // Guardrail: Can only be run after Human Review concludes
+      if (round.status !== RoundStatus.Completed) {
+        return res.status(400).json({ message: 'AI Review can only be triggered after the human review phase concludes (Round Status must be Completed).' });
+      }
+
+      // Authorization: Only Authors or Coordinators can trigger
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+      
+      if (!isAuthor && !isCoordinator) {
+        return res.status(403).json({ message: 'Forbidden: You must be an author or coordinator of this paper.' });
+      }
+
+      // Ensure we have Overleaf credentials
+      const overleafGitUrl = round.paper.overleafLink;
+      if (!overleafGitUrl) {
+        return res.status(400).json({ message: 'No Overleaf Git URL provided for this paper.' });
+      }
+
+      const lab = round.paper.labs?.[0];
+      const coordinatorToken = lab?.overleafGitToken;
+      
+      if (!coordinatorToken) {
+        return res.status(400).json({ message: 'The Coordinator has not configured a global Overleaf Git Token for this lab.' });
+      }
+
+      // Execute AI Pipeline
+      const { AIReviewService } = require('../services/AIReviewService');
+      const result = await AIReviewService.generateAIReview(round.paper.id, round.id, overleafGitUrl, coordinatorToken);
+
+      // Persist results
+      round.aiReviewReport = result.aiReviewReport;
+      round.annotatedPdfUrl = result.annotatedPdfUrl;
+      round.sourceZipUrl = result.sourceZipUrl;
+      await roundRepo.save(round);
+
+      return res.status(200).json({
+        message: 'AI Post-Review Phase executed successfully',
+        data: result
+      });
+
+    } catch (err: any) {
+      console.error('[RoundController] Error in startAIReview:', err);
+      return res.status(500).json({ message: err.message || 'Internal server error' });
+    }
   }
+  static async getVenueRules(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({ where: { id: id as string } });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+      if (!round.targetVenue) return res.status(400).json({ message: 'Round has no target venue configured' });
+
+      const { AIReviewService } = require('../services/AIReviewService');
+      const rules = await AIReviewService.getVenueRules(round.targetVenue);
+
+      return res.status(200).json(rules);
+    } catch (err: any) {
+      console.error('[RoundController] Error in getVenueRules:', err);
+      return res.status(500).json({ message: err.message || 'Internal server error' });
+    }
+  }
+
+  static async runComplianceCheck(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.authors', 'paper.coordinators', 'paper.labs']
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      // Authorization: Only Authors or Coordinators can trigger
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+      
+      if (!isAuthor && !isCoordinator) {
+        return res.status(403).json({ message: 'Forbidden: You must be an author or coordinator of this paper.' });
+      }
+
+      const overleafGitUrl = round.paper.overleafLink;
+      if (!overleafGitUrl) {
+        return res.status(400).json({ message: 'No Overleaf Git URL provided for this paper.' });
+      }
+
+      const lab = round.paper.labs?.[0];
+      const coordinatorToken = lab?.overleafGitToken;
+      
+      if (!coordinatorToken) {
+        return res.status(400).json({ message: 'The Coordinator has not configured a global Overleaf Git Token for this lab.' });
+      }
+
+      // We expect the frontend to pass the manually approved/corrected venue rules
+      const venueRules = req.body.venueRules;
+      if (!venueRules) {
+        return res.status(400).json({ message: 'Missing venueRules in request body. Fetch rules first and pass them.' });
+      }
+
+      const { ComplianceService } = require('../services/ComplianceService');
+      const complianceReport = await ComplianceService.verifyCompliance(
+        round.paper.id,
+        overleafGitUrl,
+        coordinatorToken,
+        venueRules
+      );
+
+      // Persist results
+      round.complianceReport = complianceReport;
+      await roundRepo.save(round);
+
+      return res.status(200).json({
+        message: 'Compliance check completed successfully',
+        data: complianceReport
+      });
+    } catch (err: any) {
+      console.error('[RoundController] Error in runComplianceCheck:', err);
+      return res.status(500).json({ message: err.message || 'Internal server error' });
+    }
+  }
+
   static async addChecklistItem(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }

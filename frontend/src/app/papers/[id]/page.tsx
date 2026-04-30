@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
-import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError } from '@/lib/api';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, ShieldCheck, Cpu, Download } from 'lucide-react';
+import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError, startAIReviewRequest, runComplianceCheckRequest, getVenueRulesRequest } from '@/lib/api';
 
 function todayInputValue() {
     const today = new Date();
@@ -46,6 +46,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [localDeadline, setLocalDeadline] = useState('');
     const [paperHistory, setPaperHistory] = useState<PaperHistory | null>(null);
     const [historyError, setHistoryError] = useState('');
+
+    const [runningAI, setRunningAI] = useState<string | null>(null);
+    const [runningCompliance, setRunningCompliance] = useState<string | null>(null);
+    const [aiError, setAiError] = useState('');
 
     useEffect(() => {
         const fetchData = async () => {
@@ -274,6 +278,41 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
+    const handleStartAIReview = async (roundId: string) => {
+        setRunningAI(roundId);
+        setAiError('');
+        try {
+            await startAIReviewRequest(roundId);
+            // Refresh paper history
+            const historyData = await getPaperHistoryRequest(params.id);
+            setPaperHistory(historyData);
+        } catch (err: any) {
+            setAiError(err.message || 'Failed to start AI Review');
+        } finally {
+            setRunningAI(null);
+        }
+    };
+
+    const handleRunComplianceCheck = async (roundId: string, targetVenue: string) => {
+        setRunningCompliance(roundId);
+        setAiError('');
+        try {
+            // Fetch venue rules first
+            const venueRules = await getVenueRulesRequest(roundId);
+            
+            // Pass them to compliance check
+            await runComplianceCheckRequest(roundId, venueRules);
+            
+            // Refresh paper history
+            const historyData = await getPaperHistoryRequest(params.id);
+            setPaperHistory(historyData);
+        } catch (err: any) {
+            setAiError(err.message || 'Failed to run Compliance Check');
+        } finally {
+            setRunningCompliance(null);
+        }
+    };
+
     const renderPaperHistory = () => (
         <div className="glass p-8 rounded-2xl border border-white/5">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
@@ -416,10 +455,41 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     ))}
                                 </div>
 
-                                {(checklistItems.length > 0 || aiReports.length > 0) && (
+                                {(checklistItems.length > 0 || aiReports.length > 0 || round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl || round.roundStatus === 'Completed') && (
                                     <div className="p-5 border-t border-white/5 bg-black/10">
-                                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Artifacts</h4>
-                                        <div className="space-y-3">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                                            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Post-Review Phase & Artifacts</h4>
+                                            
+                                            {/* AI Actions */}
+                                            {round.roundStatus === 'Completed' && (user.isCoordinator || user.id === paper.authors?.[0]?.id || paper.authors?.some(a => a.id === user.id)) && (
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleRunComplianceCheck(round.id, paperHistory?.targetVenue || paper.targetVenue)}
+                                                        disabled={runningCompliance === round.id || runningAI === round.id}
+                                                        className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/20 text-xs font-medium rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
+                                                    >
+                                                        {runningCompliance === round.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                                                        Run Compliance Check
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleStartAIReview(round.id)}
+                                                        disabled={runningCompliance === round.id || runningAI === round.id}
+                                                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500 shadow-sm text-xs font-medium rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
+                                                    >
+                                                        {runningAI === round.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cpu className="w-3.5 h-3.5" />}
+                                                        Generate AI Review
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {aiError && (runningAI === round.id || runningCompliance === round.id) && (
+                                            <div className="mb-4 p-3 rounded-lg border border-red-500/20 bg-red-500/5 text-sm text-red-400">
+                                                {aiError}
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-4">
                                             {aiReports.map(report => (
                                                 <div key={report.id} className="flex flex-wrap items-center gap-3 text-sm">
                                                     {report.generatedReportUrl && (
@@ -436,8 +506,100 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     )}
                                                 </div>
                                             ))}
+
+                                            {/* New AI Review Report */}
+                                            {round.aiReviewReport && (
+                                                <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4 mt-2">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <Cpu className="w-4 h-4 text-indigo-400" />
+                                                        <h5 className="text-sm font-semibold text-indigo-300">AI Review Generated</h5>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <p className="text-xs text-slate-500 mb-1">Checklist Compliance</p>
+                                                            <div className="space-y-1">
+                                                                {round.aiReviewReport.checklist?.map((item: any, i: number) => (
+                                                                    <div key={i} className="flex items-start gap-2 text-xs">
+                                                                        {item.status === 'Pass' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+                                                                        <span className="text-slate-300">{item.requirement}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-slate-500 mb-1">Methodology Review</p>
+                                                            <p className="text-xs text-slate-300 line-clamp-4">{round.aiReviewReport.methodologyReview}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* New Compliance Report */}
+                                            {round.complianceReport && (
+                                                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 mt-2">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <ShieldCheck className="w-4 h-4 text-blue-400" />
+                                                        <h5 className="text-sm font-semibold text-blue-300">Compliance Check</h5>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <p className="text-xs text-slate-500 mb-1">Anonymity Validation</p>
+                                                            <div className="space-y-1">
+                                                                {round.complianceReport.anonymityViolations?.length > 0 ? (
+                                                                    round.complianceReport.anonymityViolations.map((v: string, i: number) => (
+                                                                        <div key={i} className="flex items-start gap-2 text-xs">
+                                                                            <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                                                                            <span className="text-slate-300">{v}</span>
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <div className="flex items-center gap-2 text-xs text-emerald-400">
+                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> No anonymity violations found.
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-slate-500 mb-1">Formatting Validation</p>
+                                                            <div className="space-y-1">
+                                                                {round.complianceReport.formattingViolations?.length > 0 ? (
+                                                                    round.complianceReport.formattingViolations.map((v: string, i: number) => (
+                                                                        <div key={i} className="flex items-start gap-2 text-xs">
+                                                                            <XCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                                                            <span className="text-slate-300">{v}</span>
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <div className="flex items-center gap-2 text-xs text-emerald-400">
+                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> Formatting looks correct.
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Download Links */}
+                                            {(round.annotatedPdfUrl || round.sourceZipUrl) && (
+                                                <div className="flex flex-wrap gap-3 mt-4">
+                                                    {round.annotatedPdfUrl && (
+                                                        <a href={round.annotatedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-sm font-medium transition-colors">
+                                                            <ExternalLink className="w-4 h-4" />
+                                                            View Annotated PDF
+                                                        </a>
+                                                    )}
+                                                    {round.sourceZipUrl && (
+                                                        <a href={round.sourceZipUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-sm font-medium transition-colors">
+                                                            <Download className="w-4 h-4" />
+                                                            Download Source ZIP
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            )}
+
                                             {checklistItems.length > 0 && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
                                                     {checklistItems.map(item => (
                                                         <div key={item.id} className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-3">
                                                             <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${item.isChecked ? 'text-emerald-400' : 'text-slate-600'}`} />
@@ -624,14 +786,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 Archive Paper
                             </button>
 
-                            <button
-                                disabled={!allReviewsComplete}
-                                className={`w-full px-5 py-2.5 border text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 
-                                ${allReviewsComplete ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20' : 'bg-slate-800/50 text-slate-500 border-slate-700 cursor-not-allowed'}`}
-                            >
-                                <Play className="w-4 h-4" />
-                                Run AI Analysis
-                            </button>
                         </>
                     )}
 

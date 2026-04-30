@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { AccountController } from '../controllers/AccountController';
 import { AdminController } from '../controllers/AdminController';
-import { AIReviewController } from '../controllers/AIReviewController';
 import { AssignmentController } from '../controllers/AssignmentController';
 import { CoordinatorController } from '../controllers/CoordinatorController';
 import { PaperController } from '../controllers/PaperController';
@@ -59,12 +58,8 @@ router.put('/labs/:labId/topics/:topicId', authenticateRequest, TopicController.
 router.delete('/labs/:labId/topics/:topicId', authenticateRequest, TopicController.removeTopicFromLab);
 
 // ==== AI REVIEW ROUTES ====
-router.post('/ai/review', AIReviewController.runAIReview);
-router.get('/ai/report', AIReviewController.generateReviewReport);
-router.get('/ai/pdf', AIReviewController.generateAnnotatedPDF);
-router.get('/ai/scan', AIReviewController.performPCRelatedWorkScan);
-router.get('/ai/checklist', AIReviewController.getChecklist);
-router.post('/ai/validate', AIReviewController.validateAIOutput);
+// Note: Core AI execution route is handled in Round Routes (POST /rounds/:id/ai)
+// Other stubs can be implemented later as needed.
 
 // ==== ASSIGNMENT ROUTES ====
 router.get('/assignments/my', authenticateRequest, AssignmentController.getMyAssignments);
@@ -130,7 +125,9 @@ router.get('/rounds/:id/status', RoundController.trackReviewStatus);
 router.post('/rounds/:id/alerts', RoundController.alertOverdueReviews);
 router.post('/rounds/:id/close', RoundController.closeRound);
 router.post('/rounds/next', authenticateRequest, RoundController.createReviewRound);
-router.post('/rounds/:id/ai', RoundController.startAIReview);
+router.post('/rounds/:id/ai', authenticateRequest, RoundController.startAIReview);
+router.get('/rounds/:id/venue-rules', authenticateRequest, RoundController.getVenueRules);
+router.post('/rounds/:id/compliance', authenticateRequest, RoundController.runComplianceCheck);
 router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
 router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistItem);
 router.put('/rounds/:id/checklist/:itemId', RoundController.updateChecklistItem);
