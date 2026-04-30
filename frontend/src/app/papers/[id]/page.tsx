@@ -564,6 +564,12 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 Open Overleaf Manuscript
                             </a>
                         )}
+                        {paper.overleafGitUrl && (
+                            <div className="inline-flex items-center gap-2 text-sm text-slate-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 w-fit">
+                                <span className="font-semibold text-[10px] uppercase tracking-wider text-slate-500">Overleaf Git:</span>
+                                <span className="font-mono text-xs select-all">{paper.overleafGitUrl}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 

@@ -287,6 +287,7 @@ export class PaperController {
         status: paper.status,
         targetVenue: latestRound?.targetVenue ?? '',
         overleafLink: paper.overleafLink,
+        overleafGitUrl: paper.overleafGitUrl,
         authors: (paper.authors ?? []).map(author => ({
           id: author.id,
           name: author.name,
@@ -326,6 +327,7 @@ export class PaperController {
           targetVenue: latestRound?.targetVenue ?? '',
           abstractText: p.abstractText,
           overleafLink: p.overleafLink,
+          overleafGitUrl: p.overleafGitUrl,
           creationTime: p.creationTime,
           topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
           authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name, email: a.email })),
@@ -473,6 +475,7 @@ export class PaperController {
         status: p.status,
         abstractText: p.abstractText,
         overleafLink: p.overleafLink ?? null,
+        overleafGitUrl: p.overleafGitUrl ?? null,
       })));
     } catch (err) {
       console.error(err);
@@ -507,6 +510,39 @@ export class PaperController {
       await paperRepo.save(paper);
 
       return res.status(200).json({ message: 'Overleaf link updated', overleafLink: paper.overleafLink ?? null });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async updateOverleafGitUrl(req: AuthenticatedRequest, res: Response) {
+    try {
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      }
+
+      const id = req.params.id as string;
+      const { overleafGitUrl } = req.body;
+      if (typeof overleafGitUrl !== 'string') {
+        return res.status(400).json({ message: 'overleafGitUrl must be a string' });
+      }
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id },
+        relations: ['coordinators'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
+      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+
+      paper.overleafGitUrl = overleafGitUrl || null!;
+      await paperRepo.save(paper);
+
+      return res.status(200).json({ message: 'Overleaf Git URL updated', overleafGitUrl: paper.overleafGitUrl ?? null });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });

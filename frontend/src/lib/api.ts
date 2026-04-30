@@ -221,6 +221,7 @@ export type Paper = {
   targetVenue?: string;
   status: string;
   overleafLink?: string | null;
+  overleafGitUrl?: string | null;
   authorOrder?: string[] | null;
   authors?: PaperAuthor[];
   coordinators?: LabMember[];
@@ -288,6 +289,7 @@ export type PaperHistory = {
   status: string;
   targetVenue: string;
   overleafLink?: string | null;
+  overleafGitUrl?: string | null;
   authors: PaperAuthor[];
   rounds: PaperHistoryRound[];
 };
@@ -299,6 +301,7 @@ export type RegisterPaperPayload = {
   topics: string[];
   authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
+  overleafGitUrl?: string;
 };
 
 export function registerPaperRequest(payload: RegisterPaperPayload) {
@@ -357,6 +360,7 @@ export type CoordinatedPaper = {
   status: string;
   abstractText: string;
   overleafLink: string | null;
+  overleafGitUrl: string | null;
 };
 
 export type PendingDeclineRequest = {
@@ -411,7 +415,7 @@ export type MyAssignment = {
   deadline: string | null;
   invitationSent: boolean;
   round: { id: string; roundNumber: number; deadline: string | null; submissionDeadline: string | null; targetVenue: string; venueCategory: string };
-  paper: { id: string; title: string; abstractText: string; overleafLink: string | null };
+  paper: { id: string; title: string; abstractText: string; overleafLink: string | null; overleafGitUrl: string | null };
   pendingDeclineRequest: PendingDeclineRequest | null;
   pendingExtensionRequest: PendingExtensionRequest | null;
   resolvedDeclineRequests: ResolvedDeclineRequest[];
@@ -472,6 +476,13 @@ export function updateOverleafLinkRequest(paperId: string, overleafLink: string)
   return apiRequest<{ message: string; overleafLink: string | null }>(`/papers/${paperId}/overleaf`, {
     method: 'PUT',
     body: { overleafLink },
+  });
+}
+
+export function updateOverleafGitUrlRequest(paperId: string, overleafGitUrl: string) {
+  return apiRequest<{ message: string; overleafGitUrl: string | null }>(`/papers/${paperId}/overleaf-git`, {
+    method: 'PUT',
+    body: { overleafGitUrl },
   });
 }
 

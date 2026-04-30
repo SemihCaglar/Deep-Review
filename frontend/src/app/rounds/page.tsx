@@ -22,7 +22,8 @@ import {
   startRoundRequest,
   editRoundDeadlineRequest,
   reassignReviewerRequest,
-  updateOverleafLinkRequest
+  updateOverleafLinkRequest,
+  updateOverleafGitUrlRequest
 } from '@/lib/api';
 import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2 } from 'lucide-react';
 
@@ -30,18 +31,18 @@ import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle
 
 function statusColor(status: string) {
   switch (status) {
-    case 'Draft':      return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
-    case 'Open':       return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-    case 'Invited':    return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-    case 'Accepted':   return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    case 'Draft': return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+    case 'Open': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    case 'Invited': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+    case 'Accepted': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
     case 'PendingDecline': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
     case 'PendingExtension': return 'bg-sky-500/10 text-sky-400 border-sky-500/20';
-    case 'Declined':   return 'bg-red-500/10 text-red-400 border-red-500/20';
-    case 'Completed':  return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
-    case 'Cancelled':  return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
-    case 'Overdue':    return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+    case 'Declined': return 'bg-red-500/10 text-red-400 border-red-500/20';
+    case 'Completed': return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+    case 'Cancelled': return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+    case 'Overdue': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
     case 'Reassigned': return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
-    default:           return 'bg-white/10 text-slate-300 border-white/10';
+    default: return 'bg-white/10 text-slate-300 border-white/10';
   }
 }
 
@@ -333,13 +334,13 @@ function AssignmentRow({
 
 // ── Round card ────────────────────────────────────────────────────────────────
 
-function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { round: RoundWithAssignments; onRefresh: () => void; coordinatorId: string; paperHasOverleafLink: boolean }) {
+function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink, paperHasGitUrl }: { round: RoundWithAssignments; onRefresh: () => void; coordinatorId: string; paperHasOverleafLink: boolean; paperHasGitUrl: boolean }) {
   const [expanded, setExpanded] = useState(true);
 
   // Add Reviewer / Reassign panel
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [reassigningForId, setReassigningForId] = useState<string | null>(null);
-  
+
   const [suggestions, setSuggestions] = useState<SuggestedReviewer[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestError, setSuggestError] = useState('');
@@ -424,7 +425,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
   const [editingDeadline, setEditingDeadline] = useState(false);
   const [draftDeadline, setDraftDeadline] = useState(round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : '');
   const [savingDeadline, setSavingDeadline] = useState(false);
-  
+
   const handleEditDeadline = async () => {
     if (!draftDeadline) return;
     setSavingDeadline(true);
@@ -510,16 +511,16 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                 <div>
                   <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Round Deadline</p>
                   {!editingDeadline ? (
-                     <div className="flex items-center gap-2">
-                        <p className="text-white font-medium">{formatDate(round.deadline)}</p>
-                        <button onClick={() => { setDraftDeadline(round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : ''); setEditingDeadline(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
-                     </div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-white font-medium">{formatDate(round.deadline)}</p>
+                      <button onClick={() => { setDraftDeadline(round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : ''); setEditingDeadline(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
+                    </div>
                   ) : (
-                     <div className="flex items-center gap-2">
-                        <input type="date" value={draftDeadline} onChange={(e) => setDraftDeadline(e.target.value)} min={todayInputValue()} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
-                        <button onClick={handleEditDeadline} disabled={savingDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white">Save</button>
-                        <button onClick={() => setEditingDeadline(false)} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
-                     </div>
+                    <div className="flex items-center gap-2">
+                      <input type="date" value={draftDeadline} onChange={(e) => setDraftDeadline(e.target.value)} min={todayInputValue()} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
+                      <button onClick={handleEditDeadline} disabled={savingDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white">Save</button>
+                      <button onClick={() => setEditingDeadline(false)} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -559,11 +560,10 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                   {suggestions.map(s => (
                     <label
                       key={s.user.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                        selectedIds.has(s.user.id)
-                          ? 'border-blue-500/40 bg-blue-500/10'
-                          : 'border-white/5 bg-white/[0.02] hover:bg-white/5'
-                      }`}
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedIds.has(s.user.id)
+                        ? 'border-blue-500/40 bg-blue-500/10'
+                        : 'border-white/5 bg-white/[0.02] hover:bg-white/5'
+                        }`}
                     >
                       <input
                         type={reassigningForId ? "radio" : "checkbox"}
@@ -647,6 +647,12 @@ export default function RoundsPage() {
   const [savingOverleaf, setSavingOverleaf] = useState(false);
   const [overleafError, setOverleafError] = useState('');
 
+  // Overleaf Git URL editing
+  const [editingGit, setEditingGit] = useState(false);
+  const [gitDraft, setGitDraft] = useState('');
+  const [savingGit, setSavingGit] = useState(false);
+  const [gitError, setGitError] = useState('');
+
   // Create Draft State
   const [showCreateRound, setShowCreateRound] = useState(false);
   const [newRoundVenueCat, setNewRoundVenueCat] = useState('Conference');
@@ -678,7 +684,9 @@ export default function RoundsPage() {
     setSelectedPaperId(paperId);
     setRounds([]);
     setEditingOverleaf(false);
+    setEditingGit(false);
     setOverleafError('');
+    setGitError('');
     loadRounds(paperId);
   };
 
@@ -704,6 +712,21 @@ export default function RoundsPage() {
       setOverleafError(e instanceof ApiError ? e.message : 'Failed to save');
     } finally {
       setSavingOverleaf(false);
+    }
+  };
+
+  const handleSaveGit = async () => {
+    if (!selectedPaperId) return;
+    setSavingGit(true);
+    setGitError('');
+    try {
+      const result = await updateOverleafGitUrlRequest(selectedPaperId, gitDraft.trim());
+      setPapers(prev => prev.map(p => p.id === selectedPaperId ? { ...p, overleafGitUrl: result.overleafGitUrl } : p));
+      setEditingGit(false);
+    } catch (e) {
+      setGitError(e instanceof ApiError ? e.message : 'Failed to save');
+    } finally {
+      setSavingGit(false);
     }
   };
 
@@ -745,7 +768,7 @@ export default function RoundsPage() {
   }
 
   const selectedPaper = papers.find(p => p.id === selectedPaperId);
-  
+
   const latestRound = rounds.length > 0 ? rounds[rounds.length - 1] : null;
   const canCreateNextRound = !latestRound || latestRound.status === 'Completed';
 
@@ -780,11 +803,10 @@ export default function RoundsPage() {
               <button
                 key={paper.id}
                 onClick={() => handleSelectPaper(paper.id)}
-                className={`text-left p-4 rounded-xl border transition-all ${
-                  selectedPaperId === paper.id
-                    ? 'border-blue-500/40 bg-blue-500/10'
-                    : 'border-white/10 bg-white/[0.02] hover:bg-white/5 hover:border-white/20'
-                }`}
+                className={`text-left p-4 rounded-xl border transition-all ${selectedPaperId === paper.id
+                  ? 'border-blue-500/40 bg-blue-500/10'
+                  : 'border-white/10 bg-white/[0.02] hover:bg-white/5 hover:border-white/20'
+                  }`}
               >
                 <p className="text-sm font-semibold text-white line-clamp-2 mb-2">{paper.title}</p>
                 <div className="flex items-center justify-between gap-2">
@@ -809,126 +831,171 @@ export default function RoundsPage() {
               Rounds for <span className="text-blue-400">{selectedPaper.title}</span>
             </h2>
             {canCreateNextRound && !showCreateRound && (
-               <button
-                  onClick={() => setShowCreateRound(true)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors"
-               >
-                  <Plus className="w-4 h-4" />
-                  {rounds.length === 0 ? 'Create Initial Round' : 'Create Next Round'}
-               </button>
+              <button
+                onClick={() => setShowCreateRound(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                {rounds.length === 0 ? 'Create Initial Round' : 'Create Next Round'}
+              </button>
             )}
           </div>
 
-          {/* Overleaf link */}
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-white/5 bg-white/[0.02]">
-            <ExternalLink className="w-4 h-4 text-emerald-400 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-slate-500 mb-1">Overleaf manuscript link</p>
-              {!editingOverleaf ? (
-                <div className="flex items-center gap-3">
-                  {selectedPaper.overleafLink ? (
-                    <a href={selectedPaper.overleafLink} target="_blank" rel="noopener noreferrer"
-                      className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 truncate">
-                      {selectedPaper.overleafLink}
-                    </a>
-                  ) : (
-                    <span className="text-sm text-slate-600 italic">Not set — reviewers cannot see the manuscript</span>
-                  )}
-                  <button
-                    onClick={() => { setOverleafDraft(selectedPaper.overleafLink ?? ''); setEditingOverleaf(true); setOverleafError(''); }}
-                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-0.5 rounded shrink-0"
-                  >
-                    <Edit2 className="w-3 h-3" /> Edit
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <input
-                    type="url"
-                    value={overleafDraft}
-                    onChange={e => setOverleafDraft(e.target.value)}
-                    placeholder="https://www.overleaf.com/..."
-                    className="w-full bg-background border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-                  />
-                  {overleafError && <p className="text-xs text-red-400">{overleafError}</p>}
-                  <div className="flex gap-2">
-                    <button onClick={handleSaveOverleaf} disabled={savingOverleaf}
-                      className="px-3 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 transition-colors">
-                      {savingOverleaf ? 'Saving…' : 'Save'}
+          {/* Overleaf links */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Standard Link */}
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-white/5 bg-white/[0.02]">
+              <ExternalLink className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-slate-500 mb-1">Overleaf manuscript link</p>
+                {!editingOverleaf ? (
+                  <div className="flex items-center gap-3">
+                    {selectedPaper.overleafLink ? (
+                      <a href={selectedPaper.overleafLink} target="_blank" rel="noopener noreferrer"
+                        className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 truncate">
+                        {selectedPaper.overleafLink}
+                      </a>
+                    ) : (
+                      <span className="text-sm text-slate-600 italic">Not set</span>
+                    )}
+                    <button
+                      onClick={() => { setOverleafDraft(selectedPaper.overleafLink ?? ''); setEditingOverleaf(true); setOverleafError(''); }}
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-0.5 rounded shrink-0"
+                    >
+                      <Edit2 className="w-3 h-3" /> Edit
                     </button>
-                    <button onClick={() => setEditingOverleaf(false)} className="text-xs text-slate-500 hover:text-slate-300">Cancel</button>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="space-y-2">
+                    <input
+                      type="url"
+                      value={overleafDraft}
+                      onChange={e => setOverleafDraft(e.target.value)}
+                      placeholder="https://www.overleaf.com/read/..."
+                      className="w-full bg-background border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                    />
+                    {overleafError && <p className="text-xs text-red-400">{overleafError}</p>}
+                    <div className="flex gap-2">
+                      <button onClick={handleSaveOverleaf} disabled={savingOverleaf}
+                        className="px-3 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 transition-colors">
+                        {savingOverleaf ? 'Saving…' : 'Save'}
+                      </button>
+                      <button onClick={() => setEditingOverleaf(false)} className="text-xs text-slate-500 hover:text-slate-300">Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Git URL */}
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-white/5 bg-white/[0.02]">
+              <ExternalLink className="w-4 h-4 text-blue-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-slate-500 mb-1">Overleaf Git URL</p>
+                {!editingGit ? (
+                  <div className="flex items-center gap-3">
+                    {selectedPaper.overleafGitUrl ? (
+                      <span className="text-sm text-blue-400 truncate">{selectedPaper.overleafGitUrl}</span>
+                    ) : (
+                      <span className="text-sm text-slate-600 italic">Not set</span>
+                    )}
+                    <button
+                      onClick={() => { setGitDraft(selectedPaper.overleafGitUrl ?? ''); setEditingGit(true); setGitError(''); }}
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-0.5 rounded shrink-0"
+                    >
+                      <Edit2 className="w-3 h-3" /> Edit
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-slate-500">To enable AI Annotated PDFs, please turn on 'Link Sharing' in Overleaf settings.</p>
+                    <input
+                      type="url"
+                      value={gitDraft}
+                      onChange={e => setGitDraft(e.target.value)}
+                      placeholder="https://git.overleaf.com/..."
+                      className="w-full bg-background border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                    />
+                    {gitError && <p className="text-xs text-red-400">{gitError}</p>}
+                    <div className="flex gap-2">
+                      <button onClick={handleSaveGit} disabled={savingGit}
+                        className="px-3 py-1 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors">
+                        {savingGit ? 'Saving…' : 'Save'}
+                      </button>
+                      <button onClick={() => setEditingGit(false)} className="text-xs text-slate-500 hover:text-slate-300">Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           {showCreateRound && (
-             <div className="glass rounded-2xl border border-blue-500/30 p-6 space-y-4 bg-blue-500/5">
-               <h3 className="text-base font-semibold text-blue-400">Setup Draft Round</h3>
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                 <div className="space-y-1">
-                   <label className="text-xs text-slate-400 uppercase tracking-wider">Venue Category</label>
-                   <select
-                     value={newRoundVenueCat}
-                     onChange={(e) => setNewRoundVenueCat(e.target.value)}
-                     className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                   >
-                     <option value="Conference">Conference</option>
-                     <option value="Article">Article</option>
-                   </select>
-                 </div>
-                 <div className="space-y-1">
-                   <label className="text-xs text-slate-400 uppercase tracking-wider">Target Venue Name</label>
-                   <input
-                     type="text"
-                     value={newRoundTargetVenue}
-                     onChange={(e) => setNewRoundTargetVenue(e.target.value)}
-                     placeholder="e.g. NeurIPS 2026"
-                     className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                   />
-                 </div>
-                 {newRoundVenueCat === 'Conference' && (
-                    <div className="space-y-1">
-                      <label className="text-xs text-slate-400 uppercase tracking-wider">Submission Deadline</label>
-                      <input
-                        type="date"
-                        value={newRoundSubDeadline}
-                        onChange={(e) => setNewRoundSubDeadline(e.target.value)}
-                        min={todayInputValue()}
-                        className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                      />
-                    </div>
-                 )}
-                 <div className="space-y-1">
-                   <label className="text-xs text-slate-400 uppercase tracking-wider">Round Deadline</label>
-                   <input
-                     type="date"
-                     value={newRoundDeadline}
-                     onChange={(e) => setNewRoundDeadline(e.target.value)}
-                     min={todayInputValue()}
-                     max={newRoundVenueCat === 'Conference' && newRoundSubDeadline ? newRoundSubDeadline : undefined}
-                     className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                   />
-                 </div>
-               </div>
-               {createError && <p className="text-xs text-red-400">{createError}</p>}
-               <div className="flex gap-3 pt-2">
-                 <button
-                   onClick={handleCreateRound}
-                   disabled={creatingRound || !newRoundTargetVenue || (newRoundVenueCat === 'Conference' && !newRoundSubDeadline)}
-                   className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors"
-                 >
-                   {creatingRound ? 'Saving...' : 'Create Draft'}
-                 </button>
-                 <button
-                   onClick={() => setShowCreateRound(false)}
-                   className="px-4 py-2 text-sm font-medium rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 transition-colors"
-                 >
-                   Cancel
-                 </button>
-               </div>
-             </div>
+            <div className="glass rounded-2xl border border-blue-500/30 p-6 space-y-4 bg-blue-500/5">
+              <h3 className="text-base font-semibold text-blue-400">Setup Draft Round</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-400 uppercase tracking-wider">Venue Category</label>
+                  <select
+                    value={newRoundVenueCat}
+                    onChange={(e) => setNewRoundVenueCat(e.target.value)}
+                    className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                  >
+                    <option value="Conference">Conference</option>
+                    <option value="Article">Article</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-400 uppercase tracking-wider">Target Venue Name</label>
+                  <input
+                    type="text"
+                    value={newRoundTargetVenue}
+                    onChange={(e) => setNewRoundTargetVenue(e.target.value)}
+                    placeholder="e.g. NeurIPS 2026"
+                    className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                  />
+                </div>
+                {newRoundVenueCat === 'Conference' && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-slate-400 uppercase tracking-wider">Submission Deadline</label>
+                    <input
+                      type="date"
+                      value={newRoundSubDeadline}
+                      onChange={(e) => setNewRoundSubDeadline(e.target.value)}
+                      min={todayInputValue()}
+                      className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-400 uppercase tracking-wider">Round Deadline</label>
+                  <input
+                    type="date"
+                    value={newRoundDeadline}
+                    onChange={(e) => setNewRoundDeadline(e.target.value)}
+                    min={todayInputValue()}
+                    max={newRoundVenueCat === 'Conference' && newRoundSubDeadline ? newRoundSubDeadline : undefined}
+                    className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                  />
+                </div>
+              </div>
+              {createError && <p className="text-xs text-red-400">{createError}</p>}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleCreateRound}
+                  disabled={creatingRound || !newRoundTargetVenue || (newRoundVenueCat === 'Conference' && !newRoundSubDeadline)}
+                  className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors"
+                >
+                  {creatingRound ? 'Saving...' : 'Create Draft'}
+                </button>
+                <button
+                  onClick={() => setShowCreateRound(false)}
+                  className="px-4 py-2 text-sm font-medium rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           )}
 
           {loadingRounds ? (
@@ -947,7 +1014,7 @@ export default function RoundsPage() {
             </div>
           ) : (
             rounds.map(round => (
-              <RoundCard key={round.id} round={round} onRefresh={handleRefresh} coordinatorId={user.id} paperHasOverleafLink={!!selectedPaper?.overleafLink} />
+              <RoundCard key={round.id} round={round} onRefresh={handleRefresh} coordinatorId={user.id} paperHasOverleafLink={!!selectedPaper?.overleafLink} paperHasGitUrl={!!selectedPaper?.overleafGitUrl} />
             ))
           )}
         </section>
