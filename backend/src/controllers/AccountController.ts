@@ -369,11 +369,25 @@ export class AccountController {
         approvalStatus: ApprovalStatus.Approved,
         role: Not(UserRole.Admin)
       },
-      order: { name: 'ASC' },
+      order: { name: 'ASC', email: 'ASC' },
+    });
+    const orderedUsers = approvedUsers.sort((firstUser, secondUser) => {
+      if (firstUser.role === UserRole.Coordinator && secondUser.role !== UserRole.Coordinator) {
+        return -1;
+      }
+
+      if (firstUser.role !== UserRole.Coordinator && secondUser.role === UserRole.Coordinator) {
+        return 1;
+      }
+
+      return (
+        firstUser.name.localeCompare(secondUser.name) ||
+        firstUser.email.localeCompare(secondUser.email)
+      );
     });
 
     return res.status(200).json({
-      users: approvedUsers.map(user => ({
+      users: orderedUsers.map(user => ({
         id: user.id,
         name: user.name,
         email: user.email,

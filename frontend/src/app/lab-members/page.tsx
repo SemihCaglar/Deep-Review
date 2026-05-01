@@ -9,6 +9,27 @@ export default function LabMembersPage() {
   const [members, setMembers] = React.useState<LabMember[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState('');
+  const orderedMembers = React.useMemo(
+    () =>
+      [...members].sort((firstMember, secondMember) => {
+        const firstIsCoordinator = firstMember.role === 'Coordinator';
+        const secondIsCoordinator = secondMember.role === 'Coordinator';
+
+        if (firstIsCoordinator && !secondIsCoordinator) {
+          return -1;
+        }
+
+        if (!firstIsCoordinator && secondIsCoordinator) {
+          return 1;
+        }
+
+        return (
+          firstMember.name.localeCompare(secondMember.name) ||
+          firstMember.email.localeCompare(secondMember.email)
+        );
+      }),
+    [members],
+  );
 
   React.useEffect(() => {
     if (!user.id) {
@@ -54,9 +75,9 @@ export default function LabMembersPage() {
       <section className="glass rounded-2xl border border-white/5 p-8">
         {isLoading ? (
           <p className="text-sm text-slate-400">Loading lab members...</p>
-        ) : members.length ? (
+        ) : orderedMembers.length ? (
           <div className="space-y-4">
-            {members.map(member => (
+            {orderedMembers.map(member => (
               <div key={member.id} className="rounded-2xl border border-white/10 bg-background/60 p-5">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
