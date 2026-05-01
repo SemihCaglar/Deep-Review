@@ -10,6 +10,8 @@ import { SystemPolicy } from '../entities/SystemPolicy';
 import { Template } from '../entities/Template';
 import { hashPassword } from '../services/accountSecurity';
 import type { AuthenticatedRequest } from '../types/auth';
+import * as crypto from 'crypto';
+import { sendEmail } from '../services/emailService';
 
 export class AdminController {
   // ==== USER MANAGEMENT ====
@@ -21,10 +23,18 @@ export class AdminController {
   }
 
   static async createUser(req: AuthenticatedRequest, res: Response) {
-    const { name, email, password, role } = req.body ?? {};
+    let { name, email, password, role } = req.body ?? {};
 
-    if (!name || !email || !password || !role) {
-      return res.status(400).json({ message: 'name, email, password, and role are required' });
+    if (!name || !email || !role) {
+      return res.status(400).json({ message: 'name, email, and role are required' });
+    }
+
+    if (role === UserRole.Coordinator) {
+      return res.status(400).json({ message: 'Coordinators can only be created alongside a Lab in the create lab workflow' });
+    }
+
+    if (!password) {
+      return res.status(400).json({ message: 'password is required for this role' });
     }
 
     const userRepo = AppDataSource.getRepository<User>('User');
@@ -34,9 +44,7 @@ export class AdminController {
     }
 
     let user: User;
-    if (role === UserRole.Coordinator) {
-      user = new Coordinator();
-    } else if (role === UserRole.Admin) {
+    if (role === UserRole.Admin) {
       user = new Admin();
     } else {
       user = new LabMember();
@@ -52,6 +60,8 @@ export class AdminController {
 
     await AdminController.logAction(req, AuditAction.CREATE_USER, 'User', user.id, `Created ${role} user`);
 
+    // Don't leak generated password in response unless necessary.
+    // For admin UI, we can just return the user object.
     return res.status(201).json(user);
   }
 
@@ -109,14 +119,59 @@ export class AdminController {
   }
 
   static async createLab(req: AuthenticatedRequest, res: Response) {
-    const { name, description } = req.body ?? {};
-    if (!name) return res.status(400).json({ message: 'Lab name is required' });
+    const { name, description, coordinatorName, coordinatorEmail } = req.body ?? {};
+    
+    if (!name || !name.trim()) return res.status(400).json({ message: 'Lab name is required' });
+    if (!coordinatorName || !coordinatorName.trim()) return res.status(400).json({ message: 'Coordinator name is required' });
+    if (!coordinatorEmail || !coordinatorEmail.trim()) return res.status(400).json({ message: 'Coordinator email is required' });
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const existing = await userRepo.findOne({ where: { email: coordinatorEmail.trim().toLowerCase() } });
+    if (existing) {
+      return res.status(409).json({ message: 'Coordinator email already in use' });
+    }
+
+    // Auto-generate password for Coordinator
+    const password = crypto.randomBytes(8).toString('hex');
+
+    const coordinator = new Coordinator();
+    coordinator.name = coordinatorName.trim();
+    coordinator.email = coordinatorEmail.trim().toLowerCase();
+    coordinator.passwordHash = await hashPassword(password);
+    coordinator.approvalStatus = ApprovalStatus.Approved;
+    coordinator.approvalReviewedAt = new Date();
+
+    await userRepo.save(coordinator);
 
     const labRepo = AppDataSource.getRepository(Lab);
-    const lab = labRepo.create({ name, description });
+    const lab = labRepo.create({ 
+      name, 
+      description,
+      coordinator,
+      members: [coordinator]
+    });
     await labRepo.save(lab);
 
-    await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Lab', lab.id, `Created lab: ${name}`);
+    await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Lab', lab.id, `Created lab: ${name} with coordinator ${coordinator.email}`);
+
+    const subject = 'Welcome to BILSEN - Coordinator Account Created';
+    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const body = `Hello ${coordinator.name},
+
+An admin has created a Coordinator account and a Lab for you on the BILSEN platform.
+
+Your login credentials:
+Email: ${coordinator.email}
+Password: ${password}
+
+Please log in at: ${loginUrl}/login
+
+If you are not involved with BILSEN, please ignore this email.
+
+Best regards,
+BILSEN Admin Team`;
+
+    await sendEmail(coordinator, subject, body);
 
     return res.status(201).json(lab);
   }
@@ -124,11 +179,22 @@ export class AdminController {
   static async deleteLab(req: AuthenticatedRequest, res: Response) {
     const id = req.params.id as string;
     const labRepo = AppDataSource.getRepository(Lab);
-    const lab = await labRepo.findOne({ where: { id } });
+    const lab = await labRepo.findOne({ where: { id }, relations: ['coordinator'] });
 
     if (!lab) return res.status(404).json({ message: 'Lab not found' });
 
+    const coordinator = lab.coordinator;
+
+    // Disassociate coordinator from lab first to avoid FK constraint errors
+    lab.coordinator = null as any;
+    await labRepo.save(lab);
     await labRepo.remove(lab);
+
+    // Delete the coordinator account — coordinators cannot exist without a lab
+    if (coordinator) {
+      const userRepo = AppDataSource.getRepository<User>('User');
+      await userRepo.remove(coordinator as any);
+    }
 
     await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Lab', id, `Deleted lab: ${lab.name}`);
 

@@ -37,6 +37,10 @@ export class AccountController {
       return res.status(400).json({ message: 'name, email, and password are required' });
     }
 
+    if (!labId) {
+      return res.status(400).json({ message: 'please select a lab for signup' });
+    }
+
     const memberRepo = AppDataSource.getRepository(LabMember);
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -48,10 +52,10 @@ export class AccountController {
       return res.status(409).json({ message: 'Email is already in use' });
     }
 
-    let requestedLab = null;
-    if (labId) {
-      const labRepo = AppDataSource.getRepository(Lab);
-      requestedLab = await labRepo.findOne({ where: { id: labId } });
+    const labRepo = AppDataSource.getRepository(Lab);
+    const requestedLab = await labRepo.findOne({ where: { id: labId } });
+    if (!requestedLab) {
+      return res.status(400).json({ message: 'The selected lab is invalid or no longer exists' });
     }
 
     const member = memberRepo.create({
