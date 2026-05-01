@@ -191,11 +191,11 @@ describe('1 · Authentication', () => {
 
 describe('2 · Round creation — error cases', () => {
     test('reviewer (not author) cannot create round → 403', async () => {
-        const r = await api(r1Token).post('/api/rounds', { paperId, targetVenue: 'X', venueCategory: 'Conference', submissionDeadline: future(30) });
+        const r = await api(r1Token).post('/api/rounds', { paperId, targetVenue: 'X', targetVenueUrl: 'https://example.com/x', venueCategory: 'Conference', submissionDeadline: future(30) });
         expect(r.status).toBe(403);
     });
     test('outsider cannot create round → 403', async () => {
-        const r = await api(outsiderToken).post('/api/rounds', { paperId, targetVenue: 'X', venueCategory: 'Conference', submissionDeadline: future(30) });
+        const r = await api(outsiderToken).post('/api/rounds', { paperId, targetVenue: 'X', targetVenueUrl: 'https://example.com/x', venueCategory: 'Conference', submissionDeadline: future(30) });
         expect(r.status).toBe(403);
     });
     test('missing venueCategory → 400', async () => {
@@ -203,11 +203,11 @@ describe('2 · Round creation — error cases', () => {
         expect(r.status).toBe(400);
     });
     test('invalid venueCategory value → 400', async () => {
-        const r = await api(coordToken).post('/api/rounds', { paperId, targetVenue: 'ICSE', venueCategory: 'Symposium' });
+        const r = await api(coordToken).post('/api/rounds', { paperId, targetVenue: 'ICSE', targetVenueUrl: 'https://conf.researchr.org/home/icse-2026', venueCategory: 'Symposium' });
         expect(r.status).toBe(400);
     });
     test('Conference round without submissionDeadline → 400', async () => {
-        const r = await api(coordToken).post('/api/rounds', { paperId, targetVenue: 'ICSE', venueCategory: 'Conference' });
+        const r = await api(coordToken).post('/api/rounds', { paperId, targetVenue: 'ICSE', targetVenueUrl: 'https://conf.researchr.org/home/icse-2026', venueCategory: 'Conference' });
         expect(r.status).toBe(400);
     });
     test('missing targetVenue → 400', async () => {
@@ -222,7 +222,7 @@ describe('2 · Round creation — error cases', () => {
 
 describe('3 · Round creation — happy paths', () => {
     test('author creates Journal round without submissionDeadline → 201, Draft', async () => {
-        const r = await api(authorToken).post('/api/rounds', { paperId, targetVenue: 'JSS', venueCategory: 'Journal' });
+        const r = await api(authorToken).post('/api/rounds', { paperId, targetVenue: 'JSS', targetVenueUrl: 'https://www.journals.elsevier.com/journal-of-systems-and-software', venueCategory: 'Journal' });
         expect(r.status).toBe(201);
         expect(r.body.status).toBe('Draft');
         expect(r.body.submissionDeadline).toBeNull();
@@ -233,6 +233,7 @@ describe('3 · Round creation — happy paths', () => {
         const r = await api(coordToken).post('/api/rounds', {
             paperId,
             targetVenue: 'ICSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/icse-2026',
             venueCategory: 'Conference',
             submissionDeadline: future(30),
             deadline: future(14),
@@ -245,7 +246,7 @@ describe('3 · Round creation — happy paths', () => {
         roundId = r.body.id;
     });
     test('creating second round while first is Draft → 409', async () => {
-        const r = await api(coordToken).post('/api/rounds', { paperId, targetVenue: 'FSE', venueCategory: 'Conference', submissionDeadline: future(30) });
+        const r = await api(coordToken).post('/api/rounds', { paperId, targetVenue: 'FSE', targetVenueUrl: 'https://conf.researchr.org/home/fse-2026', venueCategory: 'Conference', submissionDeadline: future(30) });
         expect(r.status).toBe(409);
         expect(r.body.message).toMatch(/active round/i);
     });
@@ -476,7 +477,7 @@ describe('7 · Approve round — guard conditions', () => {
         emptyPaper.labs = [];
         emptyPaper.authors = [];
         await paperRepo.save(emptyPaper);
-        const emptyRound = roundRepo.create({ paper: emptyPaper, roundNumber: 1, status: RoundStatus.Draft, targetVenue: 'T', venueCategory: VenueCategory.Journal, submissionDeadline: null, deadline: new Date(future(14)), startedAt: null, completedAt: null });
+        const emptyRound = roundRepo.create({ paper: emptyPaper, roundNumber: 1, status: RoundStatus.Draft, targetVenue: 'T', targetVenueUrl: 'https://example.com/t', venueCategory: VenueCategory.Journal, submissionDeadline: null, deadline: new Date(future(14)), startedAt: null, completedAt: null });
         emptyRound.proposedReviewers = [];
         await roundRepo.save(emptyRound);
         const r = await api(coordToken).post(`/api/rounds/${emptyRound.id}/approve`, {});
@@ -975,6 +976,7 @@ describe('16 · Full second round lifecycle', () => {
         const r = await api(coordToken).post('/api/rounds', {
             paperId,
             targetVenue: 'Transactions on SE',
+            targetVenueUrl: 'https://example.com/transactions-on-se',
             venueCategory: 'Journal',
         });
         expect(r.status).toBe(201);
