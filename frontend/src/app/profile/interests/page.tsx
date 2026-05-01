@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Tags } from 'lucide-react';
 import {
   ApiError,
@@ -13,9 +13,11 @@ import {
 } from '@/lib/api';
 import { getStoredUser, mapStoredUserToLegacyUser, setStoredUser, type StoredAuthUser, type StoredTopic } from '@/lib/auth';
 import { useUser } from '@/components/context/UserContext';
+import { getProfileReturnHref } from '@/lib/profileReturn';
 
 export default function EditInterestsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setUser } = useUser();
   const [storedUser, setLocalStoredUser] = React.useState<StoredAuthUser | null>(null);
   const [topics, setTopics] = React.useState<TopicOption[]>([]);
@@ -25,6 +27,7 @@ export default function EditInterestsPage() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState('');
   const [successMessage, setSuccessMessage] = React.useState('');
+  const returnHref = React.useMemo(() => getProfileReturnHref(searchParams), [searchParams]);
 
   React.useEffect(() => {
     const cachedUser = getStoredUser();
@@ -120,7 +123,7 @@ export default function EditInterestsPage() {
       setUser(mapStoredUserToLegacyUser(nextStoredUser));
       setSuccessMessage('Interests updated successfully.');
       window.setTimeout(() => {
-        router.push('/profile');
+        router.push(returnHref);
       }, 250);
     } catch (caughtError) {
       setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to update interests.');
@@ -135,7 +138,7 @@ export default function EditInterestsPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <Link href="/profile" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors">
+        <Link href={returnHref} className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors">
           <ArrowLeft className="w-4 h-4" />
           Back to profile
         </Link>
@@ -245,7 +248,7 @@ export default function EditInterestsPage() {
             >
               {isSaving ? 'Saving...' : 'Save Interests'}
             </button>
-            <Link href="/profile" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
+            <Link href={returnHref} className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
               Cancel
             </Link>
           </div>

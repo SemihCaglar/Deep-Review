@@ -55,7 +55,7 @@ export default function PapersList() {
 
     const getTitle = () => {
         if (filter === 'authored') return 'My Authored Papers';
-        return 'System Papers';
+        return 'Papers';
     };
 
     const getSubtitle = () => {

@@ -2,14 +2,16 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { ApiError, getCurrentProfileRequest, updateProfileRequest } from '@/lib/api';
 import { getStoredUser, mapStoredUserToLegacyUser, setStoredUser, type StoredAuthUser } from '@/lib/auth';
 import { useUser } from '@/components/context/UserContext';
+import { getProfileReturnHref } from '@/lib/profileReturn';
 
 export default function EditProfilePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setUser } = useUser();
   const [storedUser, setLocalStoredUser] = React.useState<StoredAuthUser | null>(null);
   const [name, setName] = React.useState('');
@@ -17,6 +19,7 @@ export default function EditProfilePage() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState('');
+  const returnHref = React.useMemo(() => getProfileReturnHref(searchParams), [searchParams]);
 
   React.useEffect(() => {
     const cachedUser = getStoredUser();
@@ -60,7 +63,7 @@ export default function EditProfilePage() {
       setStoredUser(nextStoredUser);
       setLocalStoredUser(nextStoredUser);
       setUser(mapStoredUserToLegacyUser(nextStoredUser));
-      router.push('/profile');
+      router.push(returnHref);
     } catch (caughtError) {
       setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to update profile.');
       setIsSaving(false);
@@ -74,7 +77,7 @@ export default function EditProfilePage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <Link href="/profile" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors">
+        <Link href={returnHref} className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-slate-200 transition-colors">
           <ArrowLeft className="w-4 h-4" />
           Back to profile
         </Link>
@@ -130,7 +133,7 @@ export default function EditProfilePage() {
             >
               {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
-            <Link href="/profile" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
+            <Link href={returnHref} className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
               Cancel
             </Link>
           </div>

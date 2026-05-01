@@ -34,21 +34,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     // Handle saving user to state and localStorage
-    const handleSetUser = (newUser: User) => {
+    const handleSetUser = React.useCallback((newUser: User) => {
         setUser(newUser);
         if (typeof window !== 'undefined') {
             localStorage.setItem('bilsen_user', JSON.stringify(newUser));
         }
-    };
+    }, []);
 
-    const logout = () => {
+    const logout = React.useCallback(() => {
         clearToken();
         if (typeof window !== 'undefined') {
             localStorage.removeItem(AUTH_USER_KEY);
             localStorage.removeItem(LEGACY_USER_KEY);
         }
         handleSetUser(EMPTY_USER);
-    };
+    }, [handleSetUser]);
+
+    const contextValue = React.useMemo(
+        () => ({ user, setUser: handleSetUser, logout }),
+        [handleSetUser, logout, user],
+    );
 
     // Prevent rendering children until mounted to avoid hydration flash entirely
     if (!mounted) {
@@ -56,7 +61,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     return (
-        <UserContext.Provider value={{ user, setUser: handleSetUser, logout }}>
+        <UserContext.Provider value={contextValue}>
             {children}
         </UserContext.Provider>
     );
