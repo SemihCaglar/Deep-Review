@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { ChevronRight, FileText, Search, Loader2, Clock, CheckCircle2, X } from 'lucide-react';
 import { AuthoredPaper, getAllPapersRequest, getMyWrittenPapersRequest, PaperAuthor, TopicOption, Paper } from '@/lib/api';
@@ -10,7 +10,14 @@ import { AuthoredPaper, getAllPapersRequest, getMyWrittenPapersRequest, PaperAut
 export default function PapersList() {
     const { user } = useUser();
     const searchParams = useSearchParams();
+    const router = useRouter();
     const filter = searchParams.get('filter');
+
+    useEffect(() => {
+        if (user.id && !user.isCoordinator && filter !== 'authored') {
+            router.replace('/papers?filter=authored');
+        }
+    }, [user.id, user.isCoordinator, filter, router]);
 
     const [allPapers, setAllPapers] = useState<(Paper | AuthoredPaper)[]>([]);
     const [loading, setLoading] = useState(true);

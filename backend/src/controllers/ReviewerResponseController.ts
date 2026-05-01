@@ -105,7 +105,7 @@ export class ReviewerResponseController {
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
         where: { id: req.params.id as string },
-        relations: ['reviewer'],
+        relations: ['reviewer', 'round', 'round.paper', 'round.paper.coordinators'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
@@ -143,6 +143,16 @@ export class ReviewerResponseController {
       }
       assignment.declineReason = reason;
       await assignRepo.save(assignment);
+
+      const paperTitle = assignment.round.paper.title;
+      const roundNumber = assignment.round.roundNumber;
+      for (const coord of assignment.round.paper.coordinators ?? []) {
+        sendEmail(
+          coord,
+          `${isUpdate ? '[Updated] ' : ''}Decline Request from ${user.name}`,
+          `Hello ${coord.name},\n\n${user.name} has ${isUpdate ? 'updated their' : 'submitted a'} decline request for paper "${paperTitle}" (Round ${roundNumber}).\n\nReason: "${reason}"\n\nPlease log in to approve or reject the request.`,
+        ).catch(console.error);
+      }
 
       return res.status(isUpdate ? 200 : 201).json({
         message: isUpdate ? 'Decline request updated' : 'Decline request submitted and awaiting coordinator approval',
@@ -294,7 +304,7 @@ export class ReviewerResponseController {
       const declineRepo = AppDataSource.getRepository(DeclineRequest);
       const declineRequest = await declineRepo.findOne({
         where: { id: declineRequestId },
-        relations: ['assignment', 'assignment.round', 'assignment.round.paper', 'assignment.round.paper.coordinators'],
+        relations: ['assignment', 'assignment.reviewer', 'assignment.round', 'assignment.round.paper', 'assignment.round.paper.coordinators'],
       });
       if (!declineRequest) return res.status(404).json({ message: 'Decline request not found' });
       if (declineRequest.status !== DeclineRequestStatus.Pending) {
@@ -322,6 +332,23 @@ export class ReviewerResponseController {
       }
 
       await declineRepo.save(declineRequest);
+
+      const reviewer = declineRequest.assignment.reviewer;
+      const paperTitle = declineRequest.assignment.round.paper.title;
+      const roundNumber = declineRequest.assignment.round.roundNumber;
+      if (decision === 'approve') {
+        sendEmail(
+          reviewer,
+          `Your decline request for "${paperTitle}" has been approved`,
+          `Hello ${reviewer.name},\n\nYour decline request for paper "${paperTitle}" (Round ${roundNumber}) has been approved. You are no longer assigned to review this paper.`,
+        ).catch(console.error);
+      } else {
+        sendEmail(
+          reviewer,
+          `Your decline request for "${paperTitle}" has been rejected`,
+          `Hello ${reviewer.name},\n\nYour decline request for paper "${paperTitle}" (Round ${roundNumber}) has been rejected. Your assignment remains active — please continue with the review.`,
+        ).catch(console.error);
+      }
 
       return res.status(200).json({
         message: decision === 'approve' ? 'Decline request approved' : 'Decline request rejected',
@@ -357,7 +384,7 @@ export class ReviewerResponseController {
       const extensionRepo = AppDataSource.getRepository(Extension);
       const extension = await extensionRepo.findOne({
         where: { id: extensionId },
-        relations: ['assignment', 'assignment.round', 'assignment.round.paper', 'assignment.round.paper.coordinators'],
+        relations: ['assignment', 'assignment.reviewer', 'assignment.round', 'assignment.round.paper', 'assignment.round.paper.coordinators'],
       });
       if (!extension) return res.status(404).json({ message: 'Extension request not found' });
       if (extension.status !== ExtensionStatus.Pending) {
@@ -392,6 +419,24 @@ export class ReviewerResponseController {
       }
       await assignRepo.save(extension.assignment);
       await extensionRepo.save(extension);
+
+      const reviewer = extension.assignment.reviewer;
+      const paperTitle = extension.assignment.round.paper.title;
+      const roundNumber = extension.assignment.round.roundNumber;
+      if (decision === 'approve') {
+        const newDeadline = extension.assignment.deadline?.toISOString().split('T')[0] ?? 'N/A';
+        sendEmail(
+          reviewer,
+          `Your extension request for "${paperTitle}" has been approved`,
+          `Hello ${reviewer.name},\n\nYour deadline extension request for paper "${paperTitle}" (Round ${roundNumber}) has been approved.\n\nYour new deadline is: ${newDeadline}\n\nPlease log in and submit your review before the new deadline.`,
+        ).catch(console.error);
+      } else {
+        sendEmail(
+          reviewer,
+          `Your extension request for "${paperTitle}" has been rejected`,
+          `Hello ${reviewer.name},\n\nYour deadline extension request for paper "${paperTitle}" (Round ${roundNumber}) has been rejected. Your original deadline remains unchanged.\n\nPlease log in and submit your review on time.`,
+        ).catch(console.error);
+      }
 
       return res.status(200).json({
         message: decision === 'approve' ? 'Extension approved' : 'Extension rejected',
@@ -447,7 +492,7 @@ export class ReviewerResponseController {
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
         where: { id: assignmentId as string },
-        relations: ['reviewer'],
+        relations: ['reviewer', 'round', 'round.paper', 'round.paper.coordinators', 'round.paper.authors'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
@@ -490,6 +535,24 @@ export class ReviewerResponseController {
       if (pendingExtensions.length > 0) {
         for (const e of pendingExtensions) e.status = ExtensionStatus.Rejected;
         await extensionRepo.save(pendingExtensions);
+      }
+
+      const paperTitle = assignment.round.paper.title;
+      const roundNumber = assignment.round.roundNumber;
+      const reviewerName = assignment.reviewer.name;
+      const recipients = [
+        ...(assignment.round.paper.coordinators ?? []),
+        ...(assignment.round.paper.authors ?? []),
+      ];
+      const seen = new Set<string>();
+      for (const recipient of recipients) {
+        if (seen.has(recipient.id)) continue;
+        seen.add(recipient.id);
+        sendEmail(
+          recipient,
+          `Review submitted for "${paperTitle}"`,
+          `Hello ${recipient.name},\n\n${reviewerName} has submitted their review for paper "${paperTitle}" (Round ${roundNumber}).\n\nPlease log in to view the review summary.`,
+        ).catch(console.error);
       }
 
       return res.status(200).json({ message: 'Review completed', id: assignment.id, status: assignment.status });

@@ -92,6 +92,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [showCreateRound, setShowCreateRound] = useState(false);
     const [newVenueCat, setNewVenueCat] = useState('Conference');
     const [newTargetVenue, setNewTargetVenue] = useState('');
+    const [newTargetVenueUrl, setNewTargetVenueUrl] = useState('');
     const [newSubDeadline, setNewSubDeadline] = useState('');
     const [newRoundDeadline, setNewRoundDeadline] = useState('');
     const [creatingRound, setCreatingRound] = useState(false);
@@ -404,9 +405,11 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 params.id, newTargetVenue, newVenueCat,
                 newVenueCat === 'Conference' ? newSubDeadline : undefined,
                 newRoundDeadline || undefined,
+                newTargetVenueUrl.trim() || undefined,
             );
             setShowCreateRound(false);
             setNewTargetVenue('');
+            setNewTargetVenueUrl('');
             setNewSubDeadline('');
             setNewRoundDeadline('');
             await refreshRounds();
@@ -1215,6 +1218,12 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             <label className="text-xs text-slate-400 uppercase tracking-wider">Target Venue Name</label>
                                             <input type="text" value={newTargetVenue} onChange={e => setNewTargetVenue(e.target.value)}
                                                 placeholder="e.g. NeurIPS 2026"
+                                                className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50" />
+                                        </div>
+                                        <div className="space-y-1 sm:col-span-2">
+                                            <label className="text-xs text-slate-400 uppercase tracking-wider">Venue URL <span className="normal-case text-slate-500">(optional)</span></label>
+                                            <input type="text" value={newTargetVenueUrl} onChange={e => setNewTargetVenueUrl(e.target.value)}
+                                                placeholder="https://neurips.cc/Conferences/2026"
                                                 className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50" />
                                         </div>
                                         {newVenueCat === 'Conference' && (

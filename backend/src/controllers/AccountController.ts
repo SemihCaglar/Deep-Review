@@ -542,6 +542,12 @@ export class AccountController {
 
     const savedMember = await memberRepo.save(member);
 
+    sendEmail(
+      savedMember as unknown as import('../entities/User').User,
+      'Your BILSEN account has been approved',
+      `Hello ${savedMember.name},\n\nYour sign-up request for BILSEN has been approved. You can now log in and start using the system.\n\nWelcome aboard!${note ? `\n\nNote from coordinator: ${note}` : ''}`,
+    ).catch(console.error);
+
     return res.status(200).json({
       message: 'Signup approved',
       user: AccountController.serializeAccount(savedMember),
@@ -582,6 +588,12 @@ export class AccountController {
     member.approvalNote = note;
 
     const savedMember = await memberRepo.save(member);
+
+    sendEmail(
+      savedMember as unknown as import('../entities/User').User,
+      'Your BILSEN sign-up request was not approved',
+      `Hello ${savedMember.name},\n\nUnfortunately your sign-up request for BILSEN has not been approved at this time.${note ? `\n\nReason: ${note}` : ''}\n\nIf you believe this is a mistake, please contact the lab coordinator.`,
+    ).catch(console.error);
 
     return res.status(200).json({
       message: 'Signup rejected',

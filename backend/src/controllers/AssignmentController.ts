@@ -417,7 +417,7 @@ export class AssignmentController {
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
         where: { id },
-        relations: ['round', 'round.paper', 'round.paper.coordinators', 'declineRequests', 'extensions'],
+        relations: ['reviewer', 'round', 'round.paper', 'round.paper.coordinators', 'declineRequests', 'extensions'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
 
@@ -454,6 +454,12 @@ export class AssignmentController {
       if (extensionsToSave.length > 0) {
         await AppDataSource.getRepository(Extension).save(extensionsToSave);
       }
+
+      sendEmail(
+        assignment.reviewer,
+        `Your review assignment for "${assignment.round.paper.title}" has been cancelled`,
+        `Hello ${assignment.reviewer.name},\n\nYour review assignment for paper "${assignment.round.paper.title}" (Round ${assignment.round.roundNumber}) has been cancelled by the coordinator. No further action is required from you.`,
+      ).catch(console.error);
 
       return res.status(200).json({
         message: 'Assignment cancelled',

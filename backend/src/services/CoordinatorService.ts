@@ -7,6 +7,7 @@ import { Lab } from '../entities/Lab';
 import { ReviewerResponse, ReviewerResponseStatus } from '../entities/ReviewerResponse';
 import { User, UserRole } from '../entities/User';
 import { RoundStatus, VenueCategory } from '../entities/Round';
+import { sendEmail } from './emailService';
 
 export class CoordinatorServiceError extends Error {
   statusCode: number;
@@ -40,7 +41,7 @@ export class CoordinatorService {
   ): Promise<Assignment> {
     const normalizedId = normalizeId(assignmentOrResponseId, 'Assignment id');
 
-    return AppDataSource.transaction(async (manager) => {
+    const result = await AppDataSource.transaction(async (manager) => {
       const assignment = await this.findAssignmentByAssignmentOrResponseId(manager, normalizedId);
       await this.assertCoordinatorAccess(manager, assignment, context);
 
@@ -106,6 +107,31 @@ export class CoordinatorService {
 
       return this.loadAssignment(manager, savedAssignment.id);
     });
+
+    const assignWithReviewer = await AppDataSource.getRepository(Assignment).findOne({
+      where: { id: result.id },
+      relations: ['reviewer', 'round', 'round.paper'],
+    });
+    if (assignWithReviewer?.reviewer) {
+      const reviewer = assignWithReviewer.reviewer;
+      const paperTitle = assignWithReviewer.round.paper.title;
+      const roundNumber = assignWithReviewer.round.roundNumber;
+      if (decision === 'Approve') {
+        sendEmail(
+          reviewer,
+          `Your decline request for "${paperTitle}" has been approved`,
+          `Hello ${reviewer.name},\n\nYour decline request for paper "${paperTitle}" (Round ${roundNumber}) has been approved. You are no longer assigned to review this paper.`,
+        ).catch(console.error);
+      } else {
+        sendEmail(
+          reviewer,
+          `Your decline request for "${paperTitle}" has been rejected`,
+          `Hello ${reviewer.name},\n\nYour decline request for paper "${paperTitle}" (Round ${roundNumber}) has been rejected. Your assignment remains active — please continue with the review.`,
+        ).catch(console.error);
+      }
+    }
+
+    return result;
   }
 
   static async processExtensionRequest(
