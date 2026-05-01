@@ -7,6 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 import { ApiError, getCurrentProfileRequest, updateProfileRequest } from '@/lib/api';
 import { getStoredUser, mapStoredUserToLegacyUser, setStoredUser, type StoredAuthUser } from '@/lib/auth';
 import { useUser } from '@/components/context/UserContext';
+import { confirmCancel } from '@/lib/confirmAction';
 
 export default function EditProfilePage() {
   const router = useRouter();
@@ -130,7 +131,16 @@ export default function EditProfilePage() {
             >
               {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
-            <Link href="/profile" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
+            <Link
+              href="/profile"
+              onClick={async (event) => {
+                event.preventDefault();
+                if (await confirmCancel()) {
+                  router.push('/profile');
+                }
+              }}
+              className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
+            >
               Cancel
             </Link>
           </div>

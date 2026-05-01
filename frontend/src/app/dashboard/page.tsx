@@ -10,6 +10,7 @@ import {
   Trash2, 
   UserCheck, 
   BarChart2, 
+  Search,
   ChevronDown, 
   ChevronUp,
   type LucideIcon 
@@ -175,6 +176,7 @@ export default function DashboardPage() {
   const [analyticsError, setAnalyticsError] = React.useState('');
   const [sortKey, setSortKey] = React.useState<SortKey>('aggregateScore');
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc');
+  const [leaderboardSearch, setLeaderboardSearch] = React.useState('');
 
   // Reviewer State (Request Decisions/Notifications)
   const [myReviewAssignments, setMyReviewAssignments] = React.useState<MyAssignment[]>([]);
@@ -352,7 +354,7 @@ export default function DashboardPage() {
 
   const sortedRankings = React.useMemo<ReviewerRanking[]>(() => {
     if (!analytics) return [];
-    return [...analytics.rankings].sort((a, b) => {
+    const sorted = [...analytics.rankings].sort((a, b) => {
       const av = a[sortKey] as number | null;
       const bv = b[sortKey] as number | null;
       if (av === null && bv === null) return 0;
@@ -360,7 +362,14 @@ export default function DashboardPage() {
       if (bv === null) return -1;
       return sortDir === 'desc' ? bv - av : av - bv;
     });
-  }, [analytics, sortKey, sortDir]);
+    const query = leaderboardSearch.trim().toLocaleLowerCase();
+    if (!query) return sorted;
+
+    return [
+      ...sorted.filter(reviewer => reviewer.name.toLocaleLowerCase().includes(query)),
+      ...sorted.filter(reviewer => !reviewer.name.toLocaleLowerCase().includes(query)),
+    ];
+  }, [analytics, sortKey, sortDir, leaderboardSearch]);
 
   const toggleDecisionSelection = (id: string) => {
     setSelectedDecisionIds(prev => {
@@ -470,6 +479,16 @@ export default function DashboardPage() {
               <BarChart2 className="w-5 h-5 text-blue-400" />
               Reviewer Leaderboard
             </h2>
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={leaderboardSearch}
+                onChange={event => setLeaderboardSearch(event.target.value)}
+                placeholder="Search reviewer by name..."
+                className="w-full rounded-xl border border-white/10 bg-white/[0.03] py-2 pl-9 pr-3 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+              />
+            </div>
 
             {analyticsError && (
               <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">

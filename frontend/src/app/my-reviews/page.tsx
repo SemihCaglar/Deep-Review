@@ -10,6 +10,7 @@ import {
   requestDeclineForAssignmentRequest,
   completeReviewRequest,
 } from '@/lib/api';
+import { confirmCancel } from '@/lib/confirmAction';
 import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Users } from 'lucide-react';
 
 const ACTIVE_ASSIGNMENT_STATUSES = ['Invited', 'Accepted', 'PendingDecline', 'PendingExtension', 'Overdue'];
@@ -298,7 +299,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       Send Request to Coordinator
                     </button>
-                    <button onClick={() => setShowDeclineForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={async () => { if (await confirmCancel()) setShowDeclineForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>
@@ -371,7 +372,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       Submit Review
                     </button>
-                    <button onClick={() => setShowCompleteForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={async () => { if (await confirmCancel()) setShowCompleteForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>
@@ -414,7 +415,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       {assignment.pendingExtensionRequest ? 'Update Request' : 'Submit Request'}
                     </button>
-                    <button onClick={() => setShowExtForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={async () => { if (await confirmCancel()) setShowExtForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>

@@ -33,6 +33,7 @@ import {
   approveRoundRequest,
   getRoundStatusRequest,
 } from '@/lib/api';
+import { confirmCancel } from '@/lib/confirmAction';
 import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft } from 'lucide-react';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
@@ -111,7 +112,10 @@ function AssignmentRow({
     }
   };
 
-  const handleCancel = () => act(() => cancelAssignmentRequest(assignment.id));
+  const handleCancel = async () => {
+    if (!(await confirmCancel())) return;
+    act(() => cancelAssignmentRequest(assignment.id));
+  };
 
   const handleUpdateDeadline = () =>
     act(async () => {
@@ -152,7 +156,8 @@ function AssignmentRow({
 
   const isCancelable = ['Invited', 'Accepted'].includes(assignment.status);
   const isRemindable = ['Accepted', 'PendingExtension', 'PendingDecline', 'Overdue'].includes(assignment.status);
-  const isReassignable = roundStatus !== 'Completed' && ['Declined', 'Cancelled'].includes(assignment.status);
+  const showReassign = ['Declined', 'Cancelled'].includes(assignment.status);
+  const isReassignable = roundStatus !== 'Completed' && assignment.status === 'Declined';
   const isCompleted = assignment.status === 'Completed';
 
   return (
@@ -195,11 +200,12 @@ function AssignmentRow({
               <Ban className="w-3.5 h-3.5" /> Cancel
             </button>
           )}
-          {isReassignable && (
+          {showReassign && (
             <button
               onClick={() => onReassign(assignment.id)}
-              disabled={busy}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+              disabled={busy || !isReassignable}
+              title={!isReassignable ? 'Cancelled assignments cannot be reassigned' : undefined}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-orange-500/10"
             >
               <UserPlus className="w-3.5 h-3.5" /> Reassign
             </button>
@@ -257,7 +263,7 @@ function AssignmentRow({
           >
             Save
           </button>
-          <button onClick={() => setShowDeadlineInput(false)} className="text-xs text-slate-500 hover:text-slate-300">
+          <button onClick={async () => { if (await confirmCancel()) setShowDeadlineInput(false); }} className="text-xs text-slate-500 hover:text-slate-300">
             Cancel
           </button>
         </div>
@@ -732,7 +738,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                       <div className="flex items-center gap-2">
                         <input type="date" value={draftDeadline} onChange={(e) => { setDraftDeadline(e.target.value); setDeadlineError(''); }} min={todayInputValue()} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
                         <button onClick={handleEditDeadline} disabled={savingDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white">Save</button>
-                        <button onClick={() => { setEditingDeadline(false); setDeadlineError(''); }} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
+                        <button onClick={async () => { if (await confirmCancel()) { setEditingDeadline(false); setDeadlineError(''); } }} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
                       </div>
                       {deadlineError && <p className="text-xs text-red-400">{deadlineError}</p>}
                     </div>
@@ -997,7 +1003,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                   {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
                   {reassigningForId ? 'Reassign' : `Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ''}`}
                 </button>
-                <button onClick={() => setShowAddPanel(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                <button onClick={async () => { if (await confirmCancel()) setShowAddPanel(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                   Cancel
                 </button>
                 {assignError && <p className="text-xs text-red-400">{assignError}</p>}
@@ -1343,7 +1349,7 @@ export default function RoundsPage() {
                    {creatingRound ? 'Saving...' : 'Create Draft'}
                  </button>
                  <button
-                   onClick={() => setShowCreateRound(false)}
+                   onClick={async () => { if (await confirmCancel()) setShowCreateRound(false); }}
                    className="px-4 py-2 text-sm font-medium rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 transition-colors"
                  >
                    Cancel
