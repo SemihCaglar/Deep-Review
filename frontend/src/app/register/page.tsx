@@ -125,7 +125,7 @@ export default function RegisterPaper() {
 
     // Filtered lists
     const filteredUsers = availableUsers
-        .filter(u => u.id !== user.id && u.role !== 'Coordinator')
+        .filter(u => u.id !== user.id && u.role !== 'Coordinator' && u.role !== 'Admin')
         .filter(u =>
             u.name.toLowerCase().includes(authorSearch.toLowerCase()) ||
             u.email.toLowerCase().includes(authorSearch.toLowerCase())
