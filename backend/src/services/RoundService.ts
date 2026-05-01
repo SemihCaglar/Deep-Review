@@ -1,9 +1,12 @@
 import { AppDataSource } from '../data-source';
 import { Round, RoundStatus, VenueCategory } from '../entities/Round';
-import { Paper } from '../entities/Paper';
+import { Paper, PaperStatus } from '../entities/Paper';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
+import { User, UserRole } from '../entities/User';
 import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest';
 import { Extension, ExtensionStatus } from '../entities/Extension';
+import { sendEmail } from './emailService';
+import { IsNull, LessThan, MoreThan } from 'typeorm';
 
 export class RoundServiceError extends Error {
   statusCode: number;
@@ -15,6 +18,10 @@ export class RoundServiceError extends Error {
 }
 
 export class RoundService {
+  private static hasOverleafLink(paper: Paper): boolean {
+    return typeof paper.overleafLink === 'string' && paper.overleafLink.trim().length > 0;
+  }
+
   static async startRound(roundId: string, coordinatorId: string): Promise<Round> {
     return AppDataSource.transaction(async (manager) => {
       const roundRepo = manager.getRepository(Round);
@@ -29,19 +36,19 @@ export class RoundService {
       if (!isOwner) throw new RoundServiceError(403, 'You are not a coordinator of this paper');
 
       if (round.status !== RoundStatus.Draft) {
-        throw new RoundServiceError(400, 'Only Draft rounds can be started');
+        throw new RoundServiceError(400, `Cannot start round: it is currently '${round.status}'. Only Draft rounds can be started.`);
       }
 
       if (!round.deadline) {
-        throw new RoundServiceError(400, 'Round deadline must be set before starting');
+        throw new RoundServiceError(400, 'Round deadline must be set before starting. Please set a review deadline first.');
       }
 
       if (round.venueCategory === VenueCategory.Conference && !round.submissionDeadline) {
-        throw new RoundServiceError(400, 'Submission deadline is required for Conference rounds');
+        throw new RoundServiceError(400, 'This is a Conference round — a submission deadline is required before starting.');
       }
 
-      if (!round.paper.overleafLink) {
-        throw new RoundServiceError(400, 'The paper\'s Overleaf link must be set before starting a round');
+      if (!this.hasOverleafLink(round.paper)) {
+        throw new RoundServiceError(400, 'The paper\'s Overleaf link must be set before starting a round so reviewers can access the manuscript.');
       }
 
       round.status = RoundStatus.Open;
@@ -51,63 +58,217 @@ export class RoundService {
     });
   }
 
-  static async checkAndMarkOverdue(): Promise<void> {
-    const now = new Date();
-
-    await AppDataSource.transaction(async (manager) => {
+  static async approveRound(roundId: string, coordinatorId: string): Promise<{ round: Round; assigned: number; skipped: number }> {
+    return AppDataSource.transaction(async (manager) => {
       const roundRepo = manager.getRepository(Round);
-
-      const openRounds = await roundRepo.find({
-        where: { status: RoundStatus.Open },
-        relations: ['assignments'],
+      const round = await roundRepo.findOne({
+        where: { id: roundId },
+        relations: [
+          'paper', 'paper.coordinators', 'paper.authors', 'paper.labs',
+          'proposedReviewers', 'proposedReviewers.labs',
+          'assignments', 'assignments.reviewer',
+        ],
       });
 
-      const activeStatuses = new Set<AssignmentStatus>([
-        AssignmentStatus.Invited,
-        AssignmentStatus.Accepted,
-        AssignmentStatus.PendingExtension,
-        AssignmentStatus.PendingDecline,
-      ]);
-      const terminalStatuses = new Set<AssignmentStatus>([
-        AssignmentStatus.Declined,
-        AssignmentStatus.Cancelled,
-        AssignmentStatus.Reassigned,
-        AssignmentStatus.Completed,
-        AssignmentStatus.Overdue,
-      ]);
+      if (!round) throw new RoundServiceError(404, 'Round not found');
 
-      for (const round of openRounds) {
-        for (const assignment of round.assignments ?? []) {
-          const isActive = activeStatuses.has(assignment.status);
-          const isPastDeadline = assignment.deadline && assignment.deadline.getTime() < now.getTime();
+      const isOwner = round.paper.coordinators?.some(c => c.id === coordinatorId);
+      if (!isOwner) throw new RoundServiceError(403, 'You are not a coordinator of this paper');
 
-          if (isActive && isPastDeadline) {
-            assignment.status = AssignmentStatus.Overdue;
-            await manager.getRepository(Assignment).save(assignment);
-
-            // Reject any pending decline/extension requests — coordinator didn't act in time
-            await manager.getRepository(DeclineRequest).update(
-              { assignment: { id: assignment.id }, status: DeclineRequestStatus.Pending },
-              { status: DeclineRequestStatus.Rejected },
-            );
-            await manager.getRepository(Extension).update(
-              { assignment: { id: assignment.id }, status: ExtensionStatus.Pending },
-              { status: ExtensionStatus.Rejected },
-            );
-          }
-        }
-
-        if (round.assignments.length > 0) {
-          const allTerminal = round.assignments.every(a => terminalStatuses.has(a.status));
-
-          if (allTerminal) {
-            round.status = RoundStatus.Completed;
-            round.completedAt = now;
-            await roundRepo.save(round);
-          }
-        }
+      if (round.status !== RoundStatus.Draft) {
+        throw new RoundServiceError(400, `Cannot approve round: it is currently '${round.status}'. Only Draft rounds can be approved and started.`);
       }
+      if (!round.deadline) {
+        throw new RoundServiceError(400, 'A review deadline must be set on the round before it can be approved. Please set a deadline first.');
+      }
+      if (round.venueCategory === VenueCategory.Conference && !round.submissionDeadline) {
+        throw new RoundServiceError(400, 'This is a Conference round — a submission deadline is required before the round can be approved.');
+      }
+      if (!this.hasOverleafLink(round.paper)) {
+        throw new RoundServiceError(400, 'The paper\'s Overleaf link must be set before approving so reviewers can access the manuscript.');
+      }
+      if (!round.proposedReviewers || round.proposedReviewers.length === 0) {
+        throw new RoundServiceError(400, 'At least one reviewer must be in the proposed list before approving. Add reviewers from the suggestions panel first.');
+      }
+
+      const paperLabIds = round.paper.labs?.map(l => l.id) ?? [];
+      const authorIds = new Set(round.paper.authors?.map(a => a.id) ?? []);
+      const alreadyAssignedIds = new Set(round.assignments?.map(a => a.reviewer.id) ?? []);
+
+      const assignRepo = manager.getRepository(Assignment);
+      let assigned = 0;
+      let skipped = 0;
+
+      for (const reviewer of round.proposedReviewers) {
+        // Skip admins/coordinators
+        if (reviewer.role === UserRole.Admin || reviewer.role === UserRole.Coordinator) { skipped++; continue; }
+        // Skip authors
+        if (authorIds.has(reviewer.id)) { skipped++; continue; }
+        // Skip already assigned
+        if (alreadyAssignedIds.has(reviewer.id)) { skipped++; continue; }
+        // Skip if not in a shared lab
+        const reviewerLabIds = (reviewer as User & { labs?: { id: string }[] }).labs?.map(l => l.id) ?? [];
+        const sharesLab = reviewerLabIds.some(lid => paperLabIds.includes(lid));
+        if (!sharesLab) { skipped++; continue; }
+
+        const assignment = new Assignment();
+        assignment.round = round;
+        assignment.reviewer = reviewer as any;
+        assignment.status = AssignmentStatus.Invited;
+        assignment.deadline = round.deadline;
+        assignment.invitationSent = true;
+        await assignRepo.save(assignment);
+
+        await sendEmail(
+          reviewer,
+          'You have been invited to review a paper',
+          `Hello ${reviewer.name},\n\nYou have been invited to review the paper "${round.paper.title}" (Round ${round.roundNumber}).\n\nPlease log in to accept or decline.\n\nDeadline: ${round.deadline?.toISOString().split('T')[0] ?? 'TBD'}`,
+        ).catch(err => console.error('[approveRound] invite email failed:', err));
+
+        assigned++;
+      }
+
+      // Transition paper to HumanReview
+      if (assigned > 0 && round.paper.status !== PaperStatus.HumanReview) {
+        const paperRepo = manager.getRepository(Paper);
+        await paperRepo.update(round.paper.id, { status: PaperStatus.HumanReview });
+      }
+
+      const startedAt = new Date();
+      await roundRepo.update(round.id, { status: RoundStatus.Open, startedAt });
+      round.status = RoundStatus.Open;
+      round.startedAt = startedAt;
+
+      return { round, assigned, skipped };
     });
   }
 
+  static async checkAndMarkOverdue(): Promise<void> {
+    const now = new Date();
+
+    const assignRepo = AppDataSource.getRepository(Assignment);
+
+    const activeStatuses = [
+      AssignmentStatus.Invited,
+      AssignmentStatus.Accepted,
+      AssignmentStatus.PendingExtension,
+      AssignmentStatus.PendingDecline,
+    ];
+
+    const allOverdue = await assignRepo
+      .createQueryBuilder('a')
+      .leftJoinAndSelect('a.round', 'round')
+      .leftJoinAndSelect('round.paper', 'paper')
+      .leftJoinAndSelect('paper.coordinators', 'coordinators')
+      .leftJoinAndSelect('a.reviewer', 'reviewer')
+      .where('a.deadline < :now', { now })
+      .andWhere('a.status IN (:...statuses)', { statuses: activeStatuses })
+      .getMany();
+
+    for (const assignment of allOverdue) {
+      assignment.status = AssignmentStatus.Overdue;
+      await assignRepo.save(assignment);
+
+      await AppDataSource.getRepository(DeclineRequest).update(
+        { assignment: { id: assignment.id }, status: DeclineRequestStatus.Pending },
+        { status: DeclineRequestStatus.Rejected },
+      );
+      await AppDataSource.getRepository(Extension).update(
+        { assignment: { id: assignment.id }, status: ExtensionStatus.Pending },
+        { status: ExtensionStatus.Rejected },
+      );
+
+      const paper = assignment.round?.paper;
+      const reviewer = assignment.reviewer;
+      const paperTitle = paper?.title ?? 'Unknown Paper';
+      const roundNumber = assignment.round?.roundNumber ?? '?';
+
+      // Alert coordinator(s)
+      for (const coordinator of paper?.coordinators ?? []) {
+        await sendEmail(
+          coordinator,
+          `Overdue Review Alert: ${paperTitle}`,
+          `Hello ${coordinator.name},\n\nReviewer ${reviewer.name} (${reviewer.email}) has missed their review deadline for paper "${paperTitle}" (Round ${roundNumber}).\n\nDeadline was: ${assignment.deadline?.toISOString() ?? 'N/A'}\n\nPlease consider reassigning or taking action.`,
+        ).catch(err => console.error('[overdueAlert] coordinator email failed:', err));
+      }
+
+      // Notify reviewer
+      await sendEmail(
+        reviewer,
+        `Your review for "${paperTitle}" is now Overdue`,
+        `Hello ${reviewer.name},\n\nYour review assignment for paper "${paperTitle}" (Round ${roundNumber}) has passed its deadline and is now marked as Overdue.\n\nDeadline was: ${assignment.deadline?.toISOString() ?? 'N/A'}\n\nPlease contact the coordinator if you need assistance.`,
+      ).catch(err => console.error('[overdueAlert] reviewer email failed:', err));
+    }
+
+    // Auto-complete rounds where all assignments are terminal
+    const terminalStatuses = new Set<AssignmentStatus>([
+      AssignmentStatus.Declined,
+      AssignmentStatus.Cancelled,
+      AssignmentStatus.Reassigned,
+      AssignmentStatus.Completed,
+      AssignmentStatus.Overdue,
+    ]);
+
+    const roundRepo = AppDataSource.getRepository(Round);
+    const openRounds = await roundRepo.find({
+      where: { status: RoundStatus.Open },
+      relations: ['assignments'],
+    });
+
+    for (const round of openRounds) {
+      if (round.assignments.length > 0) {
+        const allTerminal = round.assignments.every(a => terminalStatuses.has(a.status));
+        if (allTerminal) {
+          round.status = RoundStatus.Completed;
+          round.completedAt = now;
+          await roundRepo.save(round);
+        }
+      }
+    }
+  }
+
+  static async sendAutoReminders(): Promise<void> {
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000); // now + 25 hours
+
+    const eligibleStatuses = [
+      AssignmentStatus.Accepted,
+      AssignmentStatus.PendingExtension,
+      AssignmentStatus.PendingDecline,
+    ];
+
+    const assignRepo = AppDataSource.getRepository(Assignment);
+    const due = await assignRepo
+      .createQueryBuilder('a')
+      .leftJoinAndSelect('a.round', 'round')
+      .leftJoinAndSelect('round.paper', 'paper')
+      .leftJoinAndSelect('a.reviewer', 'reviewer')
+      .where('a.deadline > :now', { now })
+      .andWhere('a.deadline <= :windowEnd', { windowEnd })
+      .andWhere('a.status IN (:...statuses)', { statuses: eligibleStatuses })
+      .andWhere('a.autoReminderSentAt IS NULL')
+      .getMany();
+
+    for (const assignment of due) {
+      const paperTitle = assignment.round?.paper?.title ?? 'Unknown Paper';
+      const deadline = assignment.deadline?.toISOString().split('T')[0] ?? 'N/A';
+
+      const emailSent = await sendEmail(
+        assignment.reviewer,
+        `Reminder: Review due tomorrow for "${paperTitle}"`,
+        `Hello ${assignment.reviewer.name},\n\nThis is a reminder that your review for paper "${paperTitle}" is due on ${deadline}.\n\nPlease log in and submit your review before the deadline.`,
+      )
+        .then(() => true)
+        .catch(err => {
+          console.error('[autoReminder] email failed:', err);
+          return false;
+        });
+
+      if (!emailSent) {
+        continue;
+      }
+      assignment.autoReminderSentAt = now;
+      await assignRepo.save(assignment);
+    }
+  }
 }

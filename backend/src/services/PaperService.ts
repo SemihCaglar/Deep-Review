@@ -40,7 +40,8 @@ export class PaperService {
     const paper = paperRepo.create({
       title: dto.title,
       abstractText: dto.abstractText,
-      overleafLink: dto.overleafLink,
+      overleafLink: dto.overleafLink?.trim() || null!,
+      githubLink: dto.githubLink?.trim() || null,
       status: PaperStatus.Draft,
       creationTime: new Date(),
     });

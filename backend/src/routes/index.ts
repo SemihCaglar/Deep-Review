@@ -69,10 +69,6 @@ router.post('/labs/:labId/topics', authenticateRequest, TopicController.addTopic
 router.put('/labs/:labId/topics/:topicId', authenticateRequest, TopicController.updateTopicInLab);
 router.delete('/labs/:labId/topics/:topicId', authenticateRequest, TopicController.removeTopicFromLab);
 
-// ==== AI REVIEW ROUTES ====
-// Note: Core AI execution route is handled in Round Routes (POST /rounds/:id/ai)
-// Other stubs can be implemented later as needed.
-
 // ==== ASSIGNMENT ROUTES ====
 router.get('/assignments/my', authenticateRequest, AssignmentController.getMyAssignments);
 router.post('/assignments/my/request-decisions/dismiss', authenticateRequest, AssignmentController.dismissRequestDecisions);
@@ -95,6 +91,7 @@ router.post('/papers', authenticateRequest, PaperController.registerPaper);
 
 router.get('/papers/:id', authenticateRequest, PaperController.getPaperById);
 router.put('/papers/:id/overleaf', authenticateRequest, PaperController.updateOverleafLink);
+router.put('/papers/:id/github', authenticateRequest, PaperController.updateGithubLink);
 router.get('/papers/:id/status', authenticateRequest, PaperController.getPaperStatus);
 router.get('/papers/:id/history', authenticateRequest, PaperController.getPaperHistory);
 router.put('/papers/:id/topics', authenticateRequest, PaperController.setTopics);
@@ -127,14 +124,16 @@ router.post('/responses/complete', authenticateRequest, ReviewerResponseControll
 
 // ==== ROUND ROUTES ====
 router.get('/papers/:id/rounds', authenticateRequest, RoundController.getRoundsWithAssignments);
+router.get('/papers/:id/author-rounds', authenticateRequest, RoundController.getAuthorRounds);
 router.post('/rounds', authenticateRequest, RoundController.createReviewRound);
 router.post('/rounds/:id/start', authenticateRequest, RoundController.startRound);
+router.post('/rounds/:id/approve', authenticateRequest, RoundController.approveRound);
 router.put('/rounds/:id/deadline', authenticateRequest, RoundController.editRoundDeadline);
 router.get('/rounds/:id/suggest', authenticateRequest, RoundController.suggestReviewers);
-router.post('/rounds/:id/propose', RoundController.addProposeReviewer);
-router.get('/rounds/:id/propose', RoundController.getProposeReviewers);
-router.get('/rounds/:id/status', RoundController.trackReviewStatus);
-router.post('/rounds/:id/alerts', RoundController.alertOverdueReviews);
+router.post('/rounds/:id/propose', authenticateRequest, RoundController.addProposeReviewer);
+router.delete('/rounds/:id/propose/:userId', authenticateRequest, RoundController.removeProposedReviewer);
+router.get('/rounds/:id/propose', authenticateRequest, RoundController.getProposeReviewers);
+router.get('/rounds/:id/status', authenticateRequest, RoundController.trackReviewStatus);
 router.post('/rounds/:id/close', RoundController.closeRound);
 router.post('/rounds/next', authenticateRequest, RoundController.createReviewRound);
 router.post('/rounds/:id/ai', authenticateRequest, pdfUpload.single('pdf'), RoundController.startAIReview);

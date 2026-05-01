@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
-import { Paper } from '../entities/Paper';
+import { Paper, PaperStatus } from '../entities/Paper';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { RoundStatus } from '../entities/Round';
 import { UserRole } from '../entities/User';
@@ -77,13 +77,25 @@ export class PaperController {
   static async linkParentPapers(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
-  static async updateAbstract(req: Request<{ id: string }>, res: Response) {
+  static async updateAbstract(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const id = req.params.id as string;
       const { abstract } = req.body;
       if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-      const paper = await PaperService.updateAbstract(id, abstract);
-      res.status(200).json(paper);
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({ where: { id }, relations: ['coordinators', 'authors'] });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const canEdit = paper.coordinators?.some(c => c.id === user.id)
+        || paper.authors?.some(a => a.id === user.id);
+      if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
+
+      const updated = await PaperService.updateAbstract(id, abstract);
+      res.status(200).json(updated);
     } catch (e: any) {
       if (e.message === 'Paper not found') {
         return res.status(404).json({ message: e.message });
@@ -287,6 +299,7 @@ export class PaperController {
         status: paper.status,
         targetVenue: latestRound?.targetVenue ?? '',
         overleafLink: paper.overleafLink,
+        githubLink: paper.githubLink ?? null,
         authors: (paper.authors ?? []).map(author => ({
           id: author.id,
           name: author.name,
@@ -326,6 +339,7 @@ export class PaperController {
           targetVenue: latestRound?.targetVenue ?? '',
           abstractText: p.abstractText,
           overleafLink: p.overleafLink,
+          githubLink: p.githubLink ?? null,
           creationTime: p.creationTime,
           topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
           authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name, email: a.email })),
@@ -456,14 +470,14 @@ export class PaperController {
   }
   static async getMyCoordinatedPapers(req: AuthenticatedRequest, res: Response) {
     try {
-      const coordinator = req.user;
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ message: 'Authentication required' });
       }
 
       const paperRepo = AppDataSource.getRepository(Paper);
       const papers = await paperRepo.find({
-        where: { coordinators: { id: coordinator.id } },
+        where: { coordinators: { id: user.id } },
         relations: ['coordinators', 'labs'],
       });
 
@@ -473,6 +487,7 @@ export class PaperController {
         status: p.status,
         abstractText: p.abstractText,
         overleafLink: p.overleafLink ?? null,
+        githubLink: p.githubLink ?? null,
       })));
     } catch (err) {
       console.error(err);
@@ -482,31 +497,88 @@ export class PaperController {
 
   static async updateOverleafLink(req: AuthenticatedRequest, res: Response) {
     try {
-      const coordinator = req.user;
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ message: 'Authentication required' });
       }
 
       const id = req.params.id as string;
-      const { overleafLink } = req.body;
+      const { overleafLink, githubLink } = req.body;
       if (typeof overleafLink !== 'string') {
         return res.status(400).json({ message: 'overleafLink must be a string' });
+      }
+      if (githubLink !== undefined && typeof githubLink !== 'string') {
+        return res.status(400).json({ message: 'githubLink must be a string' });
       }
 
       const paperRepo = AppDataSource.getRepository(Paper);
       const paper = await paperRepo.findOne({
         where: { id },
-        relations: ['coordinators'],
+        relations: ['coordinators', 'authors'],
       });
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
-      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+      const canEdit = paper.coordinators?.some(c => c.id === user.id)
+        || paper.authors?.some(a => a.id === user.id);
+      if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
 
-      paper.overleafLink = overleafLink || null!;
+      const normalizedOverleafLink = overleafLink.trim();
+      if (normalizedOverleafLink && !/^https?:\/\/(www\.)?overleaf\.com\//i.test(normalizedOverleafLink)) {
+        return res.status(400).json({ message: 'Overleaf link must be a valid Overleaf URL (e.g. https://www.overleaf.com/...)' });
+      }
+      paper.overleafLink = normalizedOverleafLink || null!;
+      if (githubLink !== undefined) {
+        const normalizedGithubLink = githubLink.trim();
+        if (normalizedGithubLink && !/^https?:\/\/(www\.)?github\.com\//i.test(normalizedGithubLink)) {
+          return res.status(400).json({ message: 'GitHub link must be a valid GitHub URL (e.g. https://github.com/...)' });
+        }
+        paper.githubLink = normalizedGithubLink || null;
+      }
       await paperRepo.save(paper);
 
-      return res.status(200).json({ message: 'Overleaf link updated', overleafLink: paper.overleafLink ?? null });
+      return res.status(200).json({
+        message: 'Paper links updated',
+        overleafLink: paper.overleafLink ?? null,
+        githubLink: paper.githubLink ?? null,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async updateGithubLink(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      const id = req.params.id as string;
+      const { githubLink } = req.body;
+      if (typeof githubLink !== 'string') {
+        return res.status(400).json({ message: 'githubLink must be a string' });
+      }
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id },
+        relations: ['coordinators', 'authors'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const canEdit = paper.coordinators?.some(c => c.id === user.id)
+        || paper.authors?.some(a => a.id === user.id);
+      if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
+
+      const normalizedGithubLink = githubLink.trim();
+      if (normalizedGithubLink && !/^https?:\/\/(www\.)?github\.com\//i.test(normalizedGithubLink)) {
+        return res.status(400).json({ message: 'GitHub link must be a valid GitHub URL (e.g. https://github.com/...)' });
+      }
+      paper.githubLink = normalizedGithubLink || null;
+      await paperRepo.save(paper);
+
+      return res.status(200).json({ message: 'GitHub link updated', githubLink: paper.githubLink ?? null });
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -579,7 +651,58 @@ export class PaperController {
       res.status(500).json({ error: e.message });
     }
   }
-  static async updatePaperStatus(req: Request, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+  static async updatePaperStatus(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const id = req.params.id as string;
+      const { status } = req.body;
+      if (!id) return res.status(400).json({ message: 'Missing paper ID' });
+      if (status !== PaperStatus.Archived && status !== PaperStatus.Draft) {
+        return res.status(400).json({ message: 'Only Archived and Draft status updates are supported' });
+      }
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id },
+        relations: ['authors', 'coordinators', 'topics', 'labs', 'rounds'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const canEdit = paper.authors?.some(a => a.id === user.id)
+        || paper.coordinators?.some(c => c.id === user.id);
+      if (!canEdit) {
+        return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
+      }
+
+      if (status === PaperStatus.Archived) {
+        if (paper.status === PaperStatus.HumanReview || paper.status === PaperStatus.AIReview) {
+          return res.status(400).json({ message: 'Paper cannot be archived while it is in human review or AI review' });
+        }
+
+        const now = new Date();
+        const futureSubmission = (paper.rounds ?? []).find(round =>
+          round.submissionDeadline && round.submissionDeadline.getTime() > now.getTime()
+        );
+        if (futureSubmission) {
+          return res.status(400).json({ message: 'Paper cannot be archived before the submission deadline has passed' });
+        }
+
+        const activeRound = (paper.rounds ?? []).find(round => round.status === RoundStatus.Draft || round.status === RoundStatus.Open);
+        if (activeRound) {
+          return res.status(400).json({ message: 'Paper cannot be archived while a review round is draft or open' });
+        }
+      }
+
+      paper.status = status;
+      await paperRepo.save(paper);
+
+      const updated = await PaperService.getPaperById(id);
+      return res.status(200).json(updated);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
   }
 }

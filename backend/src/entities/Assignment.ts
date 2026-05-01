@@ -47,6 +47,12 @@ export class Assignment {
   @Column({ type: 'datetime', nullable: true })
   submittedAt: Date | null;
 
+  @Column({ type: 'datetime', nullable: true })
+  autoReminderSentAt: Date | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  reminderSentAt: Date | null;
+
   @Column({ type: 'text', nullable: true })
   declineReason: string | null;
 

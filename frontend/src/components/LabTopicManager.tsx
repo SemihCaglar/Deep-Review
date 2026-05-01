@@ -21,10 +21,6 @@ export function LabTopicManager({ labId, labName }: LabTopicManagerProps) {
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [editingName, setEditingName] = useState('');
 
-  useEffect(() => {
-    fetchTopics();
-  }, [fetchTopics]);
-
   const fetchTopics = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -36,6 +32,10 @@ export function LabTopicManager({ labId, labName }: LabTopicManagerProps) {
       setLoading(false);
     }
   }, [labId]);
+
+  useEffect(() => {
+    fetchTopics();
+  }, [fetchTopics]);
 
   const handleAdd = async () => {
     if (!newTopicName.trim()) return;

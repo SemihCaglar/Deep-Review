@@ -58,7 +58,7 @@ async function run() {
 
   // Load coordinator (created by main seed)
   const coordinator = await coordRepo.findOne({
-    where: { email: 'eraytuzun@cs.bilkent.edu.tr' },
+    where: { email: 'coordinator@mock.test' },
     relations: ['lab'],
   });
   if (!coordinator) {
