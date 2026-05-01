@@ -745,3 +745,7 @@ function getErrorMessage(payload: unknown, fallback: string) {
 
   return fallback || 'Request failed';
 }
+
+export function createUserRequest(data: { name: string; email: string; role: string; password?: string }) {
+  return apiRequest('/admin/users', { method: 'POST', body: data });
+}

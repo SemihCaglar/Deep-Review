@@ -32,6 +32,11 @@ export default function SignupPage() {
       return;
     }
 
+    if (!labId) {
+      setError('Please select a lab for signup.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -136,7 +141,7 @@ export default function SignupPage() {
 
           <div>
             <label htmlFor="labId" className="block text-sm font-medium text-slate-300 mb-2">
-              Select Lab (Optional for Admins)
+              Select Lab
             </label>
             <select
               id="labId"
@@ -144,6 +149,7 @@ export default function SignupPage() {
               onChange={event => setLabId(event.target.value)}
               className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
               disabled={isSubmitting || labs.length === 0}
+              required
             >
               <option value="">-- No Lab Selected --</option>
               {labs.map(lab => (
