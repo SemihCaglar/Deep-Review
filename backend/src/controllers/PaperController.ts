@@ -27,9 +27,15 @@ export class PaperController {
         return res.status(401).json({ message: 'Authentication required' });
       }
 
-      if (!dto.title || !dto.abstractText || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0) {
-        return res.status(400).json({ message: 'Missing required fields' });
+      if (!dto.title || !dto.abstractText || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0 || !dto.overleafLink) {
+        return res.status(400).json({ message: 'Missing required fields (title, abstractText, topics, overleafLink)' });
       }
+
+      const normalizedOverleafLink = dto.overleafLink.trim();
+      if (!/^https?:\/\/([a-z0-9-]+\.)*overleaf\.com\//i.test(normalizedOverleafLink)) {
+        return res.status(400).json({ message: 'Overleaf link must be a valid Overleaf URL (e.g. https://www.overleaf.com/...)' });
+      }
+      dto.overleafLink = normalizedOverleafLink;
 
       const paper = await PaperService.registerPaper(dto, creator);
 
@@ -302,7 +308,6 @@ export class PaperController {
         status: paper.status,
         targetVenue: latestRound?.targetVenue ?? '',
         overleafLink: paper.overleafLink,
-        githubLink: paper.githubLink ?? null,
         authors: (paper.authors ?? []).map(author => ({
           id: author.id,
           name: author.name,
@@ -342,7 +347,6 @@ export class PaperController {
           targetVenue: latestRound?.targetVenue ?? '',
           abstractText: p.abstractText,
           overleafLink: p.overleafLink,
-          githubLink: p.githubLink ?? null,
           creationTime: p.creationTime,
           topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
           authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name, email: a.email })),
@@ -490,7 +494,6 @@ export class PaperController {
         status: p.status,
         abstractText: p.abstractText,
         overleafLink: p.overleafLink ?? null,
-        githubLink: p.githubLink ?? null,
       })));
     } catch (err) {
       console.error(err);
@@ -506,12 +509,9 @@ export class PaperController {
       }
 
       const id = req.params.id as string;
-      const { overleafLink, githubLink } = req.body;
+      const { overleafLink } = req.body;
       if (typeof overleafLink !== 'string') {
         return res.status(400).json({ message: 'overleafLink must be a string' });
-      }
-      if (githubLink !== undefined && typeof githubLink !== 'string') {
-        return res.status(400).json({ message: 'githubLink must be a string' });
       }
 
       const paperRepo = AppDataSource.getRepository(Paper);
@@ -526,23 +526,18 @@ export class PaperController {
       if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
 
       const normalizedOverleafLink = overleafLink.trim();
-      if (normalizedOverleafLink && !/^https?:\/\/(www\.)?overleaf\.com\//i.test(normalizedOverleafLink)) {
+      if (!normalizedOverleafLink) {
+        return res.status(400).json({ message: 'Overleaf link is mandatory' });
+      }
+      if (!/^https?:\/\/([a-z0-9-]+\.)*overleaf\.com\//i.test(normalizedOverleafLink)) {
         return res.status(400).json({ message: 'Overleaf link must be a valid Overleaf URL (e.g. https://www.overleaf.com/...)' });
       }
-      paper.overleafLink = normalizedOverleafLink || null!;
-      if (githubLink !== undefined) {
-        const normalizedGithubLink = githubLink.trim();
-        if (normalizedGithubLink && !/^https?:\/\/(www\.)?github\.com\//i.test(normalizedGithubLink)) {
-          return res.status(400).json({ message: 'GitHub link must be a valid GitHub URL (e.g. https://github.com/...)' });
-        }
-        paper.githubLink = normalizedGithubLink || null;
-      }
+      paper.overleafLink = normalizedOverleafLink;
       await paperRepo.save(paper);
 
       return res.status(200).json({
-        message: 'Paper links updated',
+        message: 'Paper link updated',
         overleafLink: paper.overleafLink ?? null,
-        githubLink: paper.githubLink ?? null,
       });
     } catch (err) {
       console.error(err);
@@ -550,43 +545,6 @@ export class PaperController {
     }
   }
 
-  static async updateGithubLink(req: AuthenticatedRequest, res: Response) {
-    try {
-      const user = req.user;
-      if (!user) {
-        return res.status(401).json({ message: 'Authentication required' });
-      }
-
-      const id = req.params.id as string;
-      const { githubLink } = req.body;
-      if (typeof githubLink !== 'string') {
-        return res.status(400).json({ message: 'githubLink must be a string' });
-      }
-
-      const paperRepo = AppDataSource.getRepository(Paper);
-      const paper = await paperRepo.findOne({
-        where: { id },
-        relations: ['coordinators', 'authors'],
-      });
-      if (!paper) return res.status(404).json({ message: 'Paper not found' });
-
-      const canEdit = paper.coordinators?.some(c => c.id === user.id)
-        || paper.authors?.some(a => a.id === user.id);
-      if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
-
-      const normalizedGithubLink = githubLink.trim();
-      if (normalizedGithubLink && !/^https?:\/\/(www\.)?github\.com\//i.test(normalizedGithubLink)) {
-        return res.status(400).json({ message: 'GitHub link must be a valid GitHub URL (e.g. https://github.com/...)' });
-      }
-      paper.githubLink = normalizedGithubLink || null;
-      await paperRepo.save(paper);
-
-      return res.status(200).json({ message: 'GitHub link updated', githubLink: paper.githubLink ?? null });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ message: 'Internal server error' });
-    }
-  }
 
   static async getAllPapers(req: Request, res: Response) {
     try {

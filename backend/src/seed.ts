@@ -131,6 +131,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       coordinators: [{ id: coordinator.id } as Coordinator],
       labs: [{ id: lab.id } as Lab],
       authors: [{ id: reviewer.id } as LabMember],
+      overleafLink: 'https://www.overleaf.com/project/test-paper',
     });
 
     await paperRepo.save(paper);

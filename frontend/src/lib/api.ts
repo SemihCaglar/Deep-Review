@@ -221,7 +221,7 @@ export type Paper = {
   targetVenue?: string;
   status: string;
   overleafLink?: string | null;
-  githubLink?: string | null;
+
   authorOrder?: string[] | null;
   authors?: PaperAuthor[];
   coordinators?: LabMember[];
@@ -315,7 +315,7 @@ export type PaperHistory = {
   status: string;
   targetVenue: string;
   overleafLink?: string | null;
-  githubLink?: string | null;
+
   authors: PaperAuthor[];
   rounds: PaperHistoryRound[];
 };
@@ -327,7 +327,7 @@ export type RegisterPaperPayload = {
   topics: string[];
   authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
-  githubLink?: string;
+
 };
 
 export function registerPaperRequest(payload: RegisterPaperPayload) {
@@ -406,7 +406,7 @@ export type CoordinatedPaper = {
   status: string;
   abstractText: string;
   overleafLink: string | null;
-  githubLink: string | null;
+
 };
 
 export type PendingDeclineRequest = {
@@ -466,7 +466,7 @@ export type MyAssignment = {
     title: string;
     abstractText: string;
     overleafLink: string | null;
-    githubLink: string | null;
+
     authors: PaperAuthor[];
   };
   pendingDeclineRequest: PendingDeclineRequest | null;
@@ -532,19 +532,13 @@ export function updateOverleafLinkRequest(paperId: string, overleafLink: string)
   });
 }
 
-export function updatePaperLinksRequest(paperId: string, overleafLink: string, githubLink: string) {
-  return apiRequest<{ message: string; overleafLink?: string | null; githubLink?: string | null }>(`/papers/${paperId}/overleaf`, {
+export function updatePaperLinksRequest(paperId: string, overleafLink: string) {
+  return apiRequest<{ message: string; overleafLink?: string | null }>(`/papers/${paperId}/overleaf`, {
     method: 'PUT',
-    body: { overleafLink, githubLink },
+    body: { overleafLink },
   });
 }
 
-export function updateGithubLinkRequest(paperId: string, githubLink: string) {
-  return apiRequest<{ message: string; githubLink: string | null }>(`/papers/${paperId}/github`, {
-    method: 'PUT',
-    body: { githubLink },
-  });
-}
 
 export function getPaperRoundsRequest(paperId: string) {
   return apiRequest<RoundWithAssignments[]>(`/papers/${paperId}/rounds`);

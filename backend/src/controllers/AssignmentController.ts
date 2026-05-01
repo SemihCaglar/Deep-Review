@@ -213,7 +213,7 @@ export class AssignmentController {
             title: a.round.paper.title,
             abstractText: a.round.paper.abstractText,
             overleafLink: detailsVisible.includes(a.status) ? (a.round.paper.overleafLink ?? null) : null,
-            githubLink: a.round.paper.githubLink ?? null,
+
             authors: orderedAuthors.map(author => ({
               id: author.id,
               name: author.name,

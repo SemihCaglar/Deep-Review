@@ -25,7 +25,6 @@ import {
   editRoundDeadlineRequest,
   reassignReviewerRequest,
   updateOverleafLinkRequest,
-  updateGithubLinkRequest,
   sendRemindersRequest,
   getProposedReviewersRequest,
   addProposedReviewerRequest,
@@ -33,7 +32,7 @@ import {
   approveRoundRequest,
   getRoundStatusRequest,
 } from '@/lib/api';
-import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, Github, ArrowLeft } from 'lucide-react';
+import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft } from 'lucide-react';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
@@ -967,10 +966,6 @@ export default function RoundsPage() {
   const [overleafDraft, setOverleafDraft] = useState('');
   const [savingOverleaf, setSavingOverleaf] = useState(false);
   const [overleafError, setOverleafError] = useState('');
-  const [editingGithub, setEditingGithub] = useState(false);
-  const [githubDraft, setGithubDraft] = useState('');
-  const [savingGithub, setSavingGithub] = useState(false);
-  const [githubError, setGithubError] = useState('');
 
   // Create Draft State
   const [showCreateRound, setShowCreateRound] = useState(false);
@@ -998,7 +993,6 @@ export default function RoundsPage() {
         status: paper.status,
         abstractText: paper.abstractText ?? p.abstractText,
         overleafLink: paper.overleafLink ?? null,
-        githubLink: paper.githubLink ?? null,
       } : p));
     } catch {
       // The coordinated-paper list is still usable if the detail refresh fails.
@@ -1020,8 +1014,6 @@ export default function RoundsPage() {
     setRounds([]);
     setEditingOverleaf(false);
     setOverleafError('');
-    setEditingGithub(false);
-    setGithubError('');
     void refreshSelectedPaperDetails(paperId);
     loadRounds(paperId);
   };
@@ -1035,8 +1027,6 @@ export default function RoundsPage() {
     setRounds([]);
     setEditingOverleaf(false);
     setOverleafError('');
-    setEditingGithub(false);
-    setGithubError('');
     void refreshSelectedPaperDetails(paperId);
     loadRounds(paperId);
   }, [loadRounds, loadingPapers, papers, refreshSelectedPaperDetails, searchParams, selectedPaperId]);
@@ -1061,20 +1051,6 @@ export default function RoundsPage() {
     }
   };
 
-  const handleSaveGithub = async () => {
-    if (!selectedPaperId) return;
-    setSavingGithub(true);
-    setGithubError('');
-    try {
-      const result = await updateGithubLinkRequest(selectedPaperId, githubDraft.trim());
-      setPapers(prev => prev.map(p => p.id === selectedPaperId ? { ...p, githubLink: result.githubLink } : p));
-      setEditingGithub(false);
-    } catch (e) {
-      setGithubError(e instanceof ApiError ? e.message : 'Failed to save');
-    } finally {
-      setSavingGithub(false);
-    }
-  };
 
   const handleRefresh = () => {
     if (!selectedPaperId) return;
@@ -1211,105 +1187,6 @@ export default function RoundsPage() {
                 No Overleaf link
               </span>
             )}
-            {selectedPaper.githubLink ? (
-              <a href={selectedPaper.githubLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.04] text-sm text-slate-300 hover:text-white transition-colors">
-                <Github className="w-4 h-4" />
-                Open GitHub Repository
-              </a>
-            ) : (
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.02] text-sm text-slate-500">
-                <Github className="w-4 h-4" />
-                No GitHub link
-              </span>
-            )}
-          </div>
-
-          {/* Overleaf link */}
-          <div className="hidden">
-            <ExternalLink className="w-4 h-4 text-emerald-400 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-slate-500 mb-1">Overleaf manuscript link</p>
-              {!editingOverleaf ? (
-                <div className="flex items-center gap-3">
-                  {selectedPaper.overleafLink ? (
-                    <a href={selectedPaper.overleafLink} target="_blank" rel="noopener noreferrer"
-                      className="text-sm text-emerald-400 hover:text-emerald-300 underline underline-offset-2 truncate">
-                      {selectedPaper.overleafLink}
-                    </a>
-                  ) : (
-                    <span className="text-sm text-slate-600 italic">Not set — reviewers cannot see the manuscript</span>
-                  )}
-                  <button
-                    onClick={() => { setOverleafDraft(selectedPaper.overleafLink ?? ''); setEditingOverleaf(true); setOverleafError(''); }}
-                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-0.5 rounded shrink-0"
-                  >
-                    <Edit2 className="w-3 h-3" /> Edit
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <input
-                    type="url"
-                    value={overleafDraft}
-                    onChange={e => setOverleafDraft(e.target.value)}
-                    placeholder="https://www.overleaf.com/..."
-                    className="w-full bg-background border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-                  />
-                  {overleafError && <p className="text-xs text-red-400">{overleafError}</p>}
-                  <div className="flex gap-2">
-                    <button onClick={handleSaveOverleaf} disabled={savingOverleaf}
-                      className="px-3 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 transition-colors">
-                      {savingOverleaf ? 'Saving…' : 'Save'}
-                    </button>
-                    <button onClick={() => setEditingOverleaf(false)} className="text-xs text-slate-500 hover:text-slate-300">Cancel</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* GitHub link */}
-          <div className="hidden">
-            <Github className="w-4 h-4 text-slate-300 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-slate-500 mb-1">GitHub repository link</p>
-              {!editingGithub ? (
-                <div className="flex items-center gap-3">
-                  {selectedPaper.githubLink ? (
-                    <a href={selectedPaper.githubLink} target="_blank" rel="noopener noreferrer"
-                      className="text-sm text-slate-300 hover:text-white underline underline-offset-2 truncate">
-                      {selectedPaper.githubLink}
-                    </a>
-                  ) : (
-                    <span className="text-sm text-slate-600 italic">Not set</span>
-                  )}
-                  <button
-                    onClick={() => { setGithubDraft(selectedPaper.githubLink ?? ''); setEditingGithub(true); setGithubError(''); }}
-                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 border border-white/10 px-2 py-0.5 rounded shrink-0"
-                  >
-                    <Edit2 className="w-3 h-3" /> Edit
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <input
-                    type="url"
-                    value={githubDraft}
-                    onChange={e => setGithubDraft(e.target.value)}
-                    placeholder="https://github.com/org/repo"
-                    className="w-full bg-background border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-slate-400/50"
-                  />
-                  {githubError && <p className="text-xs text-red-400">{githubError}</p>}
-                  <div className="flex gap-2">
-                    <button onClick={handleSaveGithub} disabled={savingGithub}
-                      className="px-3 py-1 text-xs font-semibold rounded-lg bg-slate-700 hover:bg-slate-600 text-white disabled:opacity-50 transition-colors">
-                      {savingGithub ? 'Saving...' : 'Save'}
-                    </button>
-                    <button onClick={() => { setEditingGithub(false); setGithubError(''); }} className="text-xs text-slate-500 hover:text-slate-300">Cancel</button>
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
 
           {showCreateRound && (
