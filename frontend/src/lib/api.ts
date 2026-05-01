@@ -397,6 +397,13 @@ export type AuthorRound = {
   startedAt: string | null;
   completedAt: string | null;
   proposedReviewers: { id: string; name: string; email: string }[];
+  aiReviewReport?: AIReviewReport | null;
+  complianceReport?: ComplianceReport | null;
+  annotatedPdfUrl?: string | null;
+  artifacts?: {
+    checklistItems: { id: string; description: string; isChecked: boolean }[];
+    aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
+  };
 };
 
 export type CoordinatedPaper = {
