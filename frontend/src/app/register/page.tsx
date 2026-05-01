@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { BookOpen, CheckCircle2, Users, ArrowUp, ArrowDown } from 'lucide-react';
+import { BookOpen, CheckCircle2, Users, ArrowUp, ArrowDown, Search, X } from 'lucide-react';
 import { getLabMembersRequest, getTopicsRequest, registerPaperRequest, LabMember, TopicOption } from '@/lib/api';
 
 export default function RegisterPaper() {
@@ -11,18 +11,20 @@ export default function RegisterPaper() {
     const router = useRouter();
     const [step, setStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
+
     const [availableUsers, setAvailableUsers] = useState<LabMember[]>([]);
     const [topicsList, setTopicsList] = useState<TopicOption[]>([]);
 
     // Form state
     const [title, setTitle] = useState('');
     const [abstractText, setAbstractText] = useState('');
-    const [targetVenue, setTargetVenue] = useState('');
     const [overleafLink, setOverleafLink] = useState('');
 
     const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
     const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+
+    const [authorSearch, setAuthorSearch] = useState('');
+    const [topicSearch, setTopicSearch] = useState('');
 
     useEffect(() => {
         const fetchData = async () => {
@@ -33,7 +35,7 @@ export default function RegisterPaper() {
                 ]);
                 setAvailableUsers(membersRes.users);
                 setTopicsList(topicsRes);
-                
+
                 // Automatically add current user to authors if not already there
                 if (user?.id && !selectedAuthors.includes(user.id)) {
                     setSelectedAuthors([user.id]);
@@ -68,7 +70,7 @@ export default function RegisterPaper() {
         const newAuthors = [...selectedAuthors];
         const targetIndex = direction === 'up' ? index - 1 : index + 1;
         if (targetIndex < 0 || targetIndex >= newAuthors.length) return;
-        
+
         [newAuthors[index], newAuthors[targetIndex]] = [newAuthors[targetIndex], newAuthors[index]];
         setSelectedAuthors(newAuthors);
     };
@@ -103,12 +105,11 @@ export default function RegisterPaper() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        
+
         try {
             await registerPaperRequest({
                 title,
                 abstractText,
-                targetVenue,
                 overleafLink,
 
                 authors: selectedAuthors,
@@ -121,6 +122,17 @@ export default function RegisterPaper() {
             setIsSubmitting(false);
         }
     };
+
+    // Filtered lists
+    const filteredUsers = availableUsers
+        .filter(u => u.id !== user.id && u.role !== 'Coordinator')
+        .filter(u =>
+            u.name.toLowerCase().includes(authorSearch.toLowerCase()) ||
+            u.email.toLowerCase().includes(authorSearch.toLowerCase())
+        );
+
+    const filteredTopics = topicsList
+        .filter(t => t.name.toLowerCase().includes(topicSearch.toLowerCase()));
 
     return (
         <div className="max-w-3xl mx-auto py-8">
@@ -158,10 +170,6 @@ export default function RegisterPaper() {
                                 <input required type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Enter full paper title..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all" />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Target Venue <span className="text-red-400">*</span></label>
-                                <input required type="text" value={targetVenue} onChange={e => setTargetVenue(e.target.value)} placeholder="e.g. ICSE 2026..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all" />
-                            </div>
-                            <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Abstract <span className="text-red-400">*</span></label>
                                 <textarea required rows={5} value={abstractText} onChange={e => setAbstractText(e.target.value)} placeholder="Provide a detailed abstract of the work..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none"></textarea>
                             </div>
@@ -176,59 +184,96 @@ export default function RegisterPaper() {
                         <div className="space-y-8 animate-in slide-in-from-right-4 fade-in duration-300">
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Assign Authors</label>
-                                <p className="text-slate-500 text-sm mb-4">Select users from the system to be attached as authors. They will receive formal email invitations upon registration.</p>
+                                <p className="text-slate-500 text-sm mb-4">Select users from the system to be attached as authors.</p>
 
-                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                    {availableUsers.filter(u => u.id !== user.id && u.role !== 'Coordinator').map(u => (
+                                <div className="relative mb-4">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name or email..."
+                                        value={authorSearch}
+                                        onChange={(e) => setAuthorSearch(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                                    />
+                                    {authorSearch && (
                                         <button
-                                            key={u.id}
                                             type="button"
-                                            onClick={() => toggleAuthor(u.id)}
-                                            className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${selectedAuthors.includes(u.id) ? 'bg-blue-600/20 border-blue-500/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                            onClick={() => setAuthorSearch('')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-full transition-colors"
                                         >
-                                            <div className={`w-10 h-10 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${selectedAuthors.includes(u.id) ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
-                                                {u.name.charAt(0)}
-                                            </div>
-                                            <div className="flex-1">
-                                                <p className={`font-medium ${selectedAuthors.includes(u.id) ? 'text-blue-100' : 'text-slate-300'}`}>{u.name}</p>
-                                                <p className={`text-xs ${selectedAuthors.includes(u.id) ? 'text-blue-300/70' : 'text-slate-500'}`}>{u.email}</p>
-                                            </div>
+                                            <X className="w-3 h-3 text-slate-400" />
                                         </button>
-                                    ))}
+                                    )}
                                 </div>
 
-                                {selectedAuthors.length > 1 && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                    {filteredUsers.length === 0 ? (
+                                        <p className="col-span-2 text-center py-8 text-slate-500 text-sm border border-dashed border-white/10 rounded-xl bg-white/[0.02]">
+                                            No matching members found.
+                                        </p>
+                                    ) : (
+                                        filteredUsers.map(u => (
+                                            <button
+                                                key={u.id}
+                                                type="button"
+                                                onClick={() => toggleAuthor(u.id)}
+                                                className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${selectedAuthors.includes(u.id) ? 'bg-blue-600/20 border-blue-500/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                            >
+                                                <div className={`w-10 h-10 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${selectedAuthors.includes(u.id) ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                                                    {u.name.charAt(0)}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={`font-medium truncate ${selectedAuthors.includes(u.id) ? 'text-blue-100' : 'text-slate-300'}`}>{u.name}</p>
+                                                    <p className={`text-xs truncate ${selectedAuthors.includes(u.id) ? 'text-blue-300/70' : 'text-slate-500'}`}>{u.email}</p>
+                                                </div>
+                                            </button>
+                                        ))
+                                    )}
+                                </div>
+
+                                {selectedAuthors.length > 0 && (
                                     <div className="mt-6 pt-6 border-t border-white/5">
-                                        <label className="block text-sm font-medium text-slate-300 mb-4">Adjust Author Order</label>
-                                        <div className="space-y-2">
+                                        <label className="block text-sm font-medium text-slate-300 mb-4">Author List & Order</label>
+                                        <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                                             {selectedAuthors.map((authorId, index) => {
                                                 const authorInfo = availableUsers.find(u => u.id === authorId) || (authorId === user.id ? { name: user.name + ' (You)', email: user.email } : null);
                                                 if (!authorInfo) return null;
                                                 return (
-                                                    <div key={authorId} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl">
+                                                    <div key={authorId} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl group">
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-blue-500 font-bold text-sm w-4">{index + 1}.</span>
                                                             <div>
                                                                 <p className="text-sm font-medium text-white">{authorInfo.name}</p>
                                                             </div>
                                                         </div>
-                                                        <div className="flex gap-1">
-                                                            <button 
-                                                                type="button" 
-                                                                disabled={index === 0} 
-                                                                onClick={() => moveAuthor(index, 'up')}
-                                                                className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 disabled:opacity-20"
-                                                            >
-                                                                <ArrowUp className="w-4 h-4" />
-                                                            </button>
-                                                            <button 
-                                                                type="button" 
-                                                                disabled={index === selectedAuthors.length - 1} 
-                                                                onClick={() => moveAuthor(index, 'down')}
-                                                                className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 disabled:opacity-20"
-                                                            >
-                                                                <ArrowDown className="w-4 h-4" />
-                                                            </button>
+                                                        <div className="flex gap-1 items-center">
+                                                            <div className="flex gap-1">
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={index === 0}
+                                                                    onClick={() => moveAuthor(index, 'up')}
+                                                                    className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 disabled:opacity-20"
+                                                                >
+                                                                    <ArrowUp className="w-4 h-4" />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={index === selectedAuthors.length - 1}
+                                                                    onClick={() => moveAuthor(index, 'down')}
+                                                                    className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 disabled:opacity-20"
+                                                                >
+                                                                    <ArrowDown className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                            {authorId !== user.id && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleAuthor(authorId)}
+                                                                    className="p-1.5 hover:bg-red-500/10 rounded-lg text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                >
+                                                                    <X className="w-4 h-4" />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 );
@@ -241,17 +286,42 @@ export default function RegisterPaper() {
                             <div className="pt-6 border-t border-white/5">
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Topics & Keywords <span className="text-red-400">*</span></label>
                                 <p className="text-slate-500 text-sm mb-4">Select relevant areas to help assign appropriate reviewers.</p>
-                                <div className="flex flex-wrap gap-2">
-                                    {topicsList.map(topic => (
+
+                                <div className="relative mb-4">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search topics..."
+                                        value={topicSearch}
+                                        onChange={(e) => setTopicSearch(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                                    />
+                                    {topicSearch && (
                                         <button
-                                            key={topic.id}
                                             type="button"
-                                            onClick={() => toggleTopic(topic.id)}
-                                            className={`px-4 py-2 rounded-full border text-sm font-medium transition-all ${selectedTopics.includes(topic.id) ? 'bg-blue-600/20 border-blue-500/50 text-blue-300' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                                            onClick={() => setTopicSearch('')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-full transition-colors"
                                         >
-                                            {topic.name}
+                                            <X className="w-3 h-3 text-slate-400" />
                                         </button>
-                                    ))}
+                                    )}
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                                    {filteredTopics.length === 0 ? (
+                                        <p className="w-full text-center py-4 text-slate-500 text-sm italic">No matching topics found.</p>
+                                    ) : (
+                                        filteredTopics.map(topic => (
+                                            <button
+                                                key={topic.id}
+                                                type="button"
+                                                onClick={() => toggleTopic(topic.id)}
+                                                className={`px-4 py-2 rounded-full border text-sm font-medium transition-all ${selectedTopics.includes(topic.id) ? 'bg-blue-600/20 border-blue-500/50 text-blue-300' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                                            >
+                                                {topic.name}
+                                            </button>
+                                        ))
+                                    )}
                                 </div>
                             </div>
 
@@ -265,7 +335,7 @@ export default function RegisterPaper() {
                             </div>
                             <h3 className="text-xl font-bold text-white">Ready to Register</h3>
                             <p className="text-slate-400 max-w-md mx-auto">
-                                The paper will be created in the <strong>Draft</strong> state. Once it is registered, the Coordinator can initiate the first review round via the paper details page.
+                                The paper will be created in the <strong>Draft</strong> state. Once it is registered, first review round can be initialized via the paper details page.
                                 <br /><br />
                                 {selectedAuthors.length > 0 && <span className="text-blue-400">{selectedAuthors.length} author(s) will be notified by the Email Service.</span>}
                             </p>

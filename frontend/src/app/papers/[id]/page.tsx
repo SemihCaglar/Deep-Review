@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Cpu, Download, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Cpu, Download, ShieldCheck, Search } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
@@ -60,6 +60,9 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [localTopics, setLocalTopics] = useState<string[]>([]); // These will be IDs
     const [localDeadline, setLocalDeadline] = useState('');
     const [localOverleafLink, setLocalOverleafLink] = useState('');
+
+    const [authorSearch, setAuthorSearch] = useState('');
+    const [topicSearch, setTopicSearch] = useState('');
 
     const [linksError, setLinksError] = useState('');
     const [savingLinks, setSavingLinks] = useState(false);
@@ -722,8 +725,22 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         {isEditingTopics && (
                             <div className="absolute left-0 top-full mt-2 bg-slate-900 border border-white/10 p-4 rounded-xl shadow-2xl z-50 min-w-[300px]">
                                 <h4 className="text-xs font-semibold text-slate-400 uppercase mb-3">Select Topics</h4>
-                                <div className="flex flex-wrap gap-2 mb-4">
-                                    {availableTopics.map(topic => (
+                                
+                                <div className="relative mb-3">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search..." 
+                                        value={topicSearch}
+                                        onChange={(e) => setTopicSearch(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg pl-6 pr-2 py-1.5 text-[10px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                                    />
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 mb-4 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                                    {availableTopics
+                                        .filter(t => t.name.toLowerCase().includes(topicSearch.toLowerCase()))
+                                        .map(topic => (
                                         <button
                                             key={topic.id}
                                             type="button"
@@ -1502,48 +1519,73 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                          <div className="space-y-4">
                             {isEditingAuthors ? (
                                 <div className="space-y-6">
-                                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                        {addableAuthorOptions.length === 0 ? (
-                                            <p className="text-xs text-slate-500 rounded-lg border border-white/10 bg-white/[0.02] p-3">
-                                                No eligible lab members available to add.
-                                            </p>
-                                        ) : addableAuthorOptions.map(u => (
-                                            <button
-                                                key={u.id}
-                                                type="button"
-                                                onClick={() => toggleAuthor(u.id)}
-                                                className="w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all bg-white/5 border-white/10 hover:bg-white/10"
-                                            >
-                                                <div className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-xs bg-slate-700 text-slate-300">
-                                                    {u.name.charAt(0)}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-medium truncate text-slate-300">{u.name}</p>
-                                                    <p className="text-[11px] text-slate-500 truncate">{u.email}</p>
-                                                </div>
-                                            </button>
-                                        ))}
+                                    <div className="relative">
+                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Search members..." 
+                                            value={authorSearch}
+                                            onChange={(e) => setAuthorSearch(e.target.value)}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg pl-8 pr-2 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                        {(() => {
+                                            const filtered = addableAuthorOptions.filter(u => 
+                                                u.name.toLowerCase().includes(authorSearch.toLowerCase()) || 
+                                                u.email.toLowerCase().includes(authorSearch.toLowerCase())
+                                            );
+                                            
+                                            if (filtered.length === 0) {
+                                                return (
+                                                    <p className="text-[10px] text-slate-500 text-center py-4 border border-dashed border-white/5 rounded-lg">
+                                                        {authorSearch ? 'No matches found.' : 'No more eligible members.'}
+                                                    </p>
+                                                );
+                                            }
+                                            
+                                            return filtered.map(u => (
+                                                <button
+                                                    key={u.id}
+                                                    type="button"
+                                                    onClick={() => toggleAuthor(u.id)}
+                                                    className="w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all bg-white/5 border-white/10 hover:bg-white/10"
+                                                >
+                                                    <div className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-xs bg-slate-700 text-slate-300">
+                                                        {u.name.charAt(0)}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-medium truncate text-slate-300">{u.name}</p>
+                                                        <p className="text-[11px] text-slate-500 truncate">{u.email}</p>
+                                                    </div>
+                                                    <Plus className="w-3 h-3 text-blue-400 shrink-0" />
+                                                </button>
+                                            ));
+                                        })()}
                                     </div>
                                     
                                     <div className="pt-4 border-t border-white/10 space-y-2">
                                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Order</h4>
-                                        {localAuthors.map((id, index) => {
-                                            const u = availableUsers.find(user => user.id === id);
-                                            if (!u) return null;
-                                            return (
-                                                <div key={id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/5">
-                                                    <span className="text-xs text-blue-400 font-mono w-4">{index + 1}</span>
-                                                    <span className="text-xs text-white truncate flex-1 px-2">{u.name}</span>
-                                                    <div className="flex gap-1">
-                                                        <button disabled={index === 0} onClick={() => moveAuthor(index, 'up')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowUp className="w-3 h-3 text-slate-400" /></button>
-                                                        <button disabled={index === localAuthors.length - 1} onClick={() => moveAuthor(index, 'down')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowDown className="w-3 h-3 text-slate-400" /></button>
-                                                        <button onClick={() => setLocalAuthors(current => current.filter(authorId => authorId !== id))} className="p-1 hover:bg-red-500/10 rounded text-slate-400 hover:text-red-400">
-                                                            <XCircle className="w-3 h-3" />
-                                                        </button>
+                                        <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                            {localAuthors.map((id, index) => {
+                                                const u = availableUsers.find(user => user.id === id);
+                                                if (!u) return null;
+                                                return (
+                                                    <div key={id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/5">
+                                                        <span className="text-xs text-blue-400 font-mono w-4">{index + 1}</span>
+                                                        <span className="text-xs text-white truncate flex-1 px-2">{u.name}</span>
+                                                        <div className="flex gap-1">
+                                                            <button disabled={index === 0} onClick={() => moveAuthor(index, 'up')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowUp className="w-3 h-3 text-slate-400" /></button>
+                                                            <button disabled={index === localAuthors.length - 1} onClick={() => moveAuthor(index, 'down')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowDown className="w-3 h-3 text-slate-400" /></button>
+                                                            <button onClick={() => setLocalAuthors(current => current.filter(authorId => authorId !== id))} className="p-1 hover:bg-red-500/10 rounded text-slate-400 hover:text-red-400">
+                                                                <XCircle className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
+                                                );
+                                            })}
+                                        </div>
                                     </div>
 
                                     {authorsError && <p className="text-xs text-red-400">{authorsError}</p>}

@@ -323,7 +323,6 @@ export type PaperHistory = {
 export type RegisterPaperPayload = {
   title: string;
   abstractText: string;
-  targetVenue: string;
   topics: string[];
   authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
