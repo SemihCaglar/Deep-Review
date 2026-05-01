@@ -39,6 +39,7 @@ export default function Sidebar() {
             base.push({ name: 'Register Paper', href: '/register', icon: PlusSquare });
         } else {
             base.push({ name: 'All Papers (System)', href: '/papers', icon: FileText });
+            base.push({ name: 'Register Paper', href: '/register', icon: PlusSquare });
             base.push({ name: 'Round Management', href: '/rounds', icon: ClipboardList });
         }
 
