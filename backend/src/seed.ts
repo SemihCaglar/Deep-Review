@@ -139,7 +139,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   }
 
   // Round
-  let round = await roundRepo.findOne({ where: { paper: { id: paper.id }, roundNumber: 1 } });
+  let round = await roundRepo.findOne({ where: { paper: { id: paper.id } as any, roundNumber: 1 } });
   if (!round) {
     const deadline = new Date();
     deadline.setDate(deadline.getDate() + 14);
@@ -157,7 +157,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   }
 
   // Assignment for reviewer 2 (esranurtatoglu24 — she is not the author, so eligible)
-  const existingAssignment = await assignRepo.findOne({ where: { round: { id: round.id }, reviewer: { id: reviewer2.id } } });
+  const existingAssignment = await assignRepo.findOne({ where: { round: { id: round.id } as any, reviewer: { id: reviewer2.id } as any } });
   if (!existingAssignment) {
     const assignment = assignRepo.create({
       round: { id: round.id } as Round,

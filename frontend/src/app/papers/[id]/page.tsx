@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Cpu, Download, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Cpu, Download, ShieldCheck, Search } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
@@ -61,6 +61,9 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [localTopics, setLocalTopics] = useState<string[]>([]); // These will be IDs
     const [localDeadline, setLocalDeadline] = useState('');
     const [localOverleafLink, setLocalOverleafLink] = useState('');
+
+    const [authorSearch, setAuthorSearch] = useState('');
+    const [topicSearch, setTopicSearch] = useState('');
 
     const [linksError, setLinksError] = useState('');
     const [savingLinks, setSavingLinks] = useState(false);
@@ -589,9 +592,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
 
                     {paperHistory.rounds.map(round => {
-                        const checklistItems = round.artifacts?.checklistItems || [];
-                        const aiReports = round.artifacts?.aiReviewReports || [];
-
                         return (
                             <section key={round.id || round.roundNumber} className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
                                 <div className="p-5 border-b border-white/5">
@@ -606,28 +606,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             <span className="px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-slate-300">
                                                 Deadline: {formatDate(round.deadline)}
                                             </span>
-                                            {round.roundStatus === 'Completed' && (isAuthor || isCoordinator) && (
-                                                <div className="flex gap-2 ml-2">
-                                                    <button
-                                                        onClick={() => handleStartAIReview(round.id)}
-                                                        disabled={runningAI === round.id}
-                                                        className="px-3 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-full transition-colors flex items-center gap-1.5"
-                                                        title="Run AI Post-Review Analysis (Requires PDF Upload)"
-                                                    >
-                                                        {runningAI === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
-                                                        AI Review
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleRunComplianceCheck(round.id, paperHistory?.targetVenue || paper.targetVenue || '')}
-                                                        disabled={runningCompliance === round.id}
-                                                        className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-full transition-colors flex items-center gap-1.5"
-                                                        title="Run Venue Compliance Check (Requires PDF Upload)"
-                                                    >
-                                                        {runningCompliance === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-                                                        Compliance
-                                                    </button>
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -701,107 +679,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         </div>
                                     ))}
                                 </div>
-                                {(checklistItems.length > 0 || aiReports.length > 0 || round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl) && (
-                                    <div className="p-6 border-t border-white/5 bg-black/20">
-                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                            <Cpu className="w-3 h-3" />
-                                            AI-Generated Artifacts & Reports
-                                        </h4>
-                                        
-                                        <div className="space-y-6">
-                                            {/* Legacy Reports (if any) */}
-                                            {aiReports.map(report => (
-                                                <div key={report.id} className="flex flex-wrap items-center gap-3 text-sm">
-                                                    {report.generatedReportUrl && (
-                                                        <a href={report.generatedReportUrl} target="_blank" rel="noreferrer" className="glass px-3 py-1.5 rounded-lg inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-all border-white/5">
-                                                            <ExternalLink className="w-4 h-4" />
-                                                            Legacy AI report
-                                                        </a>
-                                                    )}
-                                                </div>
-                                            ))}
 
-                                            {/* New PDF-based AI Review Report */}
-                                            {round.aiReviewReport && (
-                                                <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
-                                                    <div className="glass p-5 rounded-xl border border-indigo-500/10 bg-indigo-500/[0.02]">
-                                                        <div className="flex items-center justify-between mb-3">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[10px] font-bold rounded uppercase">AI Review Report</span>
-                                                                <span className="text-sm font-semibold text-white">Detected Type: {round.aiReviewReport.paperType}</span>
-                                                            </div>
-                                                            {round.annotatedPdfUrl && (
-                                                                <a href={round.annotatedPdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-xs text-indigo-400 hover:text-indigo-300 font-medium">
-                                                                    <Download className="w-3.5 h-3.5" />
-                                                                    Download Annotated PDF
-                                                                </a>
-                                                            )}
-                                                        </div>
-                                                        <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap italic opacity-90 border-l-2 border-indigo-500/30 pl-4 py-1">
-                                                            {round.aiReviewReport.summaryReport}
-                                                        </div>
-                                                        
-                                                        {round.aiReviewReport.suggestedCitations && round.aiReviewReport.suggestedCitations.length > 0 && (
-                                                            <div className="mt-4 pt-4 border-t border-white/5">
-                                                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Verified Suggested Citations</p>
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    {round.aiReviewReport.suggestedCitations.map((cit: any, i: number) => (
-                                                                        <div key={i} className="px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] text-slate-400">
-                                                                            {cit.title} ({cit.authors?.[0]})
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* New Compliance Report */}
-                                            {round.complianceReport && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 animate-in fade-in slide-in-from-top-4 duration-500 delay-150">
-                                                    {Object.entries(round.complianceReport).map(([key, val]: [string, any]) => {
-                                                        if (typeof val !== 'object' || val === null) return null;
-                                                        const isOk = val.isCompliant;
-                                                        return (
-                                                            <div key={key} className={`glass p-4 rounded-xl border transition-all ${isOk ? 'border-emerald-500/10 bg-emerald-500/[0.02]' : 'border-red-500/10 bg-red-500/[0.02]'}`}>
-                                                                <div className="flex items-center justify-between mb-2">
-                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                                                    {isOk ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <XCircle className="w-3.5 h-3.5 text-red-400" />}
-                                                                </div>
-                                                                <p className="text-xs text-slate-300 leading-snug">{val.details}</p>
-                                                                <div className="mt-2 w-full bg-white/5 h-1 rounded-full overflow-hidden">
-                                                                    <div 
-                                                                        className={`h-full transition-all duration-1000 ${isOk ? 'bg-emerald-500' : 'bg-red-500'}`} 
-                                                                        style={{ width: `${(val.confidence || 0.5) * 100}%` }} 
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-
-                                            {/* Checklist Display */}
-                                            {((round.aiReviewReport?.checklist && round.aiReviewReport.checklist.length > 0) || checklistItems.length > 0) && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    {(round.aiReviewReport?.checklist?.map((item: any) => ({
-                                                        id: item.id,
-                                                        description: item.question,
-                                                        isChecked: item.answer === true
-                                                    })) || checklistItems).map((item: any) => (
-                                                        <div key={item.id} className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 transition-all hover:bg-white/[0.05]">
-                                                            <div className={`mt-0.5 p-1 rounded-md ${item.isChecked ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-600'}`}>
-                                                                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                                                            </div>
-                                                            <span className="text-sm text-slate-300 leading-tight">{item.description}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
                             </section>
                         );
                     })}
@@ -848,8 +726,22 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         {isEditingTopics && (
                             <div className="absolute left-0 top-full mt-2 bg-slate-900 border border-white/10 p-4 rounded-xl shadow-2xl z-50 min-w-[300px]">
                                 <h4 className="text-xs font-semibold text-slate-400 uppercase mb-3">Select Topics</h4>
-                                <div className="flex flex-wrap gap-2 mb-4">
-                                    {availableTopics.map(topic => (
+                                
+                                <div className="relative mb-3">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search..." 
+                                        value={topicSearch}
+                                        onChange={(e) => setTopicSearch(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg pl-6 pr-2 py-1.5 text-[10px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                                    />
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 mb-4 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                                    {availableTopics
+                                        .filter(t => t.name.toLowerCase().includes(topicSearch.toLowerCase()))
+                                        .map(topic => (
                                         <button
                                             key={topic.id}
                                             type="button"
@@ -1427,6 +1319,93 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     </div>
                                                 </div>
 
+                                                <div className="flex items-center gap-2 pt-1 pb-2">
+                                                    <button
+                                                        onClick={() => handleStartAIReview(round.id)}
+                                                        disabled={runningAI === round.id}
+                                                        className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-xs"
+                                                        title="Run AI Post-Review Analysis"
+                                                    >
+                                                        {runningAI === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
+                                                        Run AI Review
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRunComplianceCheck(round.id, round.targetVenue)}
+                                                        disabled={runningCompliance === round.id}
+                                                        className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-xs"
+                                                        title="Run Venue Compliance Check"
+                                                    >
+                                                        {runningCompliance === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+                                                        Compliance Check
+                                                    </button>
+                                                </div>
+
+                                                {/* AI Reports and Artifacts */}
+                                                {(round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl || (round.artifacts?.aiReviewReports?.length || 0) > 0 || (round.artifacts?.checklistItems?.length || 0) > 0) && (
+                                                    <div className="pt-4 mt-2 border-t border-white/5 space-y-4">
+                                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                            <Cpu className="w-3 h-3" />
+                                                            AI Analysis & Reports
+                                                        </h4>
+                                                        
+                                                        <div className="space-y-4">
+                                                            {/* New PDF-based AI Review Report */}
+                                                            {round.aiReviewReport && (
+                                                                <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-500">
+                                                                    <div className="glass p-4 rounded-xl border border-indigo-500/10 bg-indigo-500/[0.02]">
+                                                                        <div className="flex items-center justify-between mb-2">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[9px] font-bold rounded uppercase">AI Review</span>
+                                                                                <span className="text-xs font-semibold text-white">{round.aiReviewReport.paperType}</span>
+                                                                            </div>
+                                                                            {round.annotatedPdfUrl && (
+                                                                                <a href={round.annotatedPdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[10px] text-indigo-400 hover:text-indigo-300 font-medium">
+                                                                                    <Download className="w-3 h-3" />
+                                                                                    Annotated PDF
+                                                                                </a>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap italic border-l border-indigo-500/30 pl-3 py-0.5">
+                                                                            {round.aiReviewReport.summaryReport}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Compliance Report */}
+                                                            {round.complianceReport && (
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-4 duration-500">
+                                                                    {Object.entries(round.complianceReport).map(([key, val]: [string, any]) => {
+                                                                        if (typeof val !== 'object' || val === null) return null;
+                                                                        const isOk = val.isCompliant;
+                                                                        return (
+                                                                            <div key={key} className={`glass p-3 rounded-lg border transition-all ${isOk ? 'border-emerald-500/10 bg-emerald-500/[0.01]' : 'border-red-500/10 bg-red-500/[0.01]'}`}>
+                                                                                <div className="flex items-center justify-between mb-1.5">
+                                                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                                                                    {isOk ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <XCircle className="w-3 h-3 text-red-400" />}
+                                                                                </div>
+                                                                                <p className="text-[10px] text-slate-300 leading-tight">{val.details}</p>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Legacy Reports */}
+                                                            {round.artifacts?.aiReviewReports?.map(report => (
+                                                                <div key={report.id} className="flex flex-wrap items-center gap-2">
+                                                                    {report.generatedReportUrl && (
+                                                                        <a href={report.generatedReportUrl} target="_blank" rel="noreferrer" className="px-3 py-1 rounded-lg border border-white/5 bg-white/5 text-[10px] text-blue-400 hover:text-blue-300 transition-all flex items-center gap-1.5">
+                                                                            <ExternalLink className="w-3 h-3" />
+                                                                            Legacy AI Report
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) }
+
                                                 {round.status === 'Draft' && (
                                                     <>
                                                         {/* Proposed reviewers */}
@@ -1542,48 +1521,73 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                          <div className="space-y-4">
                             {isEditingAuthors ? (
                                 <div className="space-y-6">
-                                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                        {addableAuthorOptions.length === 0 ? (
-                                            <p className="text-xs text-slate-500 rounded-lg border border-white/10 bg-white/[0.02] p-3">
-                                                No eligible lab members available to add.
-                                            </p>
-                                        ) : addableAuthorOptions.map(u => (
-                                            <button
-                                                key={u.id}
-                                                type="button"
-                                                onClick={() => toggleAuthor(u.id)}
-                                                className="w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all bg-white/5 border-white/10 hover:bg-white/10"
-                                            >
-                                                <div className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-xs bg-slate-700 text-slate-300">
-                                                    {u.name.charAt(0)}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-medium truncate text-slate-300">{u.name}</p>
-                                                    <p className="text-[11px] text-slate-500 truncate">{u.email}</p>
-                                                </div>
-                                            </button>
-                                        ))}
+                                    <div className="relative">
+                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Search members..." 
+                                            value={authorSearch}
+                                            onChange={(e) => setAuthorSearch(e.target.value)}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg pl-8 pr-2 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                        {(() => {
+                                            const filtered = addableAuthorOptions.filter(u => 
+                                                u.name.toLowerCase().includes(authorSearch.toLowerCase()) || 
+                                                u.email.toLowerCase().includes(authorSearch.toLowerCase())
+                                            );
+                                            
+                                            if (filtered.length === 0) {
+                                                return (
+                                                    <p className="text-[10px] text-slate-500 text-center py-4 border border-dashed border-white/5 rounded-lg">
+                                                        {authorSearch ? 'No matches found.' : 'No more eligible members.'}
+                                                    </p>
+                                                );
+                                            }
+                                            
+                                            return filtered.map(u => (
+                                                <button
+                                                    key={u.id}
+                                                    type="button"
+                                                    onClick={() => toggleAuthor(u.id)}
+                                                    className="w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all bg-white/5 border-white/10 hover:bg-white/10"
+                                                >
+                                                    <div className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-xs bg-slate-700 text-slate-300">
+                                                        {u.name.charAt(0)}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-medium truncate text-slate-300">{u.name}</p>
+                                                        <p className="text-[11px] text-slate-500 truncate">{u.email}</p>
+                                                    </div>
+                                                    <Plus className="w-3 h-3 text-blue-400 shrink-0" />
+                                                </button>
+                                            ));
+                                        })()}
                                     </div>
                                     
                                     <div className="pt-4 border-t border-white/10 space-y-2">
                                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Order</h4>
-                                        {localAuthors.map((id, index) => {
-                                            const u = availableUsers.find(user => user.id === id);
-                                            if (!u) return null;
-                                            return (
-                                                <div key={id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/5">
-                                                    <span className="text-xs text-blue-400 font-mono w-4">{index + 1}</span>
-                                                    <span className="text-xs text-white truncate flex-1 px-2">{u.name}</span>
-                                                    <div className="flex gap-1">
-                                                        <button disabled={index === 0} onClick={() => moveAuthor(index, 'up')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowUp className="w-3 h-3 text-slate-400" /></button>
-                                                        <button disabled={index === localAuthors.length - 1} onClick={() => moveAuthor(index, 'down')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowDown className="w-3 h-3 text-slate-400" /></button>
-                                                        <button onClick={() => setLocalAuthors(current => current.filter(authorId => authorId !== id))} className="p-1 hover:bg-red-500/10 rounded text-slate-400 hover:text-red-400">
-                                                            <XCircle className="w-3 h-3" />
-                                                        </button>
+                                        <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                            {localAuthors.map((id, index) => {
+                                                const u = availableUsers.find(user => user.id === id);
+                                                if (!u) return null;
+                                                return (
+                                                    <div key={id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/5">
+                                                        <span className="text-xs text-blue-400 font-mono w-4">{index + 1}</span>
+                                                        <span className="text-xs text-white truncate flex-1 px-2">{u.name}</span>
+                                                        <div className="flex gap-1">
+                                                            <button disabled={index === 0} onClick={() => moveAuthor(index, 'up')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowUp className="w-3 h-3 text-slate-400" /></button>
+                                                            <button disabled={index === localAuthors.length - 1} onClick={() => moveAuthor(index, 'down')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowDown className="w-3 h-3 text-slate-400" /></button>
+                                                            <button onClick={() => setLocalAuthors(current => current.filter(authorId => authorId !== id))} className="p-1 hover:bg-red-500/10 rounded text-slate-400 hover:text-red-400">
+                                                                <XCircle className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
+                                                );
+                                            })}
+                                        </div>
                                     </div>
 
                                     {authorsError && <p className="text-xs text-red-400">{authorsError}</p>}

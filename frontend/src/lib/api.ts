@@ -323,7 +323,6 @@ export type PaperHistory = {
 export type RegisterPaperPayload = {
   title: string;
   abstractText: string;
-  targetVenue: string;
   topics: string[];
   authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
@@ -398,6 +397,13 @@ export type AuthorRound = {
   startedAt: string | null;
   completedAt: string | null;
   proposedReviewers: { id: string; name: string; email: string }[];
+  aiReviewReport?: AIReviewReport | null;
+  complianceReport?: ComplianceReport | null;
+  annotatedPdfUrl?: string | null;
+  artifacts?: {
+    checklistItems: { id: string; description: string; isChecked: boolean }[];
+    aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
+  };
 };
 
 export type CoordinatedPaper = {
@@ -582,10 +588,10 @@ export function updateAssignmentDeadlineRequest(assignmentId: string, deadline: 
   });
 }
 
-export function createRoundRequest(paperId: string, targetVenue: string, venueCategory: string, submissionDeadline?: string, deadline?: string) {
+export function createRoundRequest(paperId: string, targetVenue: string, venueCategory: string, submissionDeadline?: string, deadline?: string, targetVenueUrl?: string) {
   return apiRequest<{ id: string; status: string }>('/rounds', {
     method: 'POST',
-    body: { paperId, targetVenue, venueCategory, ...(submissionDeadline ? { submissionDeadline } : {}), ...(deadline ? { deadline } : {}) },
+    body: { paperId, targetVenue, venueCategory, ...(submissionDeadline ? { submissionDeadline } : {}), ...(deadline ? { deadline } : {}), ...(targetVenueUrl ? { targetVenueUrl } : {}) },
   });
 }
 
@@ -600,6 +606,13 @@ export function editRoundDeadlineRequest(roundId: string, deadline: string) {
   return apiRequest<{ id: string; deadline: string }>(`/rounds/${roundId}/deadline`, {
     method: 'PUT',
     body: { deadline },
+  });
+}
+
+export function updateRoundDetailsRequest(roundId: string, details: { targetVenue?: string; targetVenueUrl?: string | null; submissionDeadline?: string | null }) {
+  return apiRequest<{ id: string }>(`/rounds/${roundId}/details`, {
+    method: 'PUT',
+    body: details,
   });
 }
 
