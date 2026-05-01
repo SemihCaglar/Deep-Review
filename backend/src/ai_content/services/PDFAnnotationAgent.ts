@@ -24,7 +24,8 @@ export class PDFAnnotationAgent {
     const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const pages = pdfDoc.getPages();
 
-    for (const ann of annotations) {
+    for (let i = 0; i < annotations.length; i++) {
+      const ann = annotations[i];
       const pageIndex = Math.max(0, Math.min(ann.page - 1, pages.length - 1));
       const page = pages[pageIndex];
       const { width, height } = page.getSize();
@@ -36,7 +37,7 @@ export class PDFAnnotationAgent {
         : ann.comment;
 
       const boxHeight = 30;
-      const boxY = height - 60 - (annotations.indexOf(ann) % 5) * (boxHeight + 5);
+      const boxY = height - 60 - (i % 5) * (boxHeight + 5);
       const safeY = Math.max(10, boxY);
 
       // Draw yellow highlight box
@@ -52,7 +53,7 @@ export class PDFAnnotationAgent {
       });
 
       // Draw annotation text
-      page.drawText(`⚑ ${displayText}`, {
+      page.drawText(`NOTE: ${displayText}`, {
         x: 15,
         y: safeY + 9,
         size: 8,
@@ -64,8 +65,8 @@ export class PDFAnnotationAgent {
 
     const annotatedPdfBytes = await pdfDoc.save();
 
-    // Save to public/downloads
-    const downloadsDir = path.join(process.cwd(), 'public', 'downloads');
+    // Save to ./downloads
+    const downloadsDir = path.join(process.cwd(), 'downloads');
     if (!fs.existsSync(downloadsDir)) {
       fs.mkdirSync(downloadsDir, { recursive: true });
     }

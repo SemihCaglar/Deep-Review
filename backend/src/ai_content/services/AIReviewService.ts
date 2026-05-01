@@ -83,7 +83,7 @@ Return ONLY the JSON. No markdown ticks.`;
     // 5. Annotate PDF using the PDFAnnotationAgent
     console.log(`[AIReviewService] Injecting annotations into PDF...`);
     const outputFilename = `paper_${paperId}_round_${roundId}_annotated.pdf`;
-    const annotatedPdfPath = await PDFAnnotationAgent.annotate(
+    await PDFAnnotationAgent.annotate(
       pdfBuffer,
       reviewData.annotations || [],
       outputFilename

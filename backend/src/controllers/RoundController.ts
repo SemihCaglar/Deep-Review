@@ -717,7 +717,14 @@ export class RoundController {
       }
 
       // We expect the frontend to pass the manually approved/corrected venue rules
-      const venueRules = req.body.venueRules ? JSON.parse(req.body.venueRules) : {};
+      let venueRules = {};
+      if (req.body.venueRules) {
+        try {
+          venueRules = JSON.parse(req.body.venueRules);
+        } catch (e) {
+          return res.status(400).json({ message: 'Invalid venueRules format. Expected JSON string.' });
+        }
+      }
 
       const { ComplianceService } = require('../ai_content/services/ComplianceService');
       const complianceReport = await ComplianceService.verifyCompliance(

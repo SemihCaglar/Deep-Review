@@ -269,6 +269,29 @@ export type PaperHistoryAssignment = {
   extensions: PaperHistoryExtension[];
 };
 
+export interface AIReviewReport {
+  summaryReport: string;
+  annotatedPdfUrl?: string;
+  annotations?: any[];
+  suggestedCitations?: any[];
+  checklist?: Array<{
+    id: string;
+    description: string;
+    isChecked: boolean;
+  }>;
+  paperType?: string;
+}
+
+export interface ComplianceReport {
+  pageLimit?: { isCompliant: boolean; confidence: number; details: string };
+  abstractWordCount?: { isCompliant: boolean; confidence: number; details: string };
+  anonymity?: { isCompliant: boolean; confidence: number; details: string };
+  referenceFormat?: { isCompliant: boolean; confidence: number; details: string };
+  requiredSections?: { isCompliant: boolean; confidence: number; details: string };
+  detectedPaperType?: string;
+  paperTypeConfidence?: number;
+}
+
 export type PaperHistoryRound = {
   id: string;
   roundNumber: number;
@@ -281,8 +304,8 @@ export type PaperHistoryRound = {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
     aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
   };
-  aiReviewReport?: any | null;
-  complianceReport?: any | null;
+  aiReviewReport?: AIReviewReport | null;
+  complianceReport?: ComplianceReport | null;
   annotatedPdfUrl?: string | null;
 };
 

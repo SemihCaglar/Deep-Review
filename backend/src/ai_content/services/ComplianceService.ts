@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 const pdfParse = require('pdf-parse');
 import { AzureOpenAIClient } from '../utils/AzureOpenAIClient';
 

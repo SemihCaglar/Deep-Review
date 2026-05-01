@@ -68,7 +68,15 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
     const [runningAI, setRunningAI] = useState<string | null>(null);
     const [runningCompliance, setRunningCompliance] = useState<string | null>(null);
-    const [aiError, setAiError] = useState('');
+    const [aiError, setAiError] = useState<string | null>(null);
+    
+    // Show AI errors to the user
+    useEffect(() => {
+        if (aiError) {
+            window.alert(aiError);
+            setAiError(null);
+        }
+    }, [aiError]);
     const aiFileInputRef = useRef<HTMLInputElement>(null);
     const complianceFileInputRef = useRef<HTMLInputElement>(null);
     const [pendingAIRoundId, setPendingAIRoundId] = useState<string | null>(null);
@@ -710,7 +718,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             )}
                                         </div>
                                     ))}
-                                </div>                                 {(checklistItems.length > 0 || aiReports.length > 0 || round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl) && (
+                                </div>
+                                {(checklistItems.length > 0 || aiReports.length > 0 || round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl) && (
                                     <div className="p-6 border-t border-white/5 bg-black/20">
                                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                             <Cpu className="w-3 h-3" />
@@ -750,7 +759,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                             {round.aiReviewReport.summaryReport}
                                                         </div>
                                                         
-                                                        {round.aiReviewReport.suggestedCitations?.length > 0 && (
+                                                        {round.aiReviewReport.suggestedCitations && round.aiReviewReport.suggestedCitations.length > 0 && (
                                                             <div className="mt-4 pt-4 border-t border-white/5">
                                                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Verified Suggested Citations</p>
                                                                 <div className="flex flex-wrap gap-2">
@@ -792,9 +801,13 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             )}
 
                                             {/* Checklist Display */}
-                                            {(round.aiReviewReport?.checklist?.length > 0 || checklistItems.length > 0) && (
+                                            {((round.aiReviewReport?.checklist && round.aiReviewReport.checklist.length > 0) || checklistItems.length > 0) && (
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    {(round.aiReviewReport?.checklist || checklistItems).map((item: any) => (
+                                                    {(round.aiReviewReport?.checklist?.map((item: any) => ({
+                                                        id: item.id,
+                                                        description: item.question,
+                                                        isChecked: item.answer === true
+                                                    })) || checklistItems).map((item: any) => (
                                                         <div key={item.id} className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 transition-all hover:bg-white/[0.05]">
                                                             <div className={`mt-0.5 p-1 rounded-md ${item.isChecked ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-600'}`}>
                                                                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
