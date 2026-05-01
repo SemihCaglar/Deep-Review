@@ -54,6 +54,7 @@
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.1.0",
     "@types/node": "^18.19.130",
     "@types/pdf-parse": "^1.1.5",
     "@types/supertest": "^7.2.0",
@@ -64,7 +65,6 @@
   "dependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/multer": "^2.1.0",
     "@types/nodemailer": "^8.0.0",
     "adm-zip": "^0.5.17",
     "cors": "^2.8.6",

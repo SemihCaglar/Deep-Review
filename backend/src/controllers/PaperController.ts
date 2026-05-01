@@ -27,8 +27,8 @@ export class PaperController {
         return res.status(401).json({ message: 'Authentication required' });
       }
 
-      if (!dto.title || !dto.abstractText || !dto.topics || !Array.isArray(dto.topics) || dto.topics.length === 0 || !dto.overleafLink) {
-        return res.status(400).json({ message: 'Missing required fields (title, abstractText, topics, overleafLink)' });
+      if (!dto.title || !dto.abstractText || !dto.overleafLink) {
+        return res.status(400).json({ message: 'Missing required fields (title, abstractText, overleafLink)' });
       }
 
       const normalizedOverleafLink = dto.overleafLink.trim();
