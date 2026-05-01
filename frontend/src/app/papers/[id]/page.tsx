@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
@@ -13,7 +13,7 @@ import {
   AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest,
   getSuggestedReviewersRequest, SuggestedReviewer,
   getProposedReviewersRequest, addProposedReviewerRequest, removeProposedReviewerRequest,
-  updateOverleafLinkRequest, updateGithubLinkRequest, updatePaperStatusRequest,
+  updateOverleafLinkRequest, updatePaperStatusRequest,
 } from '@/lib/api';
 
 function todayInputValue() {
@@ -58,7 +58,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [localTopics, setLocalTopics] = useState<string[]>([]); // These will be IDs
     const [localDeadline, setLocalDeadline] = useState('');
     const [localOverleafLink, setLocalOverleafLink] = useState('');
-    const [localGithubLink, setLocalGithubLink] = useState('');
+
     const [linksError, setLinksError] = useState('');
     const [savingLinks, setSavingLinks] = useState(false);
     const [paperHistory, setPaperHistory] = useState<PaperHistory | null>(null);
@@ -96,7 +96,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 setLocalTopics(paperData.topics?.map((t: any) => t.id) || []);
                 setLocalAuthors(paperData.authors?.map((a: any) => a.id) || []);
                 setLocalOverleafLink(paperData.overleafLink || '');
-                setLocalGithubLink(paperData.githubLink || '');
                 setAvailableTopics(topicsData);
 
                 // Set initial deadline from mock data if it matches
@@ -273,18 +272,18 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
     const handleSaveLinks = async () => {
         setLinksError('');
-        const trimmedOverleafLink = localOverleafLink.trim();
-        const trimmedGithubLink = localGithubLink.trim();
-        if (trimmedOverleafLink && !/^https?:\/\/(www\.)?overleaf\.com\//i.test(trimmedOverleafLink)) {
-            setLinksError('Overleaf link must be a valid Overleaf URL (e.g. https://www.overleaf.com/...)');
-            return;
-        }
-        if (trimmedGithubLink && !/^https?:\/\/(www\.)?github\.com\//i.test(trimmedGithubLink)) {
-            setLinksError('GitHub link must be a valid GitHub URL (e.g. https://github.com/...)');
-            return;
-        }
-        setSavingLinks(true);
         try {
+            const trimmedOverleafLink = localOverleafLink.trim();
+            if (!trimmedOverleafLink) {
+                setLinksError('Overleaf link is mandatory');
+                return;
+            }
+            if (!/^https?:\/\/([a-z0-9-]+\.)*overleaf\.com\//i.test(trimmedOverleafLink)) {
+                setLinksError('Overleaf link must be a valid Overleaf URL (e.g. https://www.overleaf.com/...)');
+                return;
+            }
+
+            setSavingLinks(true);
             try {
                 await updateOverleafLinkRequest(paper.id, trimmedOverleafLink);
             } catch (err) {
@@ -292,32 +291,14 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 return;
             }
 
-            let githubSaveError = '';
-            try {
-                await updateGithubLinkRequest(paper.id, trimmedGithubLink);
-            } catch (err) {
-                githubSaveError = err instanceof ApiError ? err.message : 'Failed to update GitHub link. Please try again.';
-            }
-
             const persistedPaper = await getPaperByIdRequest(paper.id);
             const nextOverleafLink = persistedPaper.overleafLink ?? null;
-            const nextGithubLink = persistedPaper.githubLink ?? null;
             setPaper(persistedPaper);
             setPaperHistory(prev => prev ? {
                 ...prev,
                 overleafLink: nextOverleafLink,
-                githubLink: nextGithubLink,
             } : prev);
             setLocalOverleafLink(nextOverleafLink || '');
-            setLocalGithubLink(nextGithubLink || '');
-            if (githubSaveError) {
-                setLinksError(`Overleaf link saved. GitHub link was not saved: ${githubSaveError}`);
-                return;
-            }
-            if (trimmedGithubLink && !nextGithubLink) {
-                setLinksError('Overleaf link saved. GitHub link was not saved by the backend.');
-                return;
-            }
             setIsEditingLinks(false);
         } catch (err) {
             setLinksError(err instanceof ApiError ? err.message : 'Failed to update links. Please try again.');
@@ -782,22 +763,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     No Overleaf link
                                 </span>
                             )}
-                            {paper.githubLink ? (
-                                <a href={paper.githubLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-slate-300 hover:text-white bg-white/[0.04] px-3 py-1.5 rounded-lg transition-colors border border-white/10 w-fit">
-                                    <Github className="w-4 h-4" />
-                                    Open GitHub Repository
-                                </a>
-                            ) : (
-                                <span className="inline-flex items-center gap-2 text-sm text-slate-500 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/10 w-fit">
-                                    <Github className="w-4 h-4" />
-                                    No GitHub link
-                                </span>
-                            )}
                             {canEditLinks && !isEditingLinks && (
                                 <button
                                     onClick={() => {
                                         setLocalOverleafLink(paper.overleafLink || '');
-                                        setLocalGithubLink(paper.githubLink || '');
                                         setLinksError('');
                                         setIsEditingLinks(true);
                                     }}
@@ -812,7 +781,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         {canEditLinks && isEditingLinks && (
                             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3 max-w-2xl">
                                 <div className="space-y-1">
-                                    <label className="text-xs text-slate-400 uppercase tracking-wider">Overleaf manuscript link</label>
+                                    <label className="text-xs text-slate-400 uppercase tracking-wider">Overleaf manuscript link <span className="text-red-400">*</span></label>
                                     <input
                                         type="url"
                                         value={localOverleafLink}
@@ -821,22 +790,11 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                                     />
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs text-slate-400 uppercase tracking-wider">GitHub repository link</label>
-                                    <input
-                                        type="url"
-                                        value={localGithubLink}
-                                        onChange={(e) => setLocalGithubLink(e.target.value)}
-                                        placeholder="https://github.com/org/repo"
-                                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                    />
-                                </div>
                                 {linksError && <p className="text-xs text-red-400">{linksError}</p>}
                                 <div className="flex justify-end gap-2">
                                     <button
                                         onClick={() => {
                                             setLocalOverleafLink(paper.overleafLink || '');
-                                            setLocalGithubLink(paper.githubLink || '');
                                             setLinksError('');
                                             setIsEditingLinks(false);
                                         }}

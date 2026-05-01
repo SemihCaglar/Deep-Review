@@ -20,7 +20,7 @@ export default function RegisterPaper() {
     const [abstractText, setAbstractText] = useState('');
     const [targetVenue, setTargetVenue] = useState('');
     const [overleafLink, setOverleafLink] = useState('');
-    const [githubLink, setGithubLink] = useState('');
+
     const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
     const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
 
@@ -83,6 +83,16 @@ export default function RegisterPaper() {
 
     const handleNext = (e: React.FormEvent) => {
         e.preventDefault();
+        if (step === 1) {
+            if (!overleafLink) {
+                alert('Overleaf link is mandatory.');
+                return;
+            }
+            if (!/^https?:\/\/([a-z0-9-]+\.)*overleaf\.com\//i.test(overleafLink.trim())) {
+                alert('Please provide a valid Overleaf URL.');
+                return;
+            }
+        }
         if (step < 3) setStep(step + 1);
     };
 
@@ -100,7 +110,7 @@ export default function RegisterPaper() {
                 abstractText,
                 targetVenue,
                 overleafLink,
-                githubLink,
+
                 authors: selectedAuthors,
                 topics: selectedTopics,
             });
@@ -156,12 +166,8 @@ export default function RegisterPaper() {
                                 <textarea required rows={5} value={abstractText} onChange={e => setAbstractText(e.target.value)} placeholder="Provide a detailed abstract of the work..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none"></textarea>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Overleaf Link (Optional)</label>
-                                <input type="url" value={overleafLink} onChange={e => setOverleafLink(e.target.value)} placeholder="https://v2.overleaf.com/read/..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-sm" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">GitHub Link (Optional)</label>
-                                <input type="url" value={githubLink} onChange={e => setGithubLink(e.target.value)} placeholder="https://github.com/org/repository" className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-sm" />
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Overleaf Link <span className="text-red-400">*</span></label>
+                                <input required type="url" value={overleafLink} onChange={e => setOverleafLink(e.target.value)} placeholder="https://v2.overleaf.com/read/..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-sm" />
                             </div>
                         </div>
                     )}

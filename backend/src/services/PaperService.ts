@@ -41,7 +41,6 @@ export class PaperService {
       title: dto.title,
       abstractText: dto.abstractText,
       overleafLink: dto.overleafLink?.trim() || null!,
-      githubLink: dto.githubLink?.trim() || null,
       status: PaperStatus.Draft,
       creationTime: new Date(),
     });
