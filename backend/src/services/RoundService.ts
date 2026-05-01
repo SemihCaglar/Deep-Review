@@ -260,12 +260,20 @@ export class RoundService {
       const paperTitle = assignment.round?.paper?.title ?? 'Unknown Paper';
       const deadline = assignment.deadline?.toISOString().split('T')[0] ?? 'N/A';
 
-      await sendEmail(
+      const emailSent = await sendEmail(
         assignment.reviewer,
         `Reminder: Review due tomorrow for "${paperTitle}"`,
         `Hello ${assignment.reviewer.name},\n\nThis is a reminder that your review for paper "${paperTitle}" is due on ${deadline}.\n\nPlease log in and submit your review before the deadline.`,
-      ).catch(err => console.error('[autoReminder] email failed:', err));
+      )
+        .then(() => true)
+        .catch(err => {
+          console.error('[autoReminder] email failed:', err);
+          return false;
+        });
 
+      if (!emailSent) {
+        continue;
+      }
       assignment.autoReminderSentAt = now;
       await assignRepo.save(assignment);
     }
