@@ -40,9 +40,6 @@ const handlePdfUpload = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
-// Serve the downloads directory statically so the UI can access annotated PDFs
-router.use('/downloads', express.static(path.join(process.cwd(), 'downloads')));
-
 // ==== ACCOUNT ROUTES ====
 router.post('/account/signup', AccountController.signUp);
 router.post('/account/login', AccountController.login);

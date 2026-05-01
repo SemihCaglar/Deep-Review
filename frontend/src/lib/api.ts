@@ -463,6 +463,9 @@ export type RoundWithAssignments = {
   startedAt: string | null;
   completedAt: string | null;
   assignments: RoundAssignment[];
+  aiReviewReport?: AIReviewReport | null;
+  complianceReport?: ComplianceReport | null;
+  annotatedPdfUrl?: string | null;
 };
 
 export type MyAssignment = {

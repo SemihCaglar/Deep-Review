@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
@@ -11,6 +11,8 @@ import {
   RoundStatusSummary,
   SuggestedReviewer,
   ApiError,
+  startAIReviewRequest,
+  runComplianceCheckRequest,
   getMyCoordinatedPapersRequest,
   getPaperByIdRequest,
   getPaperRoundsRequest,
@@ -35,7 +37,7 @@ import {
   getRoundStatusRequest,
 } from '@/lib/api';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft } from 'lucide-react';
+import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download, ShieldCheck } from 'lucide-react';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
@@ -644,6 +646,74 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round.id, round.status]);
 
+  // AI Review
+  const aiFileRef = useRef<HTMLInputElement>(null);
+  const [runningAI, setRunningAI] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiStatus, setAiStatus] = useState('');
+  const [localAiResult, setLocalAiResult] = useState<any>(null);
+
+  const AI_PHASES = [
+    { at: 0,  msg: 'Uploading PDF to agent…' },
+    { at: 4,  msg: 'Agent is reading the paper…' },
+    { at: 12, msg: 'Analyzing content and generating feedback…' },
+    { at: 22, msg: 'Annotating PDF…' },
+    { at: 32, msg: 'Downloading annotated PDF…' },
+    { at: 42, msg: 'Almost done…' },
+  ];
+
+  const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setRunningAI(true);
+    setAiError('');
+    setAiStatus(AI_PHASES[0].msg);
+
+    const start = Date.now();
+    const ticker = setInterval(() => {
+      const elapsed = (Date.now() - start) / 1000;
+      const phase = [...AI_PHASES].reverse().find(p => elapsed >= p.at);
+      if (phase) setAiStatus(phase.msg);
+    }, 1000);
+
+    try {
+      const res = await startAIReviewRequest(round.id, file);
+      setLocalAiResult(res.data);
+      setAiStatus('');
+      onRefresh();
+    } catch (err: any) {
+      setAiError(err.message || 'AI Review failed');
+      setAiStatus('');
+    } finally {
+      clearInterval(ticker);
+      setRunningAI(false);
+    }
+  };
+
+  // Compliance Check
+  const complianceFileRef = useRef<HTMLInputElement>(null);
+  const [runningCompliance, setRunningCompliance] = useState(false);
+  const [complianceError, setComplianceError] = useState('');
+  const [localComplianceResult, setLocalComplianceResult] = useState<any>(null);
+
+  const handleComplianceFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setRunningCompliance(true);
+    setComplianceError('');
+    try {
+      const res = await runComplianceCheckRequest(round.id, file);
+      setLocalComplianceResult(res.data);
+      onRefresh();
+    } catch (err: any) {
+      setComplianceError(err.message || 'Compliance check failed');
+    } finally {
+      setRunningCompliance(false);
+    }
+  };
+
   const pendingCount = round.assignments.filter(
     a => a.pendingDeclineRequest || a.pendingExtensionRequest,
   ).length;
@@ -1065,6 +1135,86 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
               ))}
             </div>
           )}
+
+          {/* AI Tools */}
+          <div className="pt-3 border-t border-white/5 space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => aiFileRef.current?.click()}
+                disabled={runningAI}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {runningAI ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
+                {runningAI ? 'Running…' : 'Run AI Review'}
+              </button>
+              {aiStatus && (
+                <span className="text-xs text-indigo-300 animate-pulse">{aiStatus}</span>
+              )}
+              <button
+                onClick={() => complianceFileRef.current?.click()}
+                disabled={runningCompliance}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {runningCompliance ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+                Compliance Check
+              </button>
+              {aiError && <p className="text-xs text-red-400">{aiError}</p>}
+              {complianceError && <p className="text-xs text-red-400">{complianceError}</p>}
+            </div>
+
+            {/* AI Review result */}
+            {(() => {
+              const report = localAiResult || round.aiReviewReport;
+              const pdfUrl = localAiResult?.annotatedPdfUrl || round.annotatedPdfUrl;
+              if (!report) return null;
+              return (
+                <div className="p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">AI Review</p>
+                      {report.paperType && (
+                        <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{report.paperType}</span>
+                      )}
+                    </div>
+                    {pdfUrl && (
+                      <a href={pdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
+                        <Download className="w-3 h-3" /> Annotated PDF
+                      </a>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed line-clamp-5">{report.summaryReport}</p>
+                </div>
+              );
+            })()}
+
+            {/* Compliance result */}
+            {(() => {
+              const comp = localComplianceResult || round.complianceReport;
+              if (!comp) return null;
+              return (
+                <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
+                  <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Compliance Check</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(comp).map(([key, val]: [string, any]) => (
+                      <div key={key} className="flex items-start gap-1.5">
+                        {val.isCompliant
+                          ? <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />
+                          : <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />}
+                        <div>
+                          <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                          <p className="text-[10px] text-slate-300">{val.details}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Hidden file inputs */}
+          <input ref={aiFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
+          <input ref={complianceFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleComplianceFileSelected} />
         </div>
       )}
     </div>
