@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { KeyRound, Plus, Tags, Trash2, UserCircle2, X } from 'lucide-react';
+import { Check, KeyRound, Pencil, Plus, Tags, Trash2, UserCircle2, X } from 'lucide-react';
 import { useUser } from '@/components/context/UserContext';
 import {
   ApiError,
@@ -10,6 +10,7 @@ import {
   getCurrentProfileRequest,
   getTopicsRequest,
   updateInterestsRequest,
+  updateProfileRequest,
   type TopicOption,
 } from '@/lib/api';
 import {
@@ -25,6 +26,7 @@ type ProfileModalProps = {
 };
 
 type ProfileModalView = 'summary' | 'change-password' | 'edit-interests';
+type EditableProfileField = 'name' | 'email';
 
 export default function ProfileModal({ onClose }: ProfileModalProps) {
   const { user, setUser } = useUser();
@@ -38,7 +40,10 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
   const [topics, setTopics] = React.useState<TopicOption[]>([]);
   const [selectedTopicIds, setSelectedTopicIds] = React.useState<string[]>([]);
   const [otherInterestInputs, setOtherInterestInputs] = React.useState<string[]>(['']);
+  const [editingField, setEditingField] = React.useState<EditableProfileField | null>(null);
+  const [fieldDraft, setFieldDraft] = React.useState('');
   const [isTopicsLoading, setIsTopicsLoading] = React.useState(false);
+  const [isFieldSaving, setIsFieldSaving] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [feedback, setFeedback] = React.useState('');
   const [error, setError] = React.useState('');
@@ -101,6 +106,7 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
   };
 
   const openChangePassword = () => {
+    setEditingField(null);
     setView('change-password');
     setCurrentPassword('');
     setNewPassword('');
@@ -114,6 +120,7 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
       return;
     }
 
+    setEditingField(null);
     setView('edit-interests');
     setFeedback('');
     setError('');
@@ -153,6 +160,57 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
       setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to change password.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const startFieldEdit = (field: EditableProfileField) => {
+    setEditingField(field);
+    setFieldDraft(field === 'name' ? displayName : displayEmail);
+    setFeedback('');
+    setError('');
+  };
+
+  const cancelFieldEdit = () => {
+    setEditingField(null);
+    setFieldDraft('');
+    setError('');
+  };
+
+  const saveFieldEdit = async () => {
+    if (!profileUser || !editingField) {
+      return;
+    }
+
+    const trimmedValue = fieldDraft.trim();
+
+    if (!trimmedValue) {
+      setError(editingField === 'name' ? 'Full name is required.' : 'Email is required.');
+      return;
+    }
+
+    const nextName = editingField === 'name' ? trimmedValue : displayName;
+    const nextEmail = editingField === 'email' ? trimmedValue : displayEmail;
+
+    setIsFieldSaving(true);
+    setFeedback('');
+    setError('');
+
+    try {
+      const response = await updateProfileRequest(nextName, nextEmail);
+      const nextUser: StoredAuthUser = {
+        ...profileUser,
+        ...response.user,
+      };
+
+      syncProfileUser(nextUser);
+      setEditingField(null);
+      setFieldDraft('');
+      setFeedback('Profile updated successfully.');
+      void refreshProfile();
+    } catch (caughtError) {
+      setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to update profile.');
+    } finally {
+      setIsFieldSaving(false);
     }
   };
 
@@ -299,14 +357,31 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
               </div>
 
               <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-                <div className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-background/60 p-4">
-                  <p className="mb-2 break-words text-xs uppercase tracking-wider text-slate-500">Full Name</p>
-                  <p className="break-words font-medium text-slate-100">{displayName}</p>
-                </div>
-                <div className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-background/60 p-4">
-                  <p className="mb-2 break-words text-xs uppercase tracking-wider text-slate-500">Email</p>
-                  <p className="break-all font-medium text-slate-100">{displayEmail}</p>
-                </div>
+                <ProfileFieldCard
+                  disabled={isFieldSaving}
+                  editing={editingField === 'name'}
+                  inputType="text"
+                  label="Full Name"
+                  onCancel={cancelFieldEdit}
+                  onChange={setFieldDraft}
+                  onEdit={() => startFieldEdit('name')}
+                  onSave={saveFieldEdit}
+                  value={displayName}
+                  draftValue={fieldDraft}
+                />
+                <ProfileFieldCard
+                  disabled={isFieldSaving}
+                  editing={editingField === 'email'}
+                  inputType="email"
+                  label="Email"
+                  onCancel={cancelFieldEdit}
+                  onChange={setFieldDraft}
+                  onEdit={() => startFieldEdit('email')}
+                  onSave={saveFieldEdit}
+                  value={displayEmail}
+                  draftValue={fieldDraft}
+                  breakAll
+                />
               </div>
             </section>
 
@@ -573,6 +648,86 @@ function PasswordField({
         disabled={disabled}
         required
       />
+    </div>
+  );
+}
+
+function ProfileFieldCard({
+  breakAll = false,
+  disabled,
+  draftValue,
+  editing,
+  inputType,
+  label,
+  onCancel,
+  onChange,
+  onEdit,
+  onSave,
+  value,
+}: {
+  breakAll?: boolean;
+  disabled: boolean;
+  draftValue: string;
+  editing: boolean;
+  inputType: 'email' | 'text';
+  label: string;
+  onCancel: () => void;
+  onChange: (value: string) => void;
+  onEdit: () => void;
+  onSave: () => void;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-background/60 p-4">
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-3">
+        <p className="min-w-0 break-words text-xs uppercase tracking-wider text-slate-500">{label}</p>
+        {!editing ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-100"
+            aria-label={`Edit ${label}`}
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+
+      {editing ? (
+        <div className="min-w-0 space-y-3">
+          <input
+            type={inputType}
+            value={draftValue}
+            onChange={event => onChange(event.target.value)}
+            className="w-full min-w-0 rounded-xl border border-white/10 bg-background px-3 py-2.5 text-sm text-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            disabled={disabled}
+            autoFocus
+            required
+          />
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={disabled}
+              className="inline-flex min-w-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-600/60"
+            >
+              <Check className="h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 break-words">{disabled ? 'Saving...' : 'Save'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={disabled}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-100 disabled:opacity-60"
+              aria-label={`Cancel ${label} edit`}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className={`${breakAll ? 'break-all' : 'break-words'} font-medium text-slate-100`}>{value}</p>
+      )}
     </div>
   );
 }
