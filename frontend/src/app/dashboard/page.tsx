@@ -429,11 +429,9 @@ export default function DashboardPage() {
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
       <div>
         <h1 className="text-3xl font-bold text-white tracking-tight">Welcome, {user.name}</h1>
-        <p className="text-slate-400 mt-2">
-          {user.isCoordinator
-            ? 'Review pending account requests and keep the system moving.'
-            : 'Your account is ready to use once coordinator approval and assignments are available.'}
-        </p>
+        {user.isCoordinator && (
+          <p className="text-slate-400 mt-2">Review pending account requests and keep the system moving.</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

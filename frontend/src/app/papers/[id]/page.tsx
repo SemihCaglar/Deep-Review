@@ -11,7 +11,7 @@ import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
   getLabMembersRequest, ApiError, LabMember,
-  AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest,
+  AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest, editSubmissionDeadlineRequest,
   getSuggestedReviewersRequest, SuggestedReviewer,
   getProposedReviewersRequest, addProposedReviewerRequest, removeProposedReviewerRequest,
   updateOverleafLinkRequest, updateGithubLinkRequest, updatePaperStatusRequest,
@@ -20,9 +20,16 @@ import {
 
 
 function todayInputValue() {
-    const today = new Date();
-    const timezoneOffsetMs = today.getTimezoneOffset() * 60 * 1000;
-    return new Date(today.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+    return new Date().toISOString().split('T')[0];
+}
+
+function dateInputToUtcIso(value: string) {
+    return `${value}T00:00:00.000Z`;
+}
+
+function maxDateInputValue(...values: Array<string | null | undefined>) {
+    const sorted = values.filter((value): value is string => Boolean(value)).sort();
+    return sorted[sorted.length - 1];
 }
 
 export default function PaperDetails({ params }: { params: { id: string } }) {
@@ -92,6 +99,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [showCreateRound, setShowCreateRound] = useState(false);
     const [newVenueCat, setNewVenueCat] = useState('Conference');
     const [newTargetVenue, setNewTargetVenue] = useState('');
+    const [newTargetVenueUrl, setNewTargetVenueUrl] = useState('');
     const [newSubDeadline, setNewSubDeadline] = useState('');
     const [newRoundDeadline, setNewRoundDeadline] = useState('');
     const [creatingRound, setCreatingRound] = useState(false);
@@ -105,6 +113,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [roundErrors, setRoundErrors] = useState<Record<string, string>>({});
     const [editingRoundDeadline, setEditingRoundDeadline] = useState<string | null>(null);
     const [roundDeadlineDraft, setRoundDeadlineDraft] = useState('');
+    const [editingSubmissionDeadline, setEditingSubmissionDeadline] = useState<string | null>(null);
+    const [submissionDeadlineDraft, setSubmissionDeadlineDraft] = useState('');
 
     // Rating Modal state
     const [ratingModalOpen, setRatingModalOpen] = useState(false);
@@ -406,16 +416,34 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     };
 
     const handleCreateRound = async () => {
+        if (!newTargetVenue.trim()) {
+            setCreateRoundError('Venue name is required.');
+            return;
+        }
+        if (!newTargetVenueUrl.trim()) {
+            setCreateRoundError('Venue URL is required.');
+            return;
+        }
+        if (!/^https?:\/\/.+/i.test(newTargetVenueUrl.trim())) {
+            setCreateRoundError('Venue URL must start with http:// or https://.');
+            return;
+        }
+        if (newVenueCat === 'Conference' && !newSubDeadline) {
+            setCreateRoundError('Submission deadline is required for Conference rounds.');
+            return;
+        }
         setCreatingRound(true);
         setCreateRoundError('');
         try {
             await createRoundRequest(
-                params.id, newTargetVenue, newVenueCat,
-                newVenueCat === 'Conference' ? newSubDeadline : undefined,
-                newRoundDeadline || undefined,
+                params.id, newTargetVenue.trim(), newVenueCat,
+                newVenueCat === 'Conference' ? dateInputToUtcIso(newSubDeadline) : undefined,
+                newRoundDeadline ? dateInputToUtcIso(newRoundDeadline) : undefined,
+                newTargetVenueUrl.trim(),
             );
             setShowCreateRound(false);
             setNewTargetVenue('');
+            setNewTargetVenueUrl('');
             setNewSubDeadline('');
             setNewRoundDeadline('');
             await refreshRounds();
@@ -428,11 +456,21 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
     const handleSaveRoundDeadline = async (roundId: string) => {
         try {
-            await editRoundDeadlineRequest(roundId, new Date(roundDeadlineDraft).toISOString());
+            await editRoundDeadlineRequest(roundId, dateInputToUtcIso(roundDeadlineDraft));
             setEditingRoundDeadline(null);
             await refreshRounds();
         } catch (e) {
             setRoundErrors(prev => ({ ...prev, [roundId]: e instanceof ApiError ? e.message : 'Failed to save deadline' }));
+        }
+    };
+
+    const handleSaveSubmissionDeadline = async (roundId: string) => {
+        try {
+            await editSubmissionDeadlineRequest(roundId, dateInputToUtcIso(submissionDeadlineDraft));
+            setEditingSubmissionDeadline(null);
+            await refreshRounds();
+        } catch (e) {
+            setRoundErrors(prev => ({ ...prev, [roundId]: e instanceof ApiError ? e.message : 'Failed to save submission deadline' }));
         }
     };
 
@@ -1280,6 +1318,12 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                 placeholder="e.g. NeurIPS 2026"
                                                 className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50" />
                                         </div>
+                                        <div className="space-y-1 sm:col-span-2">
+                                            <label className="text-xs text-slate-400 uppercase tracking-wider">Venue URL</label>
+                                            <input type="text" value={newTargetVenueUrl} onChange={e => setNewTargetVenueUrl(e.target.value)}
+                                                placeholder="https://neurips.cc/Conferences/2026"
+                                                className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50" />
+                                        </div>
                                         {newVenueCat === 'Conference' && (
                                             <div className="space-y-1">
                                                 <label className="text-xs text-slate-400 uppercase tracking-wider">Submission Deadline</label>
@@ -1299,7 +1343,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     {createRoundError && <p className="text-xs text-red-400">{createRoundError}</p>}
                                     <div className="flex gap-3">
                                         <button onClick={handleCreateRound}
-                                            disabled={creatingRound || !newTargetVenue || (newVenueCat === 'Conference' && !newSubDeadline)}
+                                            disabled={creatingRound || !newTargetVenue.trim() || !newTargetVenueUrl.trim() || (newVenueCat === 'Conference' && !newSubDeadline)}
                                             className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors">
                                             {creatingRound ? 'Creating…' : 'Create Draft'}
                                         </button>
@@ -1354,7 +1398,25 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     {round.venueCategory === 'Conference' && (
                                                         <div>
                                                             <p className="text-xs text-slate-500 mb-0.5">Submission Deadline</p>
-                                                            <p className="text-white">{round.submissionDeadline ? new Date(round.submissionDeadline).toLocaleDateString() : '—'}</p>
+                                                            {round.status === 'Draft' && editingSubmissionDeadline === round.id ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <input type="date" value={submissionDeadlineDraft} onChange={e => setSubmissionDeadlineDraft(e.target.value)}
+                                                                        min={maxDateInputValue(todayInputValue(), round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : undefined)}
+                                                                        className="bg-background border border-white/10 rounded px-2 py-0.5 text-xs text-white" />
+                                                                    <button onClick={() => handleSaveSubmissionDeadline(round.id)} disabled={!submissionDeadlineDraft} className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-0.5 rounded text-white disabled:opacity-50">Save</button>
+                                                                    <button onClick={async () => { if (await confirmCancel()) setEditingSubmissionDeadline(null); }} className="text-xs text-slate-400 hover:text-white">Cancel</button>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className="text-white">{round.submissionDeadline ? new Date(round.submissionDeadline).toLocaleDateString() : '—'}</p>
+                                                                    {round.status === 'Draft' && (
+                                                                        <button onClick={() => { setEditingSubmissionDeadline(round.id); setSubmissionDeadlineDraft(round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : ''); }}
+                                                                            className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-1.5 py-0.5 rounded">
+                                                                            Edit
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )}
                                                     <div>

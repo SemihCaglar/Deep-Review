@@ -19,6 +19,7 @@ export default function RegisterPaper() {
     const [title, setTitle] = useState('');
     const [abstractText, setAbstractText] = useState('');
     const [overleafLink, setOverleafLink] = useState('');
+    const [overleafError, setOverleafError] = useState('');
 
     const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
     const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
@@ -86,14 +87,15 @@ export default function RegisterPaper() {
     const handleNext = (e: React.FormEvent) => {
         e.preventDefault();
         if (step === 1) {
-            if (!overleafLink) {
-                alert('Overleaf link is mandatory.');
+            if (!overleafLink.trim()) {
+                setOverleafError('Overleaf link is required.');
                 return;
             }
             if (!/^https?:\/\/([a-z0-9-]+\.)*overleaf\.com\//i.test(overleafLink.trim())) {
-                alert('Please provide a valid Overleaf URL.');
+                setOverleafError('The link must be a valid Overleaf URL (e.g. https://www.overleaf.com/...).');
                 return;
             }
+            setOverleafError('');
         }
         if (step < 3) setStep(step + 1);
     };
@@ -115,7 +117,7 @@ export default function RegisterPaper() {
                 authors: selectedAuthors,
                 topics: selectedTopics,
             });
-            router.push('/papers?registered=true');
+            router.push('/papers?filter=authored');
         } catch (err) {
             console.error(err);
             alert('Failed to register paper. Please try again.');
@@ -175,7 +177,8 @@ export default function RegisterPaper() {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Overleaf Link <span className="text-red-400">*</span></label>
-                                <input required type="url" value={overleafLink} onChange={e => setOverleafLink(e.target.value)} placeholder="https://v2.overleaf.com/read/..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-sm" />
+                                <input type="text" value={overleafLink} onChange={e => { setOverleafLink(e.target.value); setOverleafError(''); }} placeholder="https://www.overleaf.com/..." className={`w-full bg-background border rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-sm ${overleafError ? 'border-red-500/50' : 'border-white/10'}`} />
+                                {overleafError && <p className="mt-1.5 text-xs text-red-400">{overleafError}</p>}
                             </div>
                         </div>
                     )}
