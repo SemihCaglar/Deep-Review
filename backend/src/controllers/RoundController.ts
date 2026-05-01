@@ -436,6 +436,13 @@ export class RoundController {
         startedAt: r.startedAt,
         completedAt: r.completedAt,
         proposedReviewers: (r.proposedReviewers ?? []).map(u => ({ id: u.id, name: u.name, email: u.email })),
+        aiReviewReport: r.aiReviewReport,
+        complianceReport: r.complianceReport,
+        annotatedPdfUrl: r.annotatedPdfUrl,
+        artifacts: {
+          checklistItems: (r.checklistItems ?? []).map(ci => ({ id: ci.id, description: ci.description, isChecked: ci.isChecked })),
+          aiReviewReports: (r.aiReviewReports ?? []).map(ar => ({ id: ar.id, generatedReportUrl: ar.generatedReportUrl, annotatedPdfUrl: ar.annotatedPdfUrl }))
+        }
       })));
     } catch (err) {
       console.error(err);

@@ -588,9 +588,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
 
                     {paperHistory.rounds.map(round => {
-                        const checklistItems = round.artifacts?.checklistItems || [];
-                        const aiReports = round.artifacts?.aiReviewReports || [];
-
                         return (
                             <section key={round.id || round.roundNumber} className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
                                 <div className="p-5 border-b border-white/5">
@@ -605,28 +602,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             <span className="px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-slate-300">
                                                 Deadline: {formatDate(round.deadline)}
                                             </span>
-                                            {(isAuthor || isCoordinator) && (
-                                                <div className="flex gap-2 ml-2">
-                                                    <button
-                                                        onClick={() => handleStartAIReview(round.id)}
-                                                        disabled={runningAI === round.id}
-                                                        className="px-3 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-full transition-colors flex items-center gap-1.5"
-                                                        title="Run AI Post-Review Analysis (Requires PDF Upload)"
-                                                    >
-                                                        {runningAI === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
-                                                        AI Review
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleRunComplianceCheck(round.id, paperHistory?.targetVenue || paper.targetVenue || '')}
-                                                        disabled={runningCompliance === round.id}
-                                                        className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-full transition-colors flex items-center gap-1.5"
-                                                        title="Run Venue Compliance Check (Requires PDF Upload)"
-                                                    >
-                                                        {runningCompliance === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-                                                        Compliance
-                                                    </button>
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -700,107 +675,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         </div>
                                     ))}
                                 </div>
-                                {(checklistItems.length > 0 || aiReports.length > 0 || round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl) && (
-                                    <div className="p-6 border-t border-white/5 bg-black/20">
-                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                            <Cpu className="w-3 h-3" />
-                                            AI-Generated Artifacts & Reports
-                                        </h4>
-                                        
-                                        <div className="space-y-6">
-                                            {/* Legacy Reports (if any) */}
-                                            {aiReports.map(report => (
-                                                <div key={report.id} className="flex flex-wrap items-center gap-3 text-sm">
-                                                    {report.generatedReportUrl && (
-                                                        <a href={report.generatedReportUrl} target="_blank" rel="noreferrer" className="glass px-3 py-1.5 rounded-lg inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-all border-white/5">
-                                                            <ExternalLink className="w-4 h-4" />
-                                                            Legacy AI report
-                                                        </a>
-                                                    )}
-                                                </div>
-                                            ))}
 
-                                            {/* New PDF-based AI Review Report */}
-                                            {round.aiReviewReport && (
-                                                <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
-                                                    <div className="glass p-5 rounded-xl border border-indigo-500/10 bg-indigo-500/[0.02]">
-                                                        <div className="flex items-center justify-between mb-3">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[10px] font-bold rounded uppercase">AI Review Report</span>
-                                                                <span className="text-sm font-semibold text-white">Detected Type: {round.aiReviewReport.paperType}</span>
-                                                            </div>
-                                                            {round.annotatedPdfUrl && (
-                                                                <a href={round.annotatedPdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-xs text-indigo-400 hover:text-indigo-300 font-medium">
-                                                                    <Download className="w-3.5 h-3.5" />
-                                                                    Download Annotated PDF
-                                                                </a>
-                                                            )}
-                                                        </div>
-                                                        <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap italic opacity-90 border-l-2 border-indigo-500/30 pl-4 py-1">
-                                                            {round.aiReviewReport.summaryReport}
-                                                        </div>
-                                                        
-                                                        {round.aiReviewReport.suggestedCitations && round.aiReviewReport.suggestedCitations.length > 0 && (
-                                                            <div className="mt-4 pt-4 border-t border-white/5">
-                                                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Verified Suggested Citations</p>
-                                                                <div className="flex flex-wrap gap-2">
-                                                                    {round.aiReviewReport.suggestedCitations.map((cit: any, i: number) => (
-                                                                        <div key={i} className="px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] text-slate-400">
-                                                                            {cit.title} ({cit.authors?.[0]})
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* New Compliance Report */}
-                                            {round.complianceReport && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 animate-in fade-in slide-in-from-top-4 duration-500 delay-150">
-                                                    {Object.entries(round.complianceReport).map(([key, val]: [string, any]) => {
-                                                        if (typeof val !== 'object' || val === null) return null;
-                                                        const isOk = val.isCompliant;
-                                                        return (
-                                                            <div key={key} className={`glass p-4 rounded-xl border transition-all ${isOk ? 'border-emerald-500/10 bg-emerald-500/[0.02]' : 'border-red-500/10 bg-red-500/[0.02]'}`}>
-                                                                <div className="flex items-center justify-between mb-2">
-                                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                                                    {isOk ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <XCircle className="w-3.5 h-3.5 text-red-400" />}
-                                                                </div>
-                                                                <p className="text-xs text-slate-300 leading-snug">{val.details}</p>
-                                                                <div className="mt-2 w-full bg-white/5 h-1 rounded-full overflow-hidden">
-                                                                    <div 
-                                                                        className={`h-full transition-all duration-1000 ${isOk ? 'bg-emerald-500' : 'bg-red-500'}`} 
-                                                                        style={{ width: `${(val.confidence || 0.5) * 100}%` }} 
-                                                                    />
-                                                                </div>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            )}
-
-                                            {/* Checklist Display */}
-                                            {((round.aiReviewReport?.checklist && round.aiReviewReport.checklist.length > 0) || checklistItems.length > 0) && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                    {(round.aiReviewReport?.checklist?.map((item: any) => ({
-                                                        id: item.id,
-                                                        description: item.question,
-                                                        isChecked: item.answer === true
-                                                    })) || checklistItems).map((item: any) => (
-                                                        <div key={item.id} className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 transition-all hover:bg-white/[0.05]">
-                                                            <div className={`mt-0.5 p-1 rounded-md ${item.isChecked ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-600'}`}>
-                                                                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                                                            </div>
-                                                            <span className="text-sm text-slate-300 leading-tight">{item.description}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
                             </section>
                         );
                     })}
@@ -1445,6 +1320,72 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                         Compliance Check
                                                     </button>
                                                 </div>
+
+                                                {/* AI Reports and Artifacts */}
+                                                {(round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl || (round.artifacts?.aiReviewReports?.length || 0) > 0 || (round.artifacts?.checklistItems?.length || 0) > 0) && (
+                                                    <div className="pt-4 mt-2 border-t border-white/5 space-y-4">
+                                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                            <Cpu className="w-3 h-3" />
+                                                            AI Analysis & Reports
+                                                        </h4>
+                                                        
+                                                        <div className="space-y-4">
+                                                            {/* New PDF-based AI Review Report */}
+                                                            {round.aiReviewReport && (
+                                                                <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-500">
+                                                                    <div className="glass p-4 rounded-xl border border-indigo-500/10 bg-indigo-500/[0.02]">
+                                                                        <div className="flex items-center justify-between mb-2">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[9px] font-bold rounded uppercase">AI Review</span>
+                                                                                <span className="text-xs font-semibold text-white">{round.aiReviewReport.paperType}</span>
+                                                                            </div>
+                                                                            {round.annotatedPdfUrl && (
+                                                                                <a href={round.annotatedPdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[10px] text-indigo-400 hover:text-indigo-300 font-medium">
+                                                                                    <Download className="w-3 h-3" />
+                                                                                    Annotated PDF
+                                                                                </a>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap italic border-l border-indigo-500/30 pl-3 py-0.5">
+                                                                            {round.aiReviewReport.summaryReport}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Compliance Report */}
+                                                            {round.complianceReport && (
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-4 duration-500">
+                                                                    {Object.entries(round.complianceReport).map(([key, val]: [string, any]) => {
+                                                                        if (typeof val !== 'object' || val === null) return null;
+                                                                        const isOk = val.isCompliant;
+                                                                        return (
+                                                                            <div key={key} className={`glass p-3 rounded-lg border transition-all ${isOk ? 'border-emerald-500/10 bg-emerald-500/[0.01]' : 'border-red-500/10 bg-red-500/[0.01]'}`}>
+                                                                                <div className="flex items-center justify-between mb-1.5">
+                                                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                                                                    {isOk ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <XCircle className="w-3 h-3 text-red-400" />}
+                                                                                </div>
+                                                                                <p className="text-[10px] text-slate-300 leading-tight">{val.details}</p>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Legacy Reports */}
+                                                            {round.artifacts?.aiReviewReports?.map(report => (
+                                                                <div key={report.id} className="flex flex-wrap items-center gap-2">
+                                                                    {report.generatedReportUrl && (
+                                                                        <a href={report.generatedReportUrl} target="_blank" rel="noreferrer" className="px-3 py-1 rounded-lg border border-white/5 bg-white/5 text-[10px] text-blue-400 hover:text-blue-300 transition-all flex items-center gap-1.5">
+                                                                            <ExternalLink className="w-3 h-3" />
+                                                                            Legacy AI Report
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) }
 
                                                 {round.status === 'Draft' && (
                                                     <>
