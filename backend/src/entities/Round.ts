@@ -86,7 +86,4 @@ export class Round {
 
   @Column({ nullable: true })
   annotatedPdfUrl: string;
-
-  @Column({ nullable: true })
-  sourceZipUrl: string;
 }
