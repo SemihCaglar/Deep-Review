@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Star, Cpu, Download, ShieldCheck, Search } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Star, Search } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
@@ -14,8 +14,8 @@ import {
   AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest,
   getSuggestedReviewersRequest, SuggestedReviewer,
   getProposedReviewersRequest, addProposedReviewerRequest, removeProposedReviewerRequest,
-  updateOverleafLinkRequest, updateGithubLinkRequest, updatePaperStatusRequest,
-  submitRatingRequest, startAIReviewRequest, runComplianceCheckRequest, getVenueRulesRequest,
+  updateOverleafLinkRequest, updatePaperStatusRequest,
+  submitRatingRequest,
 } from '@/lib/api';
 
 
@@ -69,22 +69,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [savingLinks, setSavingLinks] = useState(false);
     const [paperHistory, setPaperHistory] = useState<PaperHistory | null>(null);
     const [historyError, setHistoryError] = useState('');
-
-    const [runningAI, setRunningAI] = useState<string | null>(null);
-    const [runningCompliance, setRunningCompliance] = useState<string | null>(null);
-    const [aiError, setAiError] = useState<string | null>(null);
-    
-    // Show AI errors to the user
-    useEffect(() => {
-        if (aiError) {
-            window.alert(aiError);
-            setAiError(null);
-        }
-    }, [aiError]);
-    const aiFileInputRef = useRef<HTMLInputElement>(null);
-    const complianceFileInputRef = useRef<HTMLInputElement>(null);
-    const [pendingAIRoundId, setPendingAIRoundId] = useState<string | null>(null);
-    const [pendingComplianceRoundId, setPendingComplianceRoundId] = useState<string | null>(null);
 
     // Author round proposal state
     const [authorRounds, setAuthorRounds] = useState<AuthorRound[]>([]);
@@ -537,55 +521,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
-    const handleStartAIReview = (roundId: string) => {
-        setPendingAIRoundId(roundId);
-        aiFileInputRef.current?.click();
-    };
-
-    const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !pendingAIRoundId) return;
-        e.target.value = '';
-        setRunningAI(pendingAIRoundId);
-        setAiError('');
-        try {
-            await startAIReviewRequest(pendingAIRoundId, file);
-            const historyData = await getPaperHistoryRequest(params.id);
-            setPaperHistory(historyData);
-        } catch (err: any) {
-            setAiError(err.message || 'Failed to start AI Review');
-        } finally {
-            setRunningAI(null);
-            setPendingAIRoundId(null);
-        }
-    };
-
-    const handleRunComplianceCheck = (roundId: string, _targetVenue: string) => {
-        setPendingComplianceRoundId(roundId);
-        complianceFileInputRef.current?.click();
-    };
-
-    const handleComplianceFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !pendingComplianceRoundId) return;
-        e.target.value = '';
-        setRunningCompliance(pendingComplianceRoundId);
-        setAiError('');
-        try {
-            // Optionally fetch venue rules first
-            let venueRules = {};
-            try { venueRules = await getVenueRulesRequest(pendingComplianceRoundId); } catch {}
-            await runComplianceCheckRequest(pendingComplianceRoundId, file, venueRules);
-            const historyData = await getPaperHistoryRequest(params.id);
-            setPaperHistory(historyData);
-        } catch (err: any) {
-            setAiError(err.message || 'Failed to run Compliance Check');
-        } finally {
-            setRunningCompliance(null);
-            setPendingComplianceRoundId(null);
-        }
-    };
-
     const renderPaperHistory = () => {
         const isAuthor = paperHistory?.authors?.some(a => a.id === user.id) || paper.authors?.some(a => a.id === user.id);
         const isCoordinator = user.isCoordinator;
@@ -757,10 +692,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
     return (
         <div className="max-w-5xl mx-auto py-4 animate-in fade-in duration-500 mb-20">
-            {/* Hidden file inputs for PDF uploads */}
-            <input ref={aiFileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
-            <input ref={complianceFileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleComplianceFileSelected} />
-
             <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-6">
                 <ArrowLeft className="w-4 h-4" />
                 Back to Papers
@@ -1391,92 +1322,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     </div>
                                                 </div>
 
-                                                <div className="flex items-center gap-2 pt-1 pb-2">
-                                                    <button
-                                                        onClick={() => handleStartAIReview(round.id)}
-                                                        disabled={runningAI === round.id}
-                                                        className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-xs"
-                                                        title="Run AI Post-Review Analysis"
-                                                    >
-                                                        {runningAI === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
-                                                        Run AI Review
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleRunComplianceCheck(round.id, round.targetVenue)}
-                                                        disabled={runningCompliance === round.id}
-                                                        className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-xs"
-                                                        title="Run Venue Compliance Check"
-                                                    >
-                                                        {runningCompliance === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-                                                        Compliance Check
-                                                    </button>
-                                                </div>
-
-                                                {/* AI Reports and Artifacts */}
-                                                {(round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl || (round.artifacts?.aiReviewReports?.length || 0) > 0 || (round.artifacts?.checklistItems?.length || 0) > 0) && (
-                                                    <div className="pt-4 mt-2 border-t border-white/5 space-y-4">
-                                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                                            <Cpu className="w-3 h-3" />
-                                                            AI Analysis & Reports
-                                                        </h4>
-                                                        
-                                                        <div className="space-y-4">
-                                                            {/* New PDF-based AI Review Report */}
-                                                            {round.aiReviewReport && (
-                                                                <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-500">
-                                                                    <div className="glass p-4 rounded-xl border border-indigo-500/10 bg-indigo-500/[0.02]">
-                                                                        <div className="flex items-center justify-between mb-2">
-                                                                            <div className="flex items-center gap-2">
-                                                                                <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[9px] font-bold rounded uppercase">AI Review</span>
-                                                                                <span className="text-xs font-semibold text-white">{round.aiReviewReport.paperType}</span>
-                                                                            </div>
-                                                                            {round.annotatedPdfUrl && (
-                                                                                <a href={round.annotatedPdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[10px] text-indigo-400 hover:text-indigo-300 font-medium">
-                                                                                    <Download className="w-3 h-3" />
-                                                                                    Annotated PDF
-                                                                                </a>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap italic border-l border-indigo-500/30 pl-3 py-0.5">
-                                                                            {round.aiReviewReport.summaryReport}
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Compliance Report */}
-                                                            {round.complianceReport && (
-                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-4 duration-500">
-                                                                    {Object.entries(round.complianceReport).map(([key, val]: [string, any]) => {
-                                                                        if (typeof val !== 'object' || val === null) return null;
-                                                                        const isOk = val.isCompliant;
-                                                                        return (
-                                                                            <div key={key} className={`glass p-3 rounded-lg border transition-all ${isOk ? 'border-emerald-500/10 bg-emerald-500/[0.01]' : 'border-red-500/10 bg-red-500/[0.01]'}`}>
-                                                                                <div className="flex items-center justify-between mb-1.5">
-                                                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                                                                    {isOk ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <XCircle className="w-3 h-3 text-red-400" />}
-                                                                                </div>
-                                                                                <p className="text-[10px] text-slate-300 leading-tight">{val.details}</p>
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            )}
-
-                                                            {/* Legacy Reports */}
-                                                            {round.artifacts?.aiReviewReports?.map(report => (
-                                                                <div key={report.id} className="flex flex-wrap items-center gap-2">
-                                                                    {report.generatedReportUrl && (
-                                                                        <a href={report.generatedReportUrl} target="_blank" rel="noreferrer" className="px-3 py-1 rounded-lg border border-white/5 bg-white/5 text-[10px] text-blue-400 hover:text-blue-300 transition-all flex items-center gap-1.5">
-                                                                            <ExternalLink className="w-3 h-3" />
-                                                                            Legacy AI Report
-                                                                        </a>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ) }
 
                                                 {round.status === 'Draft' && (
                                                     <>
