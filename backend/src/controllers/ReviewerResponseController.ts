@@ -33,7 +33,7 @@ export class ReviewerResponseController {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
       }
       if (assignment.status !== AssignmentStatus.Invited) {
-        return res.status(400).json({ message: 'Assignment is not in Invited status' });
+        return res.status(400).json({ message: `Cannot respond to invitation: your assignment is currently '${assignment.status}'. Only Invited assignments can be accepted or declined.` });
       }
 
       if (response === 'accept') {
@@ -56,6 +56,7 @@ export class ReviewerResponseController {
       return res.status(201).json({
         message: 'Decline request submitted and awaiting coordinator approval',
         declineRequestId: declineRequest.id,
+        assignmentStatus: assignment.status,
       });
     } catch (err) {
       console.error(err);
@@ -79,7 +80,7 @@ export class ReviewerResponseController {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
       }
       if (assignment.status !== AssignmentStatus.Invited) {
-        return res.status(400).json({ message: 'Assignment is not in Invited status' });
+        return res.status(400).json({ message: `Cannot accept invitation: your assignment is currently '${assignment.status}'. Only Invited assignments can be accepted.` });
       }
 
       assignment.status = AssignmentStatus.Accepted;
@@ -117,7 +118,7 @@ export class ReviewerResponseController {
         AssignmentStatus.PendingDecline,
       ];
       if (!allowedStatuses.includes(assignment.status)) {
-        return res.status(400).json({ message: 'Assignment is not in a state that allows a decline request' });
+        return res.status(400).json({ message: `Cannot submit decline request: your assignment is currently '${assignment.status}'. Decline requests can only be submitted for Invited, Accepted, PendingExtension, or PendingDecline assignments.` });
       }
 
       const declineRepo = AppDataSource.getRepository(DeclineRequest);
@@ -146,6 +147,7 @@ export class ReviewerResponseController {
       return res.status(isUpdate ? 200 : 201).json({
         message: isUpdate ? 'Decline request updated' : 'Decline request submitted and awaiting coordinator approval',
         declineRequestId: declineRequest.id,
+        assignmentStatus: assignment.status,
       });
     } catch (err) {
       console.error(err);
@@ -188,24 +190,27 @@ export class ReviewerResponseController {
         AssignmentStatus.PendingDecline,
       ];
       if (!allowedForExtension.includes(assignment.status)) {
-        return res.status(400).json({ message: 'Assignment must be Accepted, PendingExtension, or PendingDecline to request an extension' });
+        return res.status(400).json({ message: `Cannot request extension: your assignment is currently '${assignment.status}'. Extensions can only be requested for Accepted, PendingExtension, or PendingDecline assignments.` });
       }
       const effectiveDeadline = assignment.deadline ?? assignment.round.deadline;
       if (!effectiveDeadline) {
-        return res.status(400).json({ message: 'No deadline is set for this assignment or round; cannot request an extension' });
+        return res.status(400).json({ message: 'No deadline is set for this assignment or round — cannot request an extension without a current deadline.' });
       }
+      const currentDeadlineStr = effectiveDeadline.toISOString().split('T')[0];
       if (requested <= effectiveDeadline) {
-        return res.status(400).json({ message: 'Requested deadline must be after your current assignment deadline' });
+        return res.status(400).json({ message: `Requested deadline must be after your current deadline (${currentDeadlineStr}).` });
       }
       if (assignment.round.submissionDeadline) {
+        const subDeadlineStr = assignment.round.submissionDeadline.toISOString().split('T')[0];
         if (requested > assignment.round.submissionDeadline) {
-          return res.status(400).json({ message: 'Extension cannot exceed the round\'s submission deadline' });
+          return res.status(400).json({ message: `Extension cannot exceed the conference submission deadline (${subDeadlineStr}).` });
         }
       } else {
         const maxAllowed = new Date(effectiveDeadline);
         maxAllowed.setDate(maxAllowed.getDate() + 5);
+        const maxStr = maxAllowed.toISOString().split('T')[0];
         if (requested > maxAllowed) {
-          return res.status(400).json({ message: 'Extension cannot exceed 5 days beyond your current deadline for non-conference rounds' });
+          return res.status(400).json({ message: `Extension cannot exceed 5 days beyond your current deadline. Maximum allowed: ${maxStr}.` });
         }
       }
 
@@ -254,6 +259,7 @@ export class ReviewerResponseController {
       return res.status(isUpdate ? 200 : 201).json({
         message: isUpdate ? 'Extension request updated' : 'Extension request submitted',
         extensionId: extension.id,
+        assignmentStatus: assignment.status,
       });
     } catch (err) {
       console.error(err);
@@ -292,7 +298,7 @@ export class ReviewerResponseController {
       });
       if (!declineRequest) return res.status(404).json({ message: 'Decline request not found' });
       if (declineRequest.status !== DeclineRequestStatus.Pending) {
-        return res.status(400).json({ message: 'Decline request has already been processed' });
+        return res.status(400).json({ message: `Decline request has already been processed (${declineRequest.status}). No further action is possible.` });
       }
 
       const isOwner = declineRequest.assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
@@ -355,7 +361,7 @@ export class ReviewerResponseController {
       });
       if (!extension) return res.status(404).json({ message: 'Extension request not found' });
       if (extension.status !== ExtensionStatus.Pending) {
-        return res.status(400).json({ message: 'Extension request has already been processed' });
+        return res.status(400).json({ message: `Extension request has already been processed (${extension.status}). No further action is possible.` });
       }
 
       const isOwner = extension.assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
@@ -364,9 +370,19 @@ export class ReviewerResponseController {
       const assignRepo = AppDataSource.getRepository(Assignment);
 
       if (decision === 'approve') {
+        const approved = new Date(approvedDeadline);
+        const round = extension.assignment.round;
+        const ceiling = round.venueCategory === 'Conference' && round.submissionDeadline
+          ? round.submissionDeadline
+          : round.deadline;
+        if (ceiling && approved.getTime() > ceiling.getTime()) {
+          const label = round.venueCategory === 'Conference' ? 'the conference submission deadline' : 'the round deadline';
+          const cap = ceiling.toISOString().split('T')[0];
+          return res.status(400).json({ message: `Approved deadline cannot exceed ${label} (${cap}).` });
+        }
         extension.status = ExtensionStatus.Approved;
-        extension.approvedDeadline = new Date(approvedDeadline);
-        extension.assignment.deadline = new Date(approvedDeadline);
+        extension.approvedDeadline = approved;
+        extension.assignment.deadline = approved;
       } else {
         extension.status = ExtensionStatus.Rejected;
       }
@@ -443,7 +459,7 @@ export class ReviewerResponseController {
         AssignmentStatus.PendingDecline,
       ];
       if (!completableStatuses.includes(assignment.status)) {
-        return res.status(400).json({ message: 'Assignment must be Accepted, PendingExtension, or PendingDecline to complete' });
+        return res.status(400).json({ message: `Cannot complete review: your assignment is currently '${assignment.status}'. Only Accepted, PendingExtension, or PendingDecline assignments can be completed.` });
       }
 
       const summary = req.body?.summary ?? req.body?.text;

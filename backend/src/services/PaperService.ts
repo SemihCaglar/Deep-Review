@@ -40,9 +40,8 @@ export class PaperService {
     const paper = paperRepo.create({
       title: dto.title,
       abstractText: dto.abstractText,
-      targetVenue: dto.targetVenue,
-      overleafLink: dto.overleafLink,
-      overleafGitUrl: dto.overleafGitUrl,
+      overleafLink: dto.overleafLink?.trim() || null!,
+      githubLink: dto.githubLink?.trim() || null,
       status: PaperStatus.Draft,
       creationTime: new Date(),
     });
@@ -146,19 +145,6 @@ export class PaperService {
     if (!paper) throw new Error('Paper not found');
 
     paper.abstractText = newAbstract;
-    await paperRepo.save(paper);
-
-    const updatedPaper = await this.getPaperById(paperId);
-    if (!updatedPaper) throw new Error('Paper not found');
-    return updatedPaper;
-  }
-
-  static async updateTargetVenue(paperId: string, newVenue: string): Promise<Paper> {
-    const paperRepo = AppDataSource.getRepository(Paper);
-    const paper = await paperRepo.findOne({ where: { id: paperId } });
-    if (!paper) throw new Error('Paper not found');
-
-    paper.targetVenue = newVenue;
     await paperRepo.save(paper);
 
     const updatedPaper = await this.getPaperById(paperId);

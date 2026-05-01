@@ -9,6 +9,11 @@ export function startOverdueChecker(): void {
     } catch (err) {
       console.error('Overdue checker error:', err);
     }
+    try {
+      await RoundService.sendAutoReminders();
+    } catch (err) {
+      console.error('Auto reminder error:', err);
+    }
   };
 
   run();

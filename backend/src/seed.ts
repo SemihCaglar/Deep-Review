@@ -120,7 +120,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     }
   }
 
-  // Paper
+  // Paper — reviewer (bilkentcs319) is the author
   let paper = await paperRepo.findOne({ where: { title: 'Test Paper for Review' }, relations: ['coordinators', 'labs', 'authors'] });
   if (!paper) {
     paper = paperRepo.create({
@@ -130,11 +130,11 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       status: PaperStatus.HumanReview,
       coordinators: [{ id: coordinator.id } as Coordinator],
       labs: [{ id: lab.id } as Lab],
-      authors: [],
+      authors: [{ id: reviewer.id } as LabMember],
     });
 
     await paperRepo.save(paper);
-    console.log('✅ Paper created');
+    console.log('✅ Paper created (author: bilkentcs319@gmail.com)');
   }
 
   // Round
@@ -155,25 +155,25 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     console.log('✅ Round created');
   }
 
-  // Assignment for reviewer 1 (Invited)
-  const existingAssignment = await assignRepo.findOne({ where: { round: { id: round.id }, reviewer: { id: reviewer.id } } });
+  // Assignment for reviewer 2 (esranurtatoglu24 — she is not the author, so eligible)
+  const existingAssignment = await assignRepo.findOne({ where: { round: { id: round.id }, reviewer: { id: reviewer2.id } } });
   if (!existingAssignment) {
     const assignment = assignRepo.create({
       round: { id: round.id } as Round,
-      reviewer: { id: reviewer.id } as LabMember,
+      reviewer: { id: reviewer2.id } as LabMember,
       status: AssignmentStatus.Invited,
       deadline: round.deadline,
     });
     await assignRepo.save(assignment);
-    console.log('✅ Assignment 1 created (Invited)');
+    console.log('✅ Assignment created for esranurtatoglu24@gmail.com (Invited)');
   }
 
   // Reviewer 2 has no pre-created assignment — coordinator assigns via the UI which also sends the invitation email
 
   console.log(`\n🌱 Seed complete!`);
-  console.log(`   Coordinator — email: eraytuzun@cs.bilkent.edu.tr  password: 123`);
-  console.log(`   Reviewer 1  — email: bilkentcs319@gmail.com        password: 123`);
-  console.log(`   Reviewer 2  — email: esranurtatoglu24@gmail.com    password: 123`);
+  console.log(`   Coordinator — email: coordinator@mock.test           password: 123`);
+  console.log(`   Author      — email: bilkentcs319@gmail.com          password: 123`);
+  console.log(`   Reviewer    — email: esranurtatoglu24@gmail.com      password: 123  (assigned)`);
   console.log(`   Round ID    — ${round.id}`);
   await AppDataSource.destroy();
 }

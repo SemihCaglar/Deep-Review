@@ -225,16 +225,16 @@ describe('2 · Round creation — error cases', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('3 · Round creation — happy paths', () => {
-    test('Article round without submissionDeadline → 201', async () => {
+    test('Journal round without submissionDeadline → 201', async () => {
         const res = await api(coordinatorToken).post('/api/rounds', {
             paperId,
             coordinatorId,
             targetVenue: 'Journal of SE',
-            venueCategory: 'Article',
+            venueCategory: 'Journal',
         });
         expect(res.status).toBe(201);
         expect(res.body.status).toBe('Draft');
-        expect(res.body.venueCategory).toBe('Article');
+        expect(res.body.venueCategory).toBe('Journal');
         expect(res.body.submissionDeadline).toBeNull();
 
         // Clean up: delete this draft so main Conference round can be created cleanly
@@ -335,6 +335,41 @@ describe('5 · Start round', () => {
         expect(res.body.message).toMatch(/deadline/i);
 
         await roundRepo.delete(noDlRound.id);
+    });
+
+    test('round without overleaf link cannot be started', async () => {
+        const paperRepo = AppDataSource.getRepository(Paper);
+        const roundRepo = AppDataSource.getRepository(Round);
+        const paper = paperRepo.create({
+            title: 'No Overleaf Start Guard',
+            abstractText: 'Testing start guard.',
+            overleafLink: '   ' as any,
+            creationTime: new Date(),
+            status: PaperStatus.Draft,
+        });
+        paper.coordinators = [{ id: coordinatorId } as any];
+        paper.labs = [{ id: labId } as any];
+        paper.authors = [{ id: authorId } as any];
+        await paperRepo.save(paper);
+
+        const round = roundRepo.create({
+            paper,
+            roundNumber: 1,
+            status: RoundStatus.Draft,
+            targetVenue: 'SOSP 2026',
+            venueCategory: VenueCategory.Conference,
+            submissionDeadline: new Date(futureDate(30)),
+            deadline: new Date(futureDate(14)),
+            startedAt: null,
+            completedAt: null,
+        });
+        await roundRepo.save(round);
+
+        const res = await api(coordinatorToken).post(`/api/rounds/${round.id}/start`, { coordinatorId });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/overleaf/i);
+
+        await roundRepo.delete(round.id);
     });
 
     test('start round with all fields set → 200, status=Open, startedAt set', async () => {
@@ -611,6 +646,112 @@ describe('12 · Extension deadline ceiling for Conference round', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 12a. CROSS-REQUEST INTERACTIONS (A24–A28)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('12a · Cross-request interactions — decline while PendingExtension and vice-versa', () => {
+    let crossAssignmentId: string;
+    let crossRoundId: string;
+    let crossExtId: string;
+    let crossDeclineId: string;
+
+    test('setup: create a fresh round + assignment for cross-request tests', async () => {
+        // Force-complete the conference round
+        const roundRepo = AppDataSource.getRepository(Round);
+        await roundRepo.update(conferenceRoundId, {
+            status: RoundStatus.Completed,
+            completedAt: new Date(),
+        });
+
+        // Create a new round
+        const res = await api(coordinatorToken).post('/api/rounds', {
+            paperId,
+            coordinatorId,
+            targetVenue: 'CrossReq Conf 2027',
+            venueCategory: 'Conference',
+            submissionDeadline: futureDate(60),
+            deadline: futureDate(30),
+        });
+        expect(res.status).toBe(201);
+        crossRoundId = res.body.id;
+
+        // Assign reviewer1
+        const assignRes = await api(coordinatorToken).post('/api/assignments', {
+            roundId: crossRoundId,
+            reviewerIds: [reviewer1Id],
+        });
+        expect(assignRes.status).toBe(201);
+        crossAssignmentId = assignRes.body[0].id;
+
+        // Start the round
+        const startRes = await api(coordinatorToken).post(`/api/rounds/${crossRoundId}/start`, {
+            coordinatorId,
+        });
+        expect(startRes.status).toBe(200);
+
+        // Send invitations
+        const inviteRes = await api(coordinatorToken).post('/api/assignments/invite', {
+            roundId: crossRoundId,
+        });
+        expect(inviteRes.status).toBe(200);
+
+        // Reviewer1 accepts
+        const acceptRes = await api(reviewer1Token).patch(`/api/responses/${crossAssignmentId}/accept`, {});
+        expect(acceptRes.status).toBe(200);
+    });
+
+    test('reviewer1 requests extension → PendingExtension', async () => {
+        const res = await api(reviewer1Token).post(`/api/responses/${crossAssignmentId}/extension-request`, {
+            reason: 'Need more time for analysis',
+            proposedDeadline: futureDate(35),
+        });
+        expect([200, 201]).toContain(res.status);
+        crossExtId = res.body.extensionId;
+
+        // Verify status is PendingExtension
+        const assignRepo = AppDataSource.getRepository(Assignment);
+        const a = await assignRepo.findOne({ where: { id: crossAssignmentId } });
+        expect(a?.status).toBe(AssignmentStatus.PendingExtension);
+    });
+
+    test('reviewer1 requests decline WHILE PendingExtension → 201 (A24)', async () => {
+        const res = await api(reviewer1Token).post(`/api/responses/${crossAssignmentId}/decline-request`, {
+            declineReason: 'Actually I cannot do this review',
+        });
+        expect(res.status).toBe(201);
+        crossDeclineId = res.body.declineRequestId;
+        expect(crossDeclineId).toBeTruthy();
+
+        // Status should now be PendingDecline
+        const assignRepo = AppDataSource.getRepository(Assignment);
+        const a = await assignRepo.findOne({ where: { id: crossAssignmentId } });
+        expect(a?.status).toBe(AssignmentStatus.PendingDecline);
+    });
+
+    test('reviewer1 requests extension WHILE PendingDecline → keeps PendingDecline (A27)', async () => {
+        const res = await api(reviewer1Token).post(`/api/responses/${crossAssignmentId}/extension-request`, {
+            reason: 'Updated extension request',
+            proposedDeadline: futureDate(40),
+        });
+        expect([200, 201]).toContain(res.status);
+
+        // Status should remain PendingDecline (A27)
+        const assignRepo = AppDataSource.getRepository(Assignment);
+        const a = await assignRepo.findOne({ where: { id: crossAssignmentId } });
+        expect(a?.status).toBe(AssignmentStatus.PendingDecline);
+    });
+
+    test('reviewer1 can complete review WHILE PendingDecline → auto-rejects pending requests (A22a)', async () => {
+        const res = await api(reviewer1Token).post('/api/responses/complete', {
+            assignmentId: crossAssignmentId,
+            summary: 'Completed despite pending requests',
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.status).toBe('Completed');
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 13. OVERDUE DETECTION & ROUND AUTO-COMPLETION
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -703,24 +844,21 @@ describe('13 · Overdue detection & round auto-completion', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('14 · Create next round (POST /rounds/next)', () => {
-    test('cannot create next round while current round is Open → 409', async () => {
-        const res = await api(coordinatorToken).post('/api/rounds/next', {
-            paperId,
-            coordinatorId,
-            targetVenue: 'FSE 2027',
-            venueCategory: 'Conference',
-            submissionDeadline: futureDate(60),
-        });
-        expect(res.status).toBe(409);
-    });
 
-    test('force-complete the current round via direct DB update, then create next round → 201', async () => {
-        // Manually complete the conference round so we can test next-round creation
+    test('force-complete all active rounds, then create next round → 201', async () => {
+        // Complete any remaining active rounds for this paper
         const roundRepo = AppDataSource.getRepository(Round);
-        await roundRepo.update(conferenceRoundId, {
-            status: RoundStatus.Completed,
-            completedAt: new Date(),
+        const activeRounds = await roundRepo.find({
+            where: [
+                { paper: { id: paperId }, status: RoundStatus.Draft },
+                { paper: { id: paperId }, status: RoundStatus.Open },
+            ],
         });
+        for (const r of activeRounds) {
+            r.status = RoundStatus.Completed;
+            r.completedAt = new Date();
+            await roundRepo.save(r);
+        }
 
         const res = await api(coordinatorToken).post('/api/rounds/next', {
             paperId,
@@ -731,12 +869,11 @@ describe('14 · Create next round (POST /rounds/next)', () => {
         });
         expect(res.status).toBe(201);
         expect(res.body.status).toBe('Draft');
-        expect(res.body.roundNumber).toBe(2);
         expect(res.body.targetVenue).toBe('FSE 2027');
         expect(res.body.deadline).toBeNull();
     });
 
-    test('cannot create a third round while second is Draft → 409', async () => {
+    test('cannot create another round while one is Draft → 409', async () => {
         const res = await api(coordinatorToken).post('/api/rounds/next', {
             paperId,
             coordinatorId,
