@@ -45,6 +45,7 @@ export type PendingSignup = {
   email: string;
   createdAt: string;
   approvalStatus: string;
+  requestedLab?: { id: string; name: string } | null;
   approvalReviewedAt?: string | null;
   approvalNote?: string | null;
 };

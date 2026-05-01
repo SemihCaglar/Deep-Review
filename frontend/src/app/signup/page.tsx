@@ -151,7 +151,7 @@ export default function SignupPage() {
               disabled={isSubmitting || labs.length === 0}
               required
             >
-              <option value="">-- No Lab Selected --</option>
+              <option value="">-- Select Your Lab --</option>
               {labs.map(lab => (
                 <option key={lab.id} value={lab.id}>
                   {lab.name}
