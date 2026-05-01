@@ -41,6 +41,16 @@ type PendingReviewerRequest = {
   reason: string;
 };
 
+type PendingRoundStartRequest = {
+  id: string;
+  paperId: string;
+  paperTitle: string;
+  roundNumber: number;
+  targetVenue: string;
+  venueCategory: string;
+  deadline: string | null;
+};
+
 type ReviewerRequestDecision = {
   id: string;
   type: 'Decline' | 'Extension';
@@ -156,6 +166,7 @@ export default function DashboardPage() {
 
   // Coordinator State (Reviewer Requests)
   const [reviewerRequests, setReviewerRequests] = React.useState<PendingReviewerRequest[]>([]);
+  const [roundStartRequests, setRoundStartRequests] = React.useState<PendingRoundStartRequest[]>([]);
   const [reviewerRequestsError, setReviewerRequestsError] = React.useState('');
 
   // Coordinator State (Analytics/Leaderboard)
@@ -201,6 +212,20 @@ export default function DashboardPage() {
         })),
       );
 
+      const roundRequests = roundsByPaper.flatMap(({ paper, rounds }) =>
+        rounds
+          .filter(round => round.status === 'Draft')
+          .map(round => ({
+            id: round.id,
+            paperId: paper.id,
+            paperTitle: paper.title,
+            roundNumber: round.roundNumber,
+            targetVenue: round.targetVenue,
+            venueCategory: round.venueCategory,
+            deadline: round.deadline,
+          })),
+      );
+
       const requests = roundsByPaper.flatMap(({ paper, rounds }) =>
         rounds.flatMap(round =>
           round.assignments.flatMap(assignment => {
@@ -231,6 +256,7 @@ export default function DashboardPage() {
           }),
         ),
       );
+      setRoundStartRequests(roundRequests);
       setReviewerRequests(requests);
     } catch (caughtError) {
       setReviewerRequestsError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load reviewer requests.');
@@ -377,6 +403,7 @@ export default function DashboardPage() {
   const stats: DashboardStat[] = user.isCoordinator
     ? [
         { label: 'Pending Approvals', value: isLoadingPending ? '...' : pendingCount, icon: UserCheck, color: 'text-blue-400', bg: 'bg-blue-500/10', href: '/pending-approvals' },
+        { label: 'Round Requests', value: roundStartRequests.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '/rounds' },
         { label: 'Coordinator Access', value: 1, icon: FileText, color: 'text-white', bg: 'bg-white/10' },
       ]
     : [
@@ -435,10 +462,10 @@ export default function DashboardPage() {
 
       {/* --- Coordinator Section: Leaderboard & Requests --- */}
       {user.isCoordinator && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="space-y-8">
           
-          {/* Leaderboard (Take up 2/3 of space) */}
-          <div className="lg:col-span-2 space-y-4">
+          {/* Leaderboard */}
+          <section className="space-y-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <BarChart2 className="w-5 h-5 text-blue-400" />
               Reviewer Leaderboard
@@ -510,22 +537,53 @@ export default function DashboardPage() {
                 )}
               </>
             )}
-          </div>
+          </section>
 
-          {/* Reviewer Requests (Take up 1/3 of space) */}
-          <div className="space-y-4">
+          {/* Requests */}
+          <section className="space-y-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-amber-400" />
-              Reviewer Requests
+              Pending Requests
             </h2>
 
-            <section className="glass rounded-2xl border border-white/5 p-6 h-full">
+            <section className="glass rounded-2xl border border-white/5 p-6">
+              {reviewerRequestsError ? (
+                <p className="text-sm text-red-400">{reviewerRequestsError}</p>
+              ) : roundStartRequests.length === 0 ? (
+                <p className="text-sm text-slate-500">No pending round start requests.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {roundStartRequests.slice(0, 5).map(request => (
+                    <div key={request.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                            Round start
+                          </span>
+                          <span className="text-xs text-slate-500">Round {request.roundNumber}</span>
+                        </div>
+                        <Link href={`/rounds?paper=${request.paperId}`} className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors">
+                          Open
+                        </Link>
+                      </div>
+                      <p className="text-sm font-semibold text-white truncate">{request.paperTitle}</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {request.targetVenue} · {request.venueCategory} · due {formatDate(request.deadline)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="glass rounded-2xl border border-white/5 p-6">
+              <h3 className="text-sm font-semibold text-white mb-4">Reviewer Requests</h3>
               {reviewerRequestsError ? (
                 <p className="text-sm text-red-400">{reviewerRequestsError}</p>
               ) : reviewerRequests.length === 0 ? (
                 <p className="text-sm text-slate-500">No pending reviewer requests.</p>
               ) : (
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {reviewerRequests.slice(0, 5).map(request => (
                     <div key={request.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
@@ -546,7 +604,7 @@ export default function DashboardPage() {
                 </div>
               )}
             </section>
-          </div>
+          </section>
         </div>
       )}
 
