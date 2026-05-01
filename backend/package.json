@@ -62,6 +62,9 @@
     "ts-jest": "^29.4.9"
   },
   "dependencies": {
+    "@azure/ai-agents": "^1.1.0",
+    "@azure/ai-projects": "^2.1.0",
+    "@azure/identity": "^4.13.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
