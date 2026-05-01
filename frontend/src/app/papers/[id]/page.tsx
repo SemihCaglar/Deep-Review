@@ -13,7 +13,7 @@ import {
   AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest,
   getSuggestedReviewersRequest, SuggestedReviewer,
   getProposedReviewersRequest, addProposedReviewerRequest, removeProposedReviewerRequest,
-  updateOverleafLinkRequest, updateGithubLinkRequest, updatePaperStatusRequest,
+  updateOverleafLinkRequest, updatePaperStatusRequest,
   startAIReviewRequest, runComplianceCheckRequest, getVenueRulesRequest,
 } from '@/lib/api';
 
