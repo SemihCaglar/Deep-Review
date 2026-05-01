@@ -64,6 +64,7 @@
   "dependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/multer": "^2.1.0",
     "@types/nodemailer": "^8.0.0",
     "adm-zip": "^0.5.17",
     "cors": "^2.8.6",
@@ -71,8 +72,10 @@
     "express": "^5.2.1",
     "js-yaml": "^4.1.1",
     "jsonwebtoken": "^9.0.3",
+    "multer": "^2.1.1",
     "nodemailer": "^8.0.6",
     "openai": "^6.35.0",
+    "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
     "reflect-metadata": "^0.2.2",
     "sqlite3": "^5.1.7",

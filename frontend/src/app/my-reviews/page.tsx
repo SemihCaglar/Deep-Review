@@ -10,7 +10,8 @@ import {
   requestDeclineForAssignmentRequest,
   completeReviewRequest,
 } from '@/lib/api';
-import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Github, Users } from 'lucide-react';
+import { confirmCancel } from '@/lib/confirmAction';
+import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Users } from 'lucide-react';
 
 const ACTIVE_ASSIGNMENT_STATUSES = ['Invited', 'Accepted', 'PendingDecline', 'PendingExtension', 'Overdue'];
 
@@ -254,22 +255,6 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
             </div>
           </div>
         )}
-        {assignment.paper.githubLink && (
-          <div className="mt-3 flex items-center gap-2 p-3 rounded-xl border border-slate-500/20 bg-white/[0.03]">
-            <Github className="w-4 h-4 text-slate-300 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-300 mb-0.5">Paper repository</p>
-              <a
-                href={assignment.paper.githubLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-slate-300 hover:text-white underline underline-offset-2 truncate block"
-              >
-                {assignment.paper.githubLink}
-              </a>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Actions */}
@@ -314,7 +299,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       Send Request to Coordinator
                     </button>
-                    <button onClick={() => setShowDeclineForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={async () => { if (await confirmCancel()) setShowDeclineForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>
@@ -387,7 +372,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       Submit Review
                     </button>
-                    <button onClick={() => setShowCompleteForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={async () => { if (await confirmCancel()) setShowCompleteForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>
@@ -430,7 +415,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       {assignment.pendingExtensionRequest ? 'Update Request' : 'Submit Request'}
                     </button>
-                    <button onClick={() => setShowExtForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={async () => { if (await confirmCancel()) setShowExtForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>

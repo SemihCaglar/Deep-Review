@@ -15,7 +15,7 @@ export class RoundController {
       const user = req.user;
       if (!user) return res.status(401).json({ message: 'Authentication required' });
 
-      const { paperId, targetVenue, venueCategory, submissionDeadline, deadline } = req.body;
+      const { paperId, targetVenue, targetVenueUrl, venueCategory, submissionDeadline, deadline } = req.body;
 
       if (!paperId || !targetVenue || !venueCategory) {
         return res.status(400).json({ message: 'Missing required fields: paperId, targetVenue, venueCategory' });
@@ -72,6 +72,7 @@ export class RoundController {
       round.roundNumber = existingRounds.length + 1;
       round.status = RoundStatus.Draft;
       round.targetVenue = targetVenue;
+      round.targetVenueUrl = targetVenueUrl ? String(targetVenueUrl).trim() : null;
       round.venueCategory = venueCategory as VenueCategory;
       round.submissionDeadline = submissionDeadline ? new Date(submissionDeadline) : null;
       round.deadline = deadline ? new Date(deadline) : null;
@@ -125,6 +126,56 @@ export class RoundController {
       round.deadline = newDeadline;
       await roundRepo.save(round);
 
+      return res.status(200).json(round);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
+  static async updateRoundDetails(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const id = req.params.id as string;
+      const { targetVenue, targetVenueUrl, submissionDeadline } = req.body;
+
+      if (targetVenue !== undefined && (typeof targetVenue !== 'string' || !targetVenue.trim())) {
+        return res.status(400).json({ message: 'targetVenue must be a non-empty string' });
+      }
+      if (submissionDeadline !== undefined && submissionDeadline !== null && isNaN(new Date(submissionDeadline).getTime())) {
+        return res.status(400).json({ message: 'Invalid submissionDeadline format' });
+      }
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id },
+        relations: ['paper', 'paper.coordinators', 'paper.authors'],
+      });
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      if (!isCoordinator && !isAuthor) {
+        return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
+      }
+
+      if (round.status !== RoundStatus.Draft) {
+        return res.status(400).json({ message: `Cannot update round details: the round is currently '${round.status}'. Details can only be changed while the round is in Draft status.` });
+      }
+
+      if (targetVenue !== undefined) round.targetVenue = targetVenue.trim();
+      if (targetVenueUrl !== undefined) round.targetVenueUrl = targetVenueUrl ? String(targetVenueUrl).trim() : null;
+      if (submissionDeadline !== undefined) {
+        const newSubDeadline = submissionDeadline ? new Date(submissionDeadline) : null;
+        if (newSubDeadline && round.deadline && round.deadline.getTime() > newSubDeadline.getTime()) {
+          return res.status(400).json({ message: 'Submission deadline cannot be before the round deadline' });
+        }
+        round.submissionDeadline = newSubDeadline;
+      }
+
+      await roundRepo.save(round);
       return res.status(200).json(round);
     } catch (err) {
       console.error(err);
@@ -422,7 +473,7 @@ export class RoundController {
       const rounds = await roundRepo.find({
         where: { paper: { id: paperId } },
         relations: ['proposedReviewers'],
-        order: { roundNumber: 'ASC' },
+        order: { roundNumber: 'DESC' },
       });
 
       return res.status(200).json(rounds.map(r => ({
@@ -436,6 +487,13 @@ export class RoundController {
         startedAt: r.startedAt,
         completedAt: r.completedAt,
         proposedReviewers: (r.proposedReviewers ?? []).map(u => ({ id: u.id, name: u.name, email: u.email })),
+        aiReviewReport: r.aiReviewReport,
+        complianceReport: r.complianceReport,
+        annotatedPdfUrl: r.annotatedPdfUrl,
+        artifacts: {
+          checklistItems: (r.checklistItems ?? []).map(ci => ({ id: ci.id, description: ci.description, isChecked: ci.isChecked })),
+          aiReviewReports: (r.aiReviewReports ?? []).map(ar => ({ id: ar.id, generatedReportUrl: ar.generatedReportUrl, annotatedPdfUrl: ar.annotatedPdfUrl }))
+        }
       })));
     } catch (err) {
       console.error(err);
@@ -470,7 +528,7 @@ export class RoundController {
           'assignments.extensions',
           'assignments.reviewSummary',
         ],
-        order: { roundNumber: 'ASC' },
+        order: { roundNumber: 'DESC' },
       });
 
       const formatted = rounds.map(round => ({
@@ -619,45 +677,32 @@ export class RoundController {
       const roundRepo = AppDataSource.getRepository(Round);
       const round = await roundRepo.findOne({
         where: { id: id as string },
-        relations: ['paper', 'paper.authors', 'paper.coordinators', 'paper.labs']
+        relations: ['paper', 'paper.authors', 'paper.coordinators']
       });
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
 
-      // Guardrail: Can only be run after Human Review concludes
-      if (round.status !== RoundStatus.Completed) {
-        return res.status(400).json({ message: 'AI Review can only be triggered after the human review phase concludes (Round Status must be Completed).' });
-      }
-
       // Authorization: Only Authors or Coordinators can trigger
       const isAuthor = round.paper.authors?.some(a => a.id === user.id);
       const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
-      
+
       if (!isAuthor && !isCoordinator) {
         return res.status(403).json({ message: 'Forbidden: You must be an author or coordinator of this paper.' });
       }
 
-      // Ensure we have Overleaf credentials
-      const overleafGitUrl = round.paper.overleafLink;
-      if (!overleafGitUrl) {
-        return res.status(400).json({ message: 'No Overleaf Git URL provided for this paper.' });
-      }
-
-      const lab = round.paper.labs?.[0];
-      const coordinatorToken = lab?.overleafGitToken;
-      
-      if (!coordinatorToken) {
-        return res.status(400).json({ message: 'The Coordinator has not configured a global Overleaf Git Token for this lab.' });
+      // Get the uploaded PDF from multer
+      const file = (req as any).file;
+      if (!file || !file.buffer) {
+        return res.status(400).json({ message: 'No PDF file uploaded. Please attach a PDF to run the AI review.' });
       }
 
       // Execute AI Pipeline
       const { AIReviewService } = require('../ai_content/services/AIReviewService');
-      const result = await AIReviewService.generateAIReview(round.paper.id, round.id, overleafGitUrl, coordinatorToken);
+      const result = await AIReviewService.generateAIReview(round.paper.id, round.id, file.buffer);
 
       // Persist results
       round.aiReviewReport = result;
       round.annotatedPdfUrl = result.annotatedPdfUrl;
-      round.sourceZipUrl = result.sourceZipUrl;
       await roundRepo.save(round);
 
       return res.status(200).json({
@@ -701,46 +746,39 @@ export class RoundController {
       const roundRepo = AppDataSource.getRepository(Round);
       const round = await roundRepo.findOne({
         where: { id: id as string },
-        relations: ['paper', 'paper.authors', 'paper.coordinators', 'paper.labs']
+        relations: ['paper', 'paper.authors', 'paper.coordinators']
       });
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
 
-      if (round.status !== 'Completed') {
-        return res.status(400).json({ message: 'Compliance check can only be run after the review round is Completed.' });
-      }
-
       // Authorization: Only Authors or Coordinators can trigger
       const isAuthor = round.paper.authors?.some(a => a.id === user.id);
       const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
-      
+
       if (!isAuthor && !isCoordinator) {
         return res.status(403).json({ message: 'Forbidden: You must be an author or coordinator of this paper.' });
       }
 
-      const overleafGitUrl = round.paper.overleafLink;
-      if (!overleafGitUrl) {
-        return res.status(400).json({ message: 'No Overleaf Git URL provided for this paper.' });
-      }
-
-      const lab = round.paper.labs?.[0];
-      const coordinatorToken = lab?.overleafGitToken;
-      
-      if (!coordinatorToken) {
-        return res.status(400).json({ message: 'The Coordinator has not configured a global Overleaf Git Token for this lab.' });
+      // Get uploaded PDF
+      const file = (req as any).file;
+      if (!file || !file.buffer) {
+        return res.status(400).json({ message: 'No PDF file uploaded. Please attach a PDF to run the compliance check.' });
       }
 
       // We expect the frontend to pass the manually approved/corrected venue rules
-      const venueRules = req.body.venueRules;
-      if (!venueRules) {
-        return res.status(400).json({ message: 'Missing venueRules in request body. Fetch rules first and pass them.' });
+      let venueRules = {};
+      if (req.body.venueRules) {
+        try {
+          venueRules = JSON.parse(req.body.venueRules);
+        } catch (e) {
+          return res.status(400).json({ message: 'Invalid venueRules format. Expected JSON string.' });
+        }
       }
 
       const { ComplianceService } = require('../ai_content/services/ComplianceService');
       const complianceReport = await ComplianceService.verifyCompliance(
         round.paper.id,
-        overleafGitUrl,
-        coordinatorToken,
+        file.buffer,
         venueRules
       );
 

@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github } from 'lucide-react';
+import { confirmCancel } from '@/lib/confirmAction';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Cpu, Download, ShieldCheck, Search } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
@@ -13,8 +14,10 @@ import {
   AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest,
   getSuggestedReviewersRequest, SuggestedReviewer,
   getProposedReviewersRequest, addProposedReviewerRequest, removeProposedReviewerRequest,
-  updateOverleafLinkRequest, updateGithubLinkRequest, updatePaperStatusRequest,
+  updateOverleafLinkRequest, updatePaperStatusRequest,
+  startAIReviewRequest, runComplianceCheckRequest, getVenueRulesRequest,
 } from '@/lib/api';
+
 
 function todayInputValue() {
     const today = new Date();
@@ -58,11 +61,30 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [localTopics, setLocalTopics] = useState<string[]>([]); // These will be IDs
     const [localDeadline, setLocalDeadline] = useState('');
     const [localOverleafLink, setLocalOverleafLink] = useState('');
-    const [localGithubLink, setLocalGithubLink] = useState('');
+
+    const [authorSearch, setAuthorSearch] = useState('');
+    const [topicSearch, setTopicSearch] = useState('');
+
     const [linksError, setLinksError] = useState('');
     const [savingLinks, setSavingLinks] = useState(false);
     const [paperHistory, setPaperHistory] = useState<PaperHistory | null>(null);
     const [historyError, setHistoryError] = useState('');
+
+    const [runningAI, setRunningAI] = useState<string | null>(null);
+    const [runningCompliance, setRunningCompliance] = useState<string | null>(null);
+    const [aiError, setAiError] = useState<string | null>(null);
+    
+    // Show AI errors to the user
+    useEffect(() => {
+        if (aiError) {
+            window.alert(aiError);
+            setAiError(null);
+        }
+    }, [aiError]);
+    const aiFileInputRef = useRef<HTMLInputElement>(null);
+    const complianceFileInputRef = useRef<HTMLInputElement>(null);
+    const [pendingAIRoundId, setPendingAIRoundId] = useState<string | null>(null);
+    const [pendingComplianceRoundId, setPendingComplianceRoundId] = useState<string | null>(null);
 
     // Author round proposal state
     const [authorRounds, setAuthorRounds] = useState<AuthorRound[]>([]);
@@ -96,7 +118,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 setLocalTopics(paperData.topics?.map((t: any) => t.id) || []);
                 setLocalAuthors(paperData.authors?.map((a: any) => a.id) || []);
                 setLocalOverleafLink(paperData.overleafLink || '');
-                setLocalGithubLink(paperData.githubLink || '');
                 setAvailableTopics(topicsData);
 
                 // Set initial deadline from mock data if it matches
@@ -273,18 +294,18 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
     const handleSaveLinks = async () => {
         setLinksError('');
-        const trimmedOverleafLink = localOverleafLink.trim();
-        const trimmedGithubLink = localGithubLink.trim();
-        if (trimmedOverleafLink && !/^https?:\/\/(www\.)?overleaf\.com\//i.test(trimmedOverleafLink)) {
-            setLinksError('Overleaf link must be a valid Overleaf URL (e.g. https://www.overleaf.com/...)');
-            return;
-        }
-        if (trimmedGithubLink && !/^https?:\/\/(www\.)?github\.com\//i.test(trimmedGithubLink)) {
-            setLinksError('GitHub link must be a valid GitHub URL (e.g. https://github.com/...)');
-            return;
-        }
-        setSavingLinks(true);
         try {
+            const trimmedOverleafLink = localOverleafLink.trim();
+            if (!trimmedOverleafLink) {
+                setLinksError('Overleaf link is mandatory');
+                return;
+            }
+            if (!/^https?:\/\/([a-z0-9-]+\.)*overleaf\.com\//i.test(trimmedOverleafLink)) {
+                setLinksError('Overleaf link must be a valid Overleaf URL (e.g. https://www.overleaf.com/...)');
+                return;
+            }
+
+            setSavingLinks(true);
             try {
                 await updateOverleafLinkRequest(paper.id, trimmedOverleafLink);
             } catch (err) {
@@ -292,32 +313,14 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 return;
             }
 
-            let githubSaveError = '';
-            try {
-                await updateGithubLinkRequest(paper.id, trimmedGithubLink);
-            } catch (err) {
-                githubSaveError = err instanceof ApiError ? err.message : 'Failed to update GitHub link. Please try again.';
-            }
-
             const persistedPaper = await getPaperByIdRequest(paper.id);
             const nextOverleafLink = persistedPaper.overleafLink ?? null;
-            const nextGithubLink = persistedPaper.githubLink ?? null;
             setPaper(persistedPaper);
             setPaperHistory(prev => prev ? {
                 ...prev,
                 overleafLink: nextOverleafLink,
-                githubLink: nextGithubLink,
             } : prev);
             setLocalOverleafLink(nextOverleafLink || '');
-            setLocalGithubLink(nextGithubLink || '');
-            if (githubSaveError) {
-                setLinksError(`Overleaf link saved. GitHub link was not saved: ${githubSaveError}`);
-                return;
-            }
-            if (trimmedGithubLink && !nextGithubLink) {
-                setLinksError('Overleaf link saved. GitHub link was not saved by the backend.');
-                return;
-            }
             setIsEditingLinks(false);
         } catch (err) {
             setLinksError(err instanceof ApiError ? err.message : 'Failed to update links. Please try again.');
@@ -488,8 +491,61 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
-    const renderPaperHistory = () => (
-        <div className="glass p-8 rounded-2xl border border-white/5">
+    const handleStartAIReview = (roundId: string) => {
+        setPendingAIRoundId(roundId);
+        aiFileInputRef.current?.click();
+    };
+
+    const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !pendingAIRoundId) return;
+        e.target.value = '';
+        setRunningAI(pendingAIRoundId);
+        setAiError('');
+        try {
+            await startAIReviewRequest(pendingAIRoundId, file);
+            const historyData = await getPaperHistoryRequest(params.id);
+            setPaperHistory(historyData);
+        } catch (err: any) {
+            setAiError(err.message || 'Failed to start AI Review');
+        } finally {
+            setRunningAI(null);
+            setPendingAIRoundId(null);
+        }
+    };
+
+    const handleRunComplianceCheck = (roundId: string, _targetVenue: string) => {
+        setPendingComplianceRoundId(roundId);
+        complianceFileInputRef.current?.click();
+    };
+
+    const handleComplianceFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !pendingComplianceRoundId) return;
+        e.target.value = '';
+        setRunningCompliance(pendingComplianceRoundId);
+        setAiError('');
+        try {
+            // Optionally fetch venue rules first
+            let venueRules = {};
+            try { venueRules = await getVenueRulesRequest(pendingComplianceRoundId); } catch {}
+            await runComplianceCheckRequest(pendingComplianceRoundId, file, venueRules);
+            const historyData = await getPaperHistoryRequest(params.id);
+            setPaperHistory(historyData);
+        } catch (err: any) {
+            setAiError(err.message || 'Failed to run Compliance Check');
+        } finally {
+            setRunningCompliance(null);
+            setPendingComplianceRoundId(null);
+        }
+    };
+
+    const renderPaperHistory = () => {
+        const isAuthor = paperHistory?.authors?.some(a => a.id === user.id) || paper.authors?.some(a => a.id === user.id);
+        const isCoordinator = user.isCoordinator;
+
+        return (
+            <div className="glass p-8 rounded-2xl border border-white/5">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
                 <div>
                     <h2 className="text-xl font-semibold text-white">History & Activity Log</h2>
@@ -536,9 +592,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
 
                     {paperHistory.rounds.map(round => {
-                        const checklistItems = round.artifacts?.checklistItems || [];
-                        const aiReports = round.artifacts?.aiReviewReports || [];
-
                         return (
                             <section key={round.id || round.roundNumber} className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
                                 <div className="p-5 border-b border-white/5">
@@ -550,9 +603,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             </p>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2 text-xs">
-                                            <span className={`px-2.5 py-1 rounded-full border ${round.roundStatus === 'Completed' ? 'bg-slate-500/10 text-slate-400 border-slate-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
-                                                {round.roundStatus}
-                                            </span>
                                             <span className="px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-slate-300">
                                                 Deadline: {formatDate(round.deadline)}
                                             </span>
@@ -630,49 +680,21 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     ))}
                                 </div>
 
-                                {(checklistItems.length > 0 || aiReports.length > 0) && (
-                                    <div className="p-5 border-t border-white/5 bg-black/10">
-                                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Artifacts</h4>
-                                        <div className="space-y-3">
-                                            {aiReports.map(report => (
-                                                <div key={report.id} className="flex flex-wrap items-center gap-3 text-sm">
-                                                    {report.generatedReportUrl && (
-                                                        <a href={report.generatedReportUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300">
-                                                            <ExternalLink className="w-4 h-4" />
-                                                            AI review report
-                                                        </a>
-                                                    )}
-                                                    {report.annotatedPdfUrl && (
-                                                        <a href={report.annotatedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300">
-                                                            <ExternalLink className="w-4 h-4" />
-                                                            Annotated PDF
-                                                        </a>
-                                                    )}
-                                                </div>
-                                            ))}
-                                            {checklistItems.length > 0 && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                    {checklistItems.map(item => (
-                                                        <div key={item.id} className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-3">
-                                                            <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${item.isChecked ? 'text-emerald-400' : 'text-slate-600'}`} />
-                                                            <span className="text-sm text-slate-300">{item.description}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
                             </section>
                         );
                     })}
                 </div>
             )}
         </div>
-    );
+        );
+    };
 
     return (
         <div className="max-w-5xl mx-auto py-4 animate-in fade-in duration-500 mb-20">
+            {/* Hidden file inputs for PDF uploads */}
+            <input ref={aiFileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
+            <input ref={complianceFileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleComplianceFileSelected} />
+
             <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-6">
                 <ArrowLeft className="w-4 h-4" />
                 Back to Papers
@@ -704,8 +726,22 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         {isEditingTopics && (
                             <div className="absolute left-0 top-full mt-2 bg-slate-900 border border-white/10 p-4 rounded-xl shadow-2xl z-50 min-w-[300px]">
                                 <h4 className="text-xs font-semibold text-slate-400 uppercase mb-3">Select Topics</h4>
-                                <div className="flex flex-wrap gap-2 mb-4">
-                                    {availableTopics.map(topic => (
+                                
+                                <div className="relative mb-3">
+                                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search..." 
+                                        value={topicSearch}
+                                        onChange={(e) => setTopicSearch(e.target.value)}
+                                        className="w-full bg-white/5 border border-white/10 rounded-lg pl-6 pr-2 py-1.5 text-[10px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                                    />
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 mb-4 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                                    {availableTopics
+                                        .filter(t => t.name.toLowerCase().includes(topicSearch.toLowerCase()))
+                                        .map(topic => (
                                         <button
                                             key={topic.id}
                                             type="button"
@@ -719,7 +755,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 {topicsError && <p className="text-xs text-red-400">{topicsError}</p>}
                                 <div className="flex justify-end gap-2">
                                     <button
-                                        onClick={() => { setLocalTopics(paper.topics?.map(t => t.id) || []); setTopicsError(''); setIsEditingTopics(false); }}
+                                        onClick={async () => { if (await confirmCancel()) { setLocalTopics(paper.topics?.map(t => t.id) || []); setTopicsError(''); setIsEditingTopics(false); } }}
                                         className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
                                     >
                                         Cancel
@@ -782,22 +818,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     No Overleaf link
                                 </span>
                             )}
-                            {paper.githubLink ? (
-                                <a href={paper.githubLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-slate-300 hover:text-white bg-white/[0.04] px-3 py-1.5 rounded-lg transition-colors border border-white/10 w-fit">
-                                    <Github className="w-4 h-4" />
-                                    Open GitHub Repository
-                                </a>
-                            ) : (
-                                <span className="inline-flex items-center gap-2 text-sm text-slate-500 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/10 w-fit">
-                                    <Github className="w-4 h-4" />
-                                    No GitHub link
-                                </span>
-                            )}
                             {canEditLinks && !isEditingLinks && (
                                 <button
                                     onClick={() => {
                                         setLocalOverleafLink(paper.overleafLink || '');
-                                        setLocalGithubLink(paper.githubLink || '');
                                         setLinksError('');
                                         setIsEditingLinks(true);
                                     }}
@@ -812,7 +836,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         {canEditLinks && isEditingLinks && (
                             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3 max-w-2xl">
                                 <div className="space-y-1">
-                                    <label className="text-xs text-slate-400 uppercase tracking-wider">Overleaf manuscript link</label>
+                                    <label className="text-xs text-slate-400 uppercase tracking-wider">Overleaf manuscript link <span className="text-red-400">*</span></label>
                                     <input
                                         type="url"
                                         value={localOverleafLink}
@@ -821,22 +845,12 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                                     />
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs text-slate-400 uppercase tracking-wider">GitHub repository link</label>
-                                    <input
-                                        type="url"
-                                        value={localGithubLink}
-                                        onChange={(e) => setLocalGithubLink(e.target.value)}
-                                        placeholder="https://github.com/org/repo"
-                                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
-                                    />
-                                </div>
                                 {linksError && <p className="text-xs text-red-400">{linksError}</p>}
                                 <div className="flex justify-end gap-2">
                                     <button
-                                        onClick={() => {
+                                        onClick={async () => {
+                                            if (!(await confirmCancel())) return;
                                             setLocalOverleafLink(paper.overleafLink || '');
-                                            setLocalGithubLink(paper.githubLink || '');
                                             setLinksError('');
                                             setIsEditingLinks(false);
                                         }}
@@ -974,7 +988,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 placeholder="E.g., Conflict of interest, busy schedule..."
                             />
                             <div className="flex gap-2">
-                                <button onClick={() => setShowDeclineForm(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
+                                <button onClick={async () => { if (await confirmCancel()) setShowDeclineForm(false); }} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
                                 <button
                                     onClick={() => {
                                         setLocalAssignmentStatus('Declined');
@@ -1023,7 +1037,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         placeholder="E.g., Need more time to verify the experimental results..."
                                     />
                                     <div className="flex gap-2">
-                                        <button onClick={() => setShowExtensionForm(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
+                                        <button onClick={async () => { if (await confirmCancel()) setShowExtensionForm(false); }} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
                                         <button
                                             onClick={() => {
                                                 setHasRequestedExtension(prev => ({ ...prev, [myAssignment.id]: true }));
@@ -1134,7 +1148,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 {abstractError && <p className="text-xs text-red-400">{abstractError}</p>}
                                 <div className="flex justify-end gap-2">
                                     <button
-                                        onClick={() => { setLocalAbstract(paper.abstractText || ''); setAbstractError(''); setIsEditingAbstract(false); }}
+                                        onClick={async () => { if (await confirmCancel()) { setLocalAbstract(paper.abstractText || ''); setAbstractError(''); setIsEditingAbstract(false); } }}
                                         className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
                                     >
                                         Cancel
@@ -1226,7 +1240,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors">
                                             {creatingRound ? 'Creating…' : 'Create Draft'}
                                         </button>
-                                        <button onClick={() => setShowCreateRound(false)}
+                                        <button onClick={async () => { if (await confirmCancel()) setShowCreateRound(false); }}
                                             className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">
                                             Cancel
                                         </button>
@@ -1289,7 +1303,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                                     max={round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : undefined}
                                                                     className="bg-background border border-white/10 rounded px-2 py-0.5 text-xs text-white" />
                                                                 <button onClick={() => handleSaveRoundDeadline(round.id)} className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-0.5 rounded text-white">Save</button>
-                                                                <button onClick={() => setEditingRoundDeadline(null)} className="text-xs text-slate-400 hover:text-white">Cancel</button>
+                                                                <button onClick={async () => { if (await confirmCancel()) setEditingRoundDeadline(null); }} className="text-xs text-slate-400 hover:text-white">Cancel</button>
                                                             </div>
                                                         ) : (
                                                             <div className="flex items-center gap-2">
@@ -1304,6 +1318,93 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                         )}
                                                     </div>
                                                 </div>
+
+                                                <div className="flex items-center gap-2 pt-1 pb-2">
+                                                    <button
+                                                        onClick={() => handleStartAIReview(round.id)}
+                                                        disabled={runningAI === round.id}
+                                                        className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-xs"
+                                                        title="Run AI Post-Review Analysis"
+                                                    >
+                                                        {runningAI === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
+                                                        Run AI Review
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRunComplianceCheck(round.id, round.targetVenue)}
+                                                        disabled={runningCompliance === round.id}
+                                                        className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-xs"
+                                                        title="Run Venue Compliance Check"
+                                                    >
+                                                        {runningCompliance === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+                                                        Compliance Check
+                                                    </button>
+                                                </div>
+
+                                                {/* AI Reports and Artifacts */}
+                                                {(round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl || (round.artifacts?.aiReviewReports?.length || 0) > 0 || (round.artifacts?.checklistItems?.length || 0) > 0) && (
+                                                    <div className="pt-4 mt-2 border-t border-white/5 space-y-4">
+                                                        <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                                            <Cpu className="w-3 h-3" />
+                                                            AI Analysis & Reports
+                                                        </h4>
+                                                        
+                                                        <div className="space-y-4">
+                                                            {/* New PDF-based AI Review Report */}
+                                                            {round.aiReviewReport && (
+                                                                <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-500">
+                                                                    <div className="glass p-4 rounded-xl border border-indigo-500/10 bg-indigo-500/[0.02]">
+                                                                        <div className="flex items-center justify-between mb-2">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[9px] font-bold rounded uppercase">AI Review</span>
+                                                                                <span className="text-xs font-semibold text-white">{round.aiReviewReport.paperType}</span>
+                                                                            </div>
+                                                                            {round.annotatedPdfUrl && (
+                                                                                <a href={round.annotatedPdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[10px] text-indigo-400 hover:text-indigo-300 font-medium">
+                                                                                    <Download className="w-3 h-3" />
+                                                                                    Annotated PDF
+                                                                                </a>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap italic border-l border-indigo-500/30 pl-3 py-0.5">
+                                                                            {round.aiReviewReport.summaryReport}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Compliance Report */}
+                                                            {round.complianceReport && (
+                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-4 duration-500">
+                                                                    {Object.entries(round.complianceReport).map(([key, val]: [string, any]) => {
+                                                                        if (typeof val !== 'object' || val === null) return null;
+                                                                        const isOk = val.isCompliant;
+                                                                        return (
+                                                                            <div key={key} className={`glass p-3 rounded-lg border transition-all ${isOk ? 'border-emerald-500/10 bg-emerald-500/[0.01]' : 'border-red-500/10 bg-red-500/[0.01]'}`}>
+                                                                                <div className="flex items-center justify-between mb-1.5">
+                                                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                                                                    {isOk ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <XCircle className="w-3 h-3 text-red-400" />}
+                                                                                </div>
+                                                                                <p className="text-[10px] text-slate-300 leading-tight">{val.details}</p>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Legacy Reports */}
+                                                            {round.artifacts?.aiReviewReports?.map(report => (
+                                                                <div key={report.id} className="flex flex-wrap items-center gap-2">
+                                                                    {report.generatedReportUrl && (
+                                                                        <a href={report.generatedReportUrl} target="_blank" rel="noreferrer" className="px-3 py-1 rounded-lg border border-white/5 bg-white/5 text-[10px] text-blue-400 hover:text-blue-300 transition-all flex items-center gap-1.5">
+                                                                            <ExternalLink className="w-3 h-3" />
+                                                                            Legacy AI Report
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) }
 
                                                 {round.status === 'Draft' && (
                                                     <>
@@ -1420,53 +1521,78 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                          <div className="space-y-4">
                             {isEditingAuthors ? (
                                 <div className="space-y-6">
-                                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                        {addableAuthorOptions.length === 0 ? (
-                                            <p className="text-xs text-slate-500 rounded-lg border border-white/10 bg-white/[0.02] p-3">
-                                                No eligible lab members available to add.
-                                            </p>
-                                        ) : addableAuthorOptions.map(u => (
-                                            <button
-                                                key={u.id}
-                                                type="button"
-                                                onClick={() => toggleAuthor(u.id)}
-                                                className="w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all bg-white/5 border-white/10 hover:bg-white/10"
-                                            >
-                                                <div className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-xs bg-slate-700 text-slate-300">
-                                                    {u.name.charAt(0)}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-medium truncate text-slate-300">{u.name}</p>
-                                                    <p className="text-[11px] text-slate-500 truncate">{u.email}</p>
-                                                </div>
-                                            </button>
-                                        ))}
+                                    <div className="relative">
+                                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Search members..." 
+                                            value={authorSearch}
+                                            onChange={(e) => setAuthorSearch(e.target.value)}
+                                            className="w-full bg-white/5 border border-white/10 rounded-lg pl-8 pr-2 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                        {(() => {
+                                            const filtered = addableAuthorOptions.filter(u => 
+                                                u.name.toLowerCase().includes(authorSearch.toLowerCase()) || 
+                                                u.email.toLowerCase().includes(authorSearch.toLowerCase())
+                                            );
+                                            
+                                            if (filtered.length === 0) {
+                                                return (
+                                                    <p className="text-[10px] text-slate-500 text-center py-4 border border-dashed border-white/5 rounded-lg">
+                                                        {authorSearch ? 'No matches found.' : 'No more eligible members.'}
+                                                    </p>
+                                                );
+                                            }
+                                            
+                                            return filtered.map(u => (
+                                                <button
+                                                    key={u.id}
+                                                    type="button"
+                                                    onClick={() => toggleAuthor(u.id)}
+                                                    className="w-full flex items-center gap-3 p-2 rounded-lg border text-left transition-all bg-white/5 border-white/10 hover:bg-white/10"
+                                                >
+                                                    <div className="w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-xs bg-slate-700 text-slate-300">
+                                                        {u.name.charAt(0)}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-medium truncate text-slate-300">{u.name}</p>
+                                                        <p className="text-[11px] text-slate-500 truncate">{u.email}</p>
+                                                    </div>
+                                                    <Plus className="w-3 h-3 text-blue-400 shrink-0" />
+                                                </button>
+                                            ));
+                                        })()}
                                     </div>
                                     
                                     <div className="pt-4 border-t border-white/10 space-y-2">
                                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Order</h4>
-                                        {localAuthors.map((id, index) => {
-                                            const u = availableUsers.find(user => user.id === id);
-                                            if (!u) return null;
-                                            return (
-                                                <div key={id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/5">
-                                                    <span className="text-xs text-blue-400 font-mono w-4">{index + 1}</span>
-                                                    <span className="text-xs text-white truncate flex-1 px-2">{u.name}</span>
-                                                    <div className="flex gap-1">
-                                                        <button disabled={index === 0} onClick={() => moveAuthor(index, 'up')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowUp className="w-3 h-3 text-slate-400" /></button>
-                                                        <button disabled={index === localAuthors.length - 1} onClick={() => moveAuthor(index, 'down')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowDown className="w-3 h-3 text-slate-400" /></button>
-                                                        <button onClick={() => setLocalAuthors(current => current.filter(authorId => authorId !== id))} className="p-1 hover:bg-red-500/10 rounded text-slate-400 hover:text-red-400">
-                                                            <XCircle className="w-3 h-3" />
-                                                        </button>
+                                        <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                            {localAuthors.map((id, index) => {
+                                                const u = availableUsers.find(user => user.id === id);
+                                                if (!u) return null;
+                                                return (
+                                                    <div key={id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/5">
+                                                        <span className="text-xs text-blue-400 font-mono w-4">{index + 1}</span>
+                                                        <span className="text-xs text-white truncate flex-1 px-2">{u.name}</span>
+                                                        <div className="flex gap-1">
+                                                            <button disabled={index === 0} onClick={() => moveAuthor(index, 'up')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowUp className="w-3 h-3 text-slate-400" /></button>
+                                                            <button disabled={index === localAuthors.length - 1} onClick={() => moveAuthor(index, 'down')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowDown className="w-3 h-3 text-slate-400" /></button>
+                                                            <button onClick={() => setLocalAuthors(current => current.filter(authorId => authorId !== id))} className="p-1 hover:bg-red-500/10 rounded text-slate-400 hover:text-red-400">
+                                                                <XCircle className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
+                                                );
+                                            })}
+                                        </div>
                                     </div>
 
                                     {authorsError && <p className="text-xs text-red-400">{authorsError}</p>}
                                     <div className="flex gap-2 pt-2">
-                                        <button onClick={() => { setLocalAuthors(paper.authors?.map(author => author.id) ?? []); setIsEditingAuthors(false); setAuthorsError(''); }} className="flex-1 py-2 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
+                                        <button onClick={async () => { if (await confirmCancel()) { setLocalAuthors(paper.authors?.map(author => author.id) ?? []); setIsEditingAuthors(false); setAuthorsError(''); } }} className="flex-1 py-2 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
                                         <button onClick={handleSaveAuthors} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors">Save</button>
                                     </div>
                                 </div>

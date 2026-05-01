@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { ChevronRight, FileText, Search, Loader2, Clock, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, FileText, Search, Loader2, Clock, CheckCircle2, X } from 'lucide-react';
 import { AuthoredPaper, getAllPapersRequest, getMyWrittenPapersRequest, PaperAuthor, TopicOption, Paper } from '@/lib/api';
 
 export default function PapersList() {
@@ -14,6 +14,9 @@ export default function PapersList() {
 
     const [allPapers, setAllPapers] = useState<(Paper | AuthoredPaper)[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [authorFilter, setAuthorFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
 
     useEffect(() => {
         if (!user.id) {
@@ -63,7 +66,22 @@ export default function PapersList() {
         return 'Manage and assign papers across the system.';
     };
 
-    const papers = getPapers();
+    const papers = getPapers().filter(p => {
+        const q = searchQuery.trim().toLowerCase();
+        if (q && !p.title.toLowerCase().includes(q)) return false;
+        if (authorFilter.trim()) {
+            const af = authorFilter.trim().toLowerCase();
+            const hasAuthor = p.authors?.some(a => a.name.toLowerCase().includes(af));
+            if (!hasAuthor) return false;
+        }
+        if (statusFilter && p.status !== statusFilter) return false;
+        return true;
+    });
+
+    const hasActiveFilters = searchQuery.trim() || authorFilter.trim() || statusFilter;
+    const clearFilters = () => { setSearchQuery(''); setAuthorFilter(''); setStatusFilter(''); };
+
+    const STATUSES = ['Draft', 'In Review', 'HumanReview', 'AIReview', 'Completed', 'Accepted', 'Archived'];
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -105,15 +123,44 @@ export default function PapersList() {
             </div>
 
             <div className="glass rounded-2xl border border-white/5 overflow-hidden shadow-xl">
-                <div className="p-4 border-b border-white/5 flex gap-4">
-                    <div className="relative flex-1">
-                        <Search className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                <div className="p-4 border-b border-white/5 flex flex-wrap gap-3 items-center">
+                    <div className="relative flex-1 min-w-48">
+                        <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                         <input
                             type="text"
-                            placeholder="Search by title or author..."
-                            className="w-full bg-background/50 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                            placeholder="Search by title..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
                         />
                     </div>
+                    <div className="relative min-w-44">
+                        <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                            type="text"
+                            placeholder="Filter by author..."
+                            value={authorFilter}
+                            onChange={e => setAuthorFilter(e.target.value)}
+                            className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                        />
+                    </div>
+                    <select
+                        value={statusFilter}
+                        onChange={e => setStatusFilter(e.target.value)}
+                        className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
+                    >
+                        <option value="">All statuses</option>
+                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    {hasActiveFilters && (
+                        <button
+                            onClick={clearFilters}
+                            className="flex items-center gap-1.5 px-3 py-2 text-xs text-slate-400 hover:text-white border border-white/10 rounded-lg hover:border-white/20 transition-colors"
+                        >
+                            <X className="w-3.5 h-3.5" /> Clear
+                        </button>
+                    )}
+                    <span className="text-xs text-slate-500 ml-auto">{papers.length} paper{papers.length !== 1 ? 's' : ''}</span>
                 </div>
 
                 <div className="divide-y divide-white/5">
@@ -179,7 +226,7 @@ export default function PapersList() {
                             ))}
                             {papers.length === 0 && (
                                 <div className="p-12 text-center text-slate-500">
-                                    No papers found for this view.
+                                    {hasActiveFilters ? 'No papers match the current filters.' : 'No papers found for this view.'}
                                 </div>
                             )}
                         </>

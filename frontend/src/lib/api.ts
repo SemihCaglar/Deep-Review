@@ -221,7 +221,7 @@ export type Paper = {
   targetVenue?: string;
   status: string;
   overleafLink?: string | null;
-  githubLink?: string | null;
+
   authorOrder?: string[] | null;
   authors?: PaperAuthor[];
   coordinators?: LabMember[];
@@ -269,6 +269,29 @@ export type PaperHistoryAssignment = {
   extensions: PaperHistoryExtension[];
 };
 
+export interface AIReviewReport {
+  summaryReport: string;
+  annotatedPdfUrl?: string;
+  annotations?: any[];
+  suggestedCitations?: any[];
+  checklist?: Array<{
+    id: string;
+    description: string;
+    isChecked: boolean;
+  }>;
+  paperType?: string;
+}
+
+export interface ComplianceReport {
+  pageLimit?: { isCompliant: boolean; confidence: number; details: string };
+  abstractWordCount?: { isCompliant: boolean; confidence: number; details: string };
+  anonymity?: { isCompliant: boolean; confidence: number; details: string };
+  referenceFormat?: { isCompliant: boolean; confidence: number; details: string };
+  requiredSections?: { isCompliant: boolean; confidence: number; details: string };
+  detectedPaperType?: string;
+  paperTypeConfidence?: number;
+}
+
 export type PaperHistoryRound = {
   id: string;
   roundNumber: number;
@@ -281,6 +304,9 @@ export type PaperHistoryRound = {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
     aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
   };
+  aiReviewReport?: AIReviewReport | null;
+  complianceReport?: ComplianceReport | null;
+  annotatedPdfUrl?: string | null;
 };
 
 export type PaperHistory = {
@@ -289,7 +315,7 @@ export type PaperHistory = {
   status: string;
   targetVenue: string;
   overleafLink?: string | null;
-  githubLink?: string | null;
+
   authors: PaperAuthor[];
   rounds: PaperHistoryRound[];
 };
@@ -297,11 +323,10 @@ export type PaperHistory = {
 export type RegisterPaperPayload = {
   title: string;
   abstractText: string;
-  targetVenue: string;
   topics: string[];
   authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
-  githubLink?: string;
+
 };
 
 export function registerPaperRequest(payload: RegisterPaperPayload) {
@@ -372,6 +397,13 @@ export type AuthorRound = {
   startedAt: string | null;
   completedAt: string | null;
   proposedReviewers: { id: string; name: string; email: string }[];
+  aiReviewReport?: AIReviewReport | null;
+  complianceReport?: ComplianceReport | null;
+  annotatedPdfUrl?: string | null;
+  artifacts?: {
+    checklistItems: { id: string; description: string; isChecked: boolean }[];
+    aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
+  };
 };
 
 export type CoordinatedPaper = {
@@ -380,7 +412,7 @@ export type CoordinatedPaper = {
   status: string;
   abstractText: string;
   overleafLink: string | null;
-  githubLink: string | null;
+
 };
 
 export type PendingDeclineRequest = {
@@ -440,7 +472,7 @@ export type MyAssignment = {
     title: string;
     abstractText: string;
     overleafLink: string | null;
-    githubLink: string | null;
+
     authors: PaperAuthor[];
   };
   pendingDeclineRequest: PendingDeclineRequest | null;
@@ -506,19 +538,13 @@ export function updateOverleafLinkRequest(paperId: string, overleafLink: string)
   });
 }
 
-export function updatePaperLinksRequest(paperId: string, overleafLink: string, githubLink: string) {
-  return apiRequest<{ message: string; overleafLink?: string | null; githubLink?: string | null }>(`/papers/${paperId}/overleaf`, {
+export function updatePaperLinksRequest(paperId: string, overleafLink: string) {
+  return apiRequest<{ message: string; overleafLink?: string | null }>(`/papers/${paperId}/overleaf`, {
     method: 'PUT',
-    body: { overleafLink, githubLink },
+    body: { overleafLink },
   });
 }
 
-export function updateGithubLinkRequest(paperId: string, githubLink: string) {
-  return apiRequest<{ message: string; githubLink: string | null }>(`/papers/${paperId}/github`, {
-    method: 'PUT',
-    body: { githubLink },
-  });
-}
 
 export function getPaperRoundsRequest(paperId: string) {
   return apiRequest<RoundWithAssignments[]>(`/papers/${paperId}/rounds`);
@@ -562,10 +588,10 @@ export function updateAssignmentDeadlineRequest(assignmentId: string, deadline: 
   });
 }
 
-export function createRoundRequest(paperId: string, targetVenue: string, venueCategory: string, submissionDeadline?: string, deadline?: string) {
+export function createRoundRequest(paperId: string, targetVenue: string, venueCategory: string, submissionDeadline?: string, deadline?: string, targetVenueUrl?: string) {
   return apiRequest<{ id: string; status: string }>('/rounds', {
     method: 'POST',
-    body: { paperId, targetVenue, venueCategory, ...(submissionDeadline ? { submissionDeadline } : {}), ...(deadline ? { deadline } : {}) },
+    body: { paperId, targetVenue, venueCategory, ...(submissionDeadline ? { submissionDeadline } : {}), ...(deadline ? { deadline } : {}), ...(targetVenueUrl ? { targetVenueUrl } : {}) },
   });
 }
 
@@ -580,6 +606,13 @@ export function editRoundDeadlineRequest(roundId: string, deadline: string) {
   return apiRequest<{ id: string; deadline: string }>(`/rounds/${roundId}/deadline`, {
     method: 'PUT',
     body: { deadline },
+  });
+}
+
+export function updateRoundDetailsRequest(roundId: string, details: { targetVenue?: string; targetVenueUrl?: string | null; submissionDeadline?: string | null }) {
+  return apiRequest<{ id: string }>(`/rounds/${roundId}/details`, {
+    method: 'PUT',
+    body: details,
   });
 }
 
@@ -706,6 +739,59 @@ export function getOverallAnalyticsRequest() {
 
 export function getUserAnalyticsRequest(userId: string) {
   return apiRequest<UserAnalyticsResponse>(`/ratings/user/${userId}`);
+}
+
+// ==== AI POST-REVIEW API FUNCTIONS ====
+
+/**
+ * Starts an AI review by uploading the paper's PDF.
+ * Sends multipart/form-data with a 'pdf' field.
+ */
+export async function startAIReviewRequest(roundId: string, pdfFile: File): Promise<{ message: string; data: any }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('pdf', pdfFile);
+
+  const response = await fetch(buildUrl(`/rounds/${roundId}/ai`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const payload = await parseResponseBody(response);
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
+  return payload as { message: string; data: any };
+}
+
+/**
+ * Runs the compliance check by uploading the paper's PDF.
+ * Sends multipart/form-data with a 'pdf' field + venueRules as stringified JSON.
+ */
+export async function runComplianceCheckRequest(roundId: string, pdfFile: File, venueRules: any = {}): Promise<{ message: string; data: any }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('pdf', pdfFile);
+  formData.append('venueRules', JSON.stringify(venueRules));
+
+  const response = await fetch(buildUrl(`/rounds/${roundId}/compliance`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const payload = await parseResponseBody(response);
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
+  return payload as { message: string; data: any };
+}
+
+export function getVenueRulesRequest(roundId: string) {
+  return apiRequest<any>(`/rounds/${roundId}/venue-rules`, {
+    method: 'GET'
+  });
 }
 
 function buildUrl(path: string) {

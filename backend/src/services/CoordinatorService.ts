@@ -6,7 +6,7 @@ import { Extension, ExtensionStatus } from '../entities/Extension';
 import { Lab } from '../entities/Lab';
 import { ReviewerResponse, ReviewerResponseStatus } from '../entities/ReviewerResponse';
 import { User, UserRole } from '../entities/User';
-import { VenueCategory } from '../entities/Round';
+import { RoundStatus, VenueCategory } from '../entities/Round';
 
 export class CoordinatorServiceError extends Error {
   statusCode: number;
@@ -224,6 +224,13 @@ export class CoordinatorService {
 
       const round = oldAssignment.round;
       const paper = round.paper;
+
+      if (round.status === RoundStatus.Completed) {
+        throw new CoordinatorServiceError(
+          400,
+          'Cannot reassign reviewers after the round has been completed',
+        );
+      }
 
       const newReviewer = await manager.getRepository(User).findOne({
         where: { id: normalizedNewReviewerId },

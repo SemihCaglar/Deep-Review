@@ -101,7 +101,7 @@ async function seedTestDb() {
         title: 'Comprehensive Test Paper',
         abstractText: 'Testing everything.',
         overleafLink: 'https://overleaf.com/comp_test',
-        githubLink: 'https://github.com/team8/comp_test',
+
         creationTime: new Date(),
         status: PaperStatus.Draft,
     });
@@ -519,7 +519,7 @@ describe('8 · Approve round — happy path', () => {
         expect(r.status).toBe(200);
         const assignment = r.body.find((a: any) => a.id === r1AssignId);
         expect(assignment).toBeTruthy();
-        expect(assignment.paper.githubLink).toBe('https://github.com/team8/comp_test');
+
         expect(assignment.paper.authors).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ id: authorId, name: 'Author C', email: 'author_c@comp.test' }),

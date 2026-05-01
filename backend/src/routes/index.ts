@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import express, { Router, Request, Response, NextFunction } from 'express';
+import path from 'path';
 import { AccountController } from '../controllers/AccountController';
 import { AdminController } from '../controllers/AdminController';
 import { AssignmentController } from '../controllers/AssignmentController';
@@ -11,7 +12,36 @@ import { SearchController } from '../controllers/SearchController';
 import { TopicController } from '../controllers/TopicController';
 import { authenticateRequest, requireAdmin, requireCoordinator } from '../middleware/auth';
 
+import multer, { FileFilterCallback } from 'multer';
+
 const router = Router();
+
+// Multer: in-memory PDF upload (max 20MB)
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Only PDF files are allowed'));
+  }
+});
+
+// Custom middleware to handle Multer errors and return JSON instead of HTML
+const handlePdfUpload = (req: Request, res: Response, next: NextFunction) => {
+  pdfUpload.single('pdf')(req, res, (err: unknown) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ message: `Upload error: ${err.message}` });
+    } else if (err instanceof Error) {
+      return res.status(400).json({ message: err.message });
+    } else if (err) {
+      return res.status(400).json({ message: 'Upload failed' });
+    }
+    next();
+  });
+};
+
+// Serve the downloads directory statically so the UI can access annotated PDFs
+router.use('/downloads', express.static(path.join(process.cwd(), 'downloads')));
 
 // ==== ACCOUNT ROUTES ====
 router.post('/account/signup', AccountController.signUp);
@@ -79,7 +109,7 @@ router.post('/papers', authenticateRequest, PaperController.registerPaper);
 
 router.get('/papers/:id', authenticateRequest, PaperController.getPaperById);
 router.put('/papers/:id/overleaf', authenticateRequest, PaperController.updateOverleafLink);
-router.put('/papers/:id/github', authenticateRequest, PaperController.updateGithubLink);
+
 router.get('/papers/:id/status', authenticateRequest, PaperController.getPaperStatus);
 router.get('/papers/:id/history', authenticateRequest, PaperController.getPaperHistory);
 router.put('/papers/:id/topics', authenticateRequest, PaperController.setTopics);
@@ -117,6 +147,7 @@ router.post('/rounds', authenticateRequest, RoundController.createReviewRound);
 router.post('/rounds/:id/start', authenticateRequest, RoundController.startRound);
 router.post('/rounds/:id/approve', authenticateRequest, RoundController.approveRound);
 router.put('/rounds/:id/deadline', authenticateRequest, RoundController.editRoundDeadline);
+router.put('/rounds/:id/details', authenticateRequest, RoundController.updateRoundDetails);
 router.get('/rounds/:id/suggest', authenticateRequest, RoundController.suggestReviewers);
 router.post('/rounds/:id/propose', authenticateRequest, RoundController.addProposeReviewer);
 router.delete('/rounds/:id/propose/:userId', authenticateRequest, RoundController.removeProposedReviewer);
@@ -124,7 +155,9 @@ router.get('/rounds/:id/propose', authenticateRequest, RoundController.getPropos
 router.get('/rounds/:id/status', authenticateRequest, RoundController.trackReviewStatus);
 router.post('/rounds/:id/close', RoundController.closeRound);
 router.post('/rounds/next', authenticateRequest, RoundController.createReviewRound);
-router.post('/rounds/:id/ai', authenticateRequest, RoundController.startAIReview);
+router.post('/rounds/:id/ai', authenticateRequest, handlePdfUpload, RoundController.startAIReview);
+router.get('/rounds/:id/venue-rules', authenticateRequest, RoundController.getVenueRules);
+router.post('/rounds/:id/compliance', authenticateRequest, handlePdfUpload, RoundController.runComplianceCheck);
 router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
 router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistItem);
 router.put('/rounds/:id/checklist/:itemId', RoundController.updateChecklistItem);

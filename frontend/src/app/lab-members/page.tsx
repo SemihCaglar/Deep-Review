@@ -56,7 +56,7 @@ export default function LabMembersPage() {
           <p className="text-sm text-slate-400">Loading lab members...</p>
         ) : members.length ? (
           <div className="space-y-4">
-            {members.map(member => (
+            {[...members].sort((a, b) => (a.role === 'Coordinator' ? -1 : b.role === 'Coordinator' ? 1 : 0)).map(member => (
               <div key={member.id} className="rounded-2xl border border-white/10 bg-background/60 p-5">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>

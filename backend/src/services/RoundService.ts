@@ -51,6 +51,10 @@ export class RoundService {
         throw new RoundServiceError(400, 'The paper\'s Overleaf link must be set before starting a round so reviewers can access the manuscript.');
       }
 
+      if (!round.targetVenueUrl?.trim()) {
+        throw new RoundServiceError(400, 'The venue URL must be set before starting the round. Please add the target venue URL first.');
+      }
+
       round.status = RoundStatus.Open;
       round.startedAt = new Date();
 
@@ -87,6 +91,11 @@ export class RoundService {
       if (!this.hasOverleafLink(round.paper)) {
         throw new RoundServiceError(400, 'The paper\'s Overleaf link must be set before approving so reviewers can access the manuscript.');
       }
+
+      if (!round.targetVenueUrl?.trim()) {
+        throw new RoundServiceError(400, 'The venue URL must be set before approving the round. Please add the target venue URL first.');
+      }
+
       if (!round.proposedReviewers || round.proposedReviewers.length === 0) {
         throw new RoundServiceError(400, 'At least one reviewer must be in the proposed list before approving. Add reviewers from the suggestions panel first.');
       }
