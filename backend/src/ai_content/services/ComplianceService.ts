@@ -1,65 +1,30 @@
-import * as fs from 'fs';
-import * as path from 'path';
 const pdfParse = require('pdf-parse');
 import { AzureOpenAIClient } from '../utils/AzureOpenAIClient';
-import { OverleafGitService } from './OverleafGitService';
 
 export class ComplianceService {
   /**
    * Orchestrates the compliance verification pipeline:
-   * 1. Clones the Overleaf repository.
-   * 2. Finds and parses the PDF.
-   * 3. Calls Azure OpenAI to verify rules and generate confidence scores.
-   * 4. Cleans up.
+   * 1. Extracts text from the uploaded PDF buffer.
+   * 2. Calls Azure OpenAI to verify rules and generate confidence scores.
    */
-  static async verifyCompliance(paperId: string, gitUrl: string, token: string, venueRules: any): Promise<any> {
+  static async verifyCompliance(paperId: string, pdfBuffer: Buffer, venueRules: any): Promise<any> {
     console.log(`[ComplianceService] Starting compliance check for paper ${paperId}`);
-    
-    // 1. Clone the repository
-    const tempDir = await OverleafGitService.cloneProject(gitUrl, token);
-    
-    try {
-      // 2. Compile the project to PDF (since Overleaf Git doesn't include it)
-      console.log(`[ComplianceService] Compiling LaTeX project to PDF...`);
-      const pdfPath = await OverleafGitService.compileToPdf(tempDir);
-      
-      if (!pdfPath || !fs.existsSync(pdfPath)) {
-        throw new Error('Failed to compile the project. Please ensure the LaTeX source is valid and compiles without errors.');
-      }
 
-      // 3. Extract text from PDF
-      const dataBuffer = fs.readFileSync(pdfPath);
-      const pdfData = await pdfParse(dataBuffer);
-      const pdfText = pdfData.text;
-      
-      // Pass metadata strings along if available
-      const metadataStr = pdfData.info ? JSON.stringify(pdfData.info) : "No PDF Metadata available.";
+    // 1. Extract text + metadata from PDF
+    console.log(`[ComplianceService] Parsing PDF...`);
+    const pdfData = await pdfParse(pdfBuffer);
+    const pdfText = pdfData.text;
 
-      // 4. Run AI Compliance Check
-      const complianceReport = await this.runAIComplianceCheck(pdfText, metadataStr, venueRules);
-      
-      return complianceReport;
-
-    } catch (err) {
-      console.error('[ComplianceService] Error during compliance check:', err);
-      throw err;
-    } finally {
-      // 5. Cleanup
-      await OverleafGitService.cleanup(tempDir);
+    if (!pdfText || pdfText.trim().length === 0) {
+      throw new Error('The uploaded PDF appears to be empty or could not be parsed.');
     }
-  }
 
-  /**
-   * Helper to find a PDF file in the cloned directory.
-   */
-  private static findPdfInDir(dirPath: string): string | null {
-    const files = fs.readdirSync(dirPath);
-    for (const file of files) {
-      if (file.toLowerCase().endsWith('.pdf')) {
-        return path.join(dirPath, file);
-      }
-    }
-    return null;
+    const metadataStr = pdfData.info ? JSON.stringify(pdfData.info) : "No PDF Metadata available.";
+
+    // 2. Run AI Compliance Check
+    const complianceReport = await this.runAIComplianceCheck(pdfText, metadataStr, venueRules);
+
+    return complianceReport;
   }
 
   /**
@@ -101,7 +66,7 @@ ${JSON.stringify(venueRules, null, 2)}
 ${metadata}
 
 === PDF TEXT CONTENT (Truncated if too long) ===
-${pdfText.substring(0, 30000)} // Truncating to ~30k chars to stay within token limits safely.
+${pdfText.substring(0, 30000)}
 `;
 
     const responseText = await AzureOpenAIClient.sendPrompt(systemPrompt, userPrompt);

@@ -269,6 +269,29 @@ export type PaperHistoryAssignment = {
   extensions: PaperHistoryExtension[];
 };
 
+export interface AIReviewReport {
+  summaryReport: string;
+  annotatedPdfUrl?: string;
+  annotations?: any[];
+  suggestedCitations?: any[];
+  checklist?: Array<{
+    id: string;
+    description: string;
+    isChecked: boolean;
+  }>;
+  paperType?: string;
+}
+
+export interface ComplianceReport {
+  pageLimit?: { isCompliant: boolean; confidence: number; details: string };
+  abstractWordCount?: { isCompliant: boolean; confidence: number; details: string };
+  anonymity?: { isCompliant: boolean; confidence: number; details: string };
+  referenceFormat?: { isCompliant: boolean; confidence: number; details: string };
+  requiredSections?: { isCompliant: boolean; confidence: number; details: string };
+  detectedPaperType?: string;
+  paperTypeConfidence?: number;
+}
+
 export type PaperHistoryRound = {
   id: string;
   roundNumber: number;
@@ -281,6 +304,9 @@ export type PaperHistoryRound = {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
     aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
   };
+  aiReviewReport?: AIReviewReport | null;
+  complianceReport?: ComplianceReport | null;
+  annotatedPdfUrl?: string | null;
 };
 
 export type PaperHistory = {
@@ -700,6 +726,59 @@ export function getOverallAnalyticsRequest() {
 
 export function getUserAnalyticsRequest(userId: string) {
   return apiRequest<UserAnalyticsResponse>(`/ratings/user/${userId}`);
+}
+
+// ==== AI POST-REVIEW API FUNCTIONS ====
+
+/**
+ * Starts an AI review by uploading the paper's PDF.
+ * Sends multipart/form-data with a 'pdf' field.
+ */
+export async function startAIReviewRequest(roundId: string, pdfFile: File): Promise<{ message: string; data: any }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('pdf', pdfFile);
+
+  const response = await fetch(buildUrl(`/rounds/${roundId}/ai`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const payload = await parseResponseBody(response);
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
+  return payload as { message: string; data: any };
+}
+
+/**
+ * Runs the compliance check by uploading the paper's PDF.
+ * Sends multipart/form-data with a 'pdf' field + venueRules as stringified JSON.
+ */
+export async function runComplianceCheckRequest(roundId: string, pdfFile: File, venueRules: any = {}): Promise<{ message: string; data: any }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('pdf', pdfFile);
+  formData.append('venueRules', JSON.stringify(venueRules));
+
+  const response = await fetch(buildUrl(`/rounds/${roundId}/compliance`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const payload = await parseResponseBody(response);
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
+  return payload as { message: string; data: any };
+}
+
+export function getVenueRulesRequest(roundId: string) {
+  return apiRequest<any>(`/rounds/${roundId}/venue-rules`, {
+    method: 'GET'
+  });
 }
 
 function buildUrl(path: string) {

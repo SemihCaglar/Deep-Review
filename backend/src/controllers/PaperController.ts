@@ -285,6 +285,9 @@ export class PaperController {
                 status: extension.status,
               })),
           })),
+          aiReviewReport: round.aiReviewReport,
+          complianceReport: round.complianceReport,
+          annotatedPdfUrl: round.annotatedPdfUrl,
           artifacts: {
             checklistItems: (round.checklistItems ?? []).map(item => ({
               id: item.id,

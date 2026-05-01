@@ -8,13 +8,13 @@ export class AzureOpenAIClient {
   private static modelName: string = '';
 
   /**
-   * Initializes the Azure OpenAI Client reading from ai_content/secrets.yaml.
+   * Initializes the Azure OpenAI Client reading from backend/src/ai_content/secrets.yaml.
    */
   private static initClient() {
     if (this.client) return;
 
     try {
-      // Find the ai_content folder which is at the root of the project
+      // Find the secrets.yaml file which is in the same folder as the AI services
       // backend/src/ai_content/utils/AzureOpenAIClient.ts -> ../secrets.yaml
       const secretsPath = path.resolve(__dirname, '../secrets.yaml');
       const fileContents = fs.readFileSync(secretsPath, 'utf8');
