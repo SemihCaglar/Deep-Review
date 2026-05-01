@@ -35,11 +35,10 @@ export class Paper {
   })
   status: PaperStatus;
 
-  @Column({ nullable: true })
+  @Column()
   overleafLink: string;
 
-  @Column({ type: 'text', nullable: true })
-  githubLink: string | null;
+
 
   @ManyToMany('User', 'writtenPapers')
   authors: User[];

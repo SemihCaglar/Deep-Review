@@ -34,7 +34,7 @@ async function makePaper(status = PaperStatus.Draft) {
     title: `Archive Rule ${Date.now()}`,
     abstractText: 'Archive rule test',
     overleafLink: 'https://overleaf.com/archive-rule',
-    githubLink: null,
+
     creationTime: new Date(),
     status,
     authors: [author],
