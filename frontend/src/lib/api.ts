@@ -227,6 +227,7 @@ export type Paper = {
   authors?: PaperAuthor[];
   coordinators?: LabMember[];
   topics?: TopicOption[];
+  labs?: { id: string; name: string }[];
   history?: unknown[];
 };
 
@@ -328,7 +329,20 @@ export type RegisterPaperPayload = {
   topics: string[];
   authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
+  collaboratingLabIds?: string[];
+};
 
+export type LabCollaborationInvitation = {
+  id: string;
+  status: 'Pending' | 'Accepted' | 'Rejected' | 'Cancelled';
+  createdAt: string;
+  respondedAt: string | null;
+  invitingLab: { id: string; name: string };
+  invitedLab: { id: string; name: string };
+};
+
+export type PendingCollaborationInvitation = LabCollaborationInvitation & {
+  paper: { id: string; title: string; status: string };
 };
 
 export function registerPaperRequest(payload: RegisterPaperPayload) {
@@ -844,4 +858,42 @@ function getErrorMessage(payload: unknown, fallback: string) {
 
 export function createUserRequest(data: { name: string; email: string; role: string; password?: string }) {
   return apiRequest('/admin/users', { method: 'POST', body: data });
+}
+
+// ==== COLLABORATION INVITATION API FUNCTIONS ====
+
+export function sendCollaborationInvitationsRequest(paperId: string, labIds: string[]) {
+  return apiRequest<{ invited: LabCollaborationInvitation[]; errors: { labId: string; reason: string }[] }>(
+    `/papers/${paperId}/collaboration-invitations`,
+    { method: 'POST', body: { labIds } },
+  );
+}
+
+export function getPaperInvitationsRequest(paperId: string) {
+  return apiRequest<LabCollaborationInvitation[]>(`/papers/${paperId}/collaboration-invitations`);
+}
+
+export function getPendingCollaborationInvitationsRequest() {
+  return apiRequest<PendingCollaborationInvitation[]>('/collaboration-invitations/pending');
+}
+
+export function acceptCollaborationInvitationRequest(invitationId: string) {
+  return apiRequest<{ message: string; id: string; status: string }>(
+    `/collaboration-invitations/${invitationId}/accept`,
+    { method: 'PATCH' },
+  );
+}
+
+export function rejectCollaborationInvitationRequest(invitationId: string) {
+  return apiRequest<{ message: string; id: string; status: string }>(
+    `/collaboration-invitations/${invitationId}/reject`,
+    { method: 'PATCH' },
+  );
+}
+
+export function cancelCollaborationInvitationRequest(invitationId: string) {
+  return apiRequest<{ message: string; id: string; status: string }>(
+    `/collaboration-invitations/${invitationId}/cancel`,
+    { method: 'PATCH' },
+  );
 }

@@ -4,6 +4,7 @@ import { AccountController } from '../controllers/AccountController';
 import { AdminController } from '../controllers/AdminController';
 import { AssignmentController } from '../controllers/AssignmentController';
 import { CoordinatorController } from '../controllers/CoordinatorController';
+import { LabCollaborationController } from '../controllers/LabCollaborationController';
 import { PaperController } from '../controllers/PaperController';
 import { RatingAnalyticsController } from '../controllers/RatingAnalyticsController';
 import { ReviewerResponseController } from '../controllers/ReviewerResponseController';
@@ -116,6 +117,14 @@ router.put('/papers/:id/authors', authenticateRequest, PaperController.updateAut
 router.put('/papers/:id/status', authenticateRequest, PaperController.updatePaperStatus);
 router.post('/papers/:id/manuscript', authenticateRequest, PaperController.uploadManuscript);
 router.post('/papers/:id/parents', authenticateRequest, PaperController.linkParentPapers);
+
+// ==== COLLABORATION ROUTES ====
+router.get('/collaboration-invitations/pending', authenticateRequest, LabCollaborationController.getPendingInvitations);
+router.patch('/collaboration-invitations/:id/accept', authenticateRequest, LabCollaborationController.acceptInvitation);
+router.patch('/collaboration-invitations/:id/reject', authenticateRequest, LabCollaborationController.rejectInvitation);
+router.patch('/collaboration-invitations/:id/cancel', authenticateRequest, LabCollaborationController.cancelInvitation);
+router.post('/papers/:id/collaboration-invitations', authenticateRequest, LabCollaborationController.sendInvitations);
+router.get('/papers/:id/collaboration-invitations', authenticateRequest, LabCollaborationController.getInvitationsForPaper);
 
 // ==== RATING ANALYTICS ROUTES ====
 router.post('/ratings', authenticateRequest, RatingAnalyticsController.rateReviewer);
