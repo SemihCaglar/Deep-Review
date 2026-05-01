@@ -18,7 +18,6 @@ export default function RegisterPaper() {
     // Form state
     const [title, setTitle] = useState('');
     const [abstractText, setAbstractText] = useState('');
-    const [targetVenue, setTargetVenue] = useState('');
     const [overleafLink, setOverleafLink] = useState('');
 
     const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
@@ -108,7 +107,6 @@ export default function RegisterPaper() {
             await registerPaperRequest({
                 title,
                 abstractText,
-                targetVenue,
                 overleafLink,
 
                 authors: selectedAuthors,
@@ -156,10 +154,6 @@ export default function RegisterPaper() {
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Paper Title <span className="text-red-400">*</span></label>
                                 <input required type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Enter full paper title..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Target Venue <span className="text-red-400">*</span></label>
-                                <input required type="text" value={targetVenue} onChange={e => setTargetVenue(e.target.value)} placeholder="e.g. ICSE 2026..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Abstract <span className="text-red-400">*</span></label>
