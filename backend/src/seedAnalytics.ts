@@ -44,7 +44,7 @@ async function run() {
 
   // Require the main seed to have been run first
   const coordinator = await coordRepo.findOne({
-    where: { email: 'eraytuzun@cs.bilkent.edu.tr' },
+    where: { email: 'coordinator@mock.test' },
     relations: ['lab'],
   });
   if (!coordinator) {
@@ -56,7 +56,7 @@ async function run() {
 
   // Find the lab via the coordinator's relation (robust to lab name changes)
   const labWithCoord = await coordRepo.findOne({
-    where: { email: 'eraytuzun@cs.bilkent.edu.tr' },
+    where: { email: 'coordinator@mock.test' },
     relations: ['lab', 'lab.members'],
   });
   const lab = labWithCoord?.lab ?? null;
@@ -183,7 +183,7 @@ async function run() {
 
   console.log('\n🌱  Analytics seed complete!');
   console.log('\n   Login credentials:');
-  console.log('   Coordinator  eraytuzun@cs.bilkent.edu.tr  /  123');
+  console.log('   Coordinator  coordinator@mock.test  /  123');
   console.log('   Alice        alice.reviewer@test.com       /  123');
   console.log('   Bob          bob.reviewer@test.com         /  123');
   console.log('   Carol        carol.reviewer@test.com       /  123');

@@ -105,7 +105,7 @@ export class AssignmentController {
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
       if (round.status !== RoundStatus.Open) {
-        return res.status(400).json({ message: 'Invitations can only be sent for Open rounds. Start the round first.' });
+        return res.status(400).json({ message: `Invitations can only be sent for Open rounds — this round is currently '${round.status}'. Use 'Approve & Start Round' to open the round and send invitations automatically.` });
       }
 
       const assignRepo = AppDataSource.getRepository(Assignment);
@@ -153,7 +153,7 @@ export class AssignmentController {
           reviewer: { id: user.id },
           status: Not(AssignmentStatus.Cancelled),
         },
-        relations: ['round', 'round.paper', 'declineRequests', 'extensions'],
+        relations: ['round', 'round.paper', 'round.paper.authors', 'declineRequests', 'extensions'],
         order: { invitedAt: 'DESC' },
       });
 
@@ -165,6 +165,16 @@ export class AssignmentController {
         AssignmentStatus.Overdue,
       ];
       const formatted = assignments.map(a => {
+        const orderedAuthors = [...(a.round.paper.authors ?? [])];
+        if (a.round.paper.authorOrder?.length) {
+          const orderMap = new Map(a.round.paper.authorOrder.map((id, index) => [id, index]));
+          orderedAuthors.sort((left, right) => {
+            const leftOrder = orderMap.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+            const rightOrder = orderMap.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+            return leftOrder - rightOrder;
+          });
+        }
+
         const resolvedDeclineRequests = (a.declineRequests ?? [])
           .filter(d => d.status !== DeclineRequestStatus.Pending && !d.dismissedByReviewer)
           .map(d => ({
@@ -203,6 +213,12 @@ export class AssignmentController {
             title: a.round.paper.title,
             abstractText: a.round.paper.abstractText,
             overleafLink: detailsVisible.includes(a.status) ? (a.round.paper.overleafLink ?? null) : null,
+            githubLink: a.round.paper.githubLink ?? null,
+            authors: orderedAuthors.map(author => ({
+              id: author.id,
+              name: author.name,
+              email: author.email,
+            })),
           },
           pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
           pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
@@ -332,7 +348,62 @@ export class AssignmentController {
   }
 
   static async sendReminders(req: AuthenticatedRequest, res: Response) {
-    res.status(501).json({ message: 'Not Implemented' });
+    try {
+      const coordinator = req.user;
+      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      }
+
+      const { assignmentIds } = req.body;
+      if (!assignmentIds || !Array.isArray(assignmentIds) || assignmentIds.length === 0) {
+        return res.status(400).json({ message: 'assignmentIds must be a non-empty array' });
+      }
+
+      const activeStatuses = new Set([
+        AssignmentStatus.Invited,
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.PendingDecline,
+      ]);
+
+      const assignRepo = AppDataSource.getRepository(Assignment);
+      let sent = 0;
+      let skipped = 0;
+
+      const assignments = await assignRepo.find({
+        where: { id: In(assignmentIds) },
+        relations: ['reviewer', 'round', 'round.paper', 'round.paper.coordinators'],
+      });
+
+      const foundIds = new Set(assignments.map(a => a.id));
+      skipped += assignmentIds.filter(id => !foundIds.has(id)).length;
+
+      for (const assignment of assignments) {
+        const isOwner = assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
+        if (!isOwner || !activeStatuses.has(assignment.status)) { skipped++; continue; }
+
+        const paperTitle = assignment.round.paper.title;
+        const deadline = assignment.deadline?.toISOString().split('T')[0] ?? 'N/A';
+
+        try {
+          await sendEmail(
+            assignment.reviewer,
+            `Reminder: Review pending for "${paperTitle}"`,
+            `Hello ${assignment.reviewer.name},\n\nThis is a reminder from the coordinator that your review for paper "${paperTitle}" (Round ${assignment.round.roundNumber}) is pending.\n\nDeadline: ${deadline}\n\nPlease log in and submit your review.`,
+          );
+          assignment.reminderSentAt = new Date();
+          await assignRepo.save(assignment);
+          sent++;
+        } catch {
+          skipped++;
+        }
+      }
+
+      return res.status(200).json({ message: `Reminders sent`, sent, skipped });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
   }
 
   static async cancelAssignment(req: AuthenticatedRequest, res: Response) {
@@ -352,6 +423,16 @@ export class AssignmentController {
 
       const isOwner = assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+
+      const cancellableStatuses = [
+        AssignmentStatus.Invited,
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingDecline,
+        AssignmentStatus.PendingExtension,
+      ];
+      if (!cancellableStatuses.includes(assignment.status)) {
+        return res.status(400).json({ message: `Cannot cancel assignment: it is currently '${assignment.status}'. Only active assignments (Invited, Accepted, PendingDecline, PendingExtension) can be cancelled.` });
+      }
 
       assignment.status = AssignmentStatus.Cancelled;
       const declinedRequestsToSave = assignment.declineRequests?.filter(request => request.status === DeclineRequestStatus.Pending) ?? [];
@@ -414,8 +495,9 @@ export class AssignmentController {
         : round.deadline;
 
       if (ceiling && newDeadline.getTime() > ceiling.getTime()) {
-        const label = round.venueCategory === 'Conference' ? 'the submission deadline' : 'the round deadline';
-        return res.status(400).json({ message: `Assignment deadline cannot exceed ${label}` });
+        const label = round.venueCategory === 'Conference' ? 'the conference submission deadline' : 'the round deadline';
+        const cap = ceiling.toISOString().split('T')[0];
+        return res.status(400).json({ message: `Assignment deadline cannot exceed ${label} (${cap}).` });
       }
 
       assignment.deadline = newDeadline;
