@@ -608,7 +608,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             <span className="px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-slate-300">
                                                 Deadline: {formatDate(round.deadline)}
                                             </span>
-                                            {round.roundStatus === 'Completed' && (isAuthor || isCoordinator) && (
+                                            {(isAuthor || isCoordinator) && (
                                                 <div className="flex gap-2 ml-2">
                                                     <button
                                                         onClick={() => handleStartAIReview(round.id)}
@@ -1421,12 +1421,12 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                         <p className="text-xs text-slate-500 mb-0.5">Round Deadline</p>
                                                         {round.status === 'Draft' && editingRoundDeadline === round.id ? (
                                                             <div className="flex items-center gap-2">
-                                                                <input type="date" value={roundDeadlineDraft} onChange={e => setRoundDeadlineDraft(e.target.value)}
-                                                                    min={todayInputValue()}
-                                                                    max={round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : undefined}
-                                                                    className="bg-background border border-white/10 rounded px-2 py-0.5 text-xs text-white" />
-                                                                <button onClick={() => handleSaveRoundDeadline(round.id)} className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-0.5 rounded text-white">Save</button>
-                                                                <button onClick={() => setEditingRoundDeadline(null)} className="text-xs text-slate-400 hover:text-white">Cancel</button>
+                                                                  <input type="date" value={roundDeadlineDraft} onChange={e => setRoundDeadlineDraft(e.target.value)}
+                                                                      min={todayInputValue()}
+                                                                      max={round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : undefined}
+                                                                      className="bg-background border border-white/10 rounded px-2 py-0.5 text-xs text-white" />
+                                                                  <button onClick={() => handleSaveRoundDeadline(round.id)} className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-0.5 rounded text-white">Save</button>
+                                                                  <button onClick={() => setEditingRoundDeadline(null)} className="text-xs text-slate-400 hover:text-white">Cancel</button>
                                                             </div>
                                                         ) : (
                                                             <div className="flex items-center gap-2">
@@ -1440,6 +1440,27 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                             </div>
                                                         )}
                                                     </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-2 pt-1 pb-2">
+                                                    <button
+                                                        onClick={() => handleStartAIReview(round.id)}
+                                                        disabled={runningAI === round.id}
+                                                        className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-xs"
+                                                        title="Run AI Post-Review Analysis"
+                                                    >
+                                                        {runningAI === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
+                                                        Run AI Review
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRunComplianceCheck(round.id, round.targetVenue)}
+                                                        disabled={runningCompliance === round.id}
+                                                        className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-xs"
+                                                        title="Run Venue Compliance Check"
+                                                    >
+                                                        {runningCompliance === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+                                                        Compliance Check
+                                                    </button>
                                                 </div>
 
                                                 {round.status === 'Draft' && (
