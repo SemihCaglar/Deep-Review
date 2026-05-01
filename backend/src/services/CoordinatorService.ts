@@ -83,6 +83,15 @@ export class CoordinatorService {
       } else {
         assignment.declineReason = declineRequest.reason;
         declineRequest.status = DeclineRequestStatus.Approved;
+
+        const extensionRepo = manager.getRepository(Extension);
+        const pendingExtensions = await extensionRepo.find({
+          where: { assignment: { id: assignment.id }, status: ExtensionStatus.Pending },
+        });
+        if (pendingExtensions.length > 0) {
+          for (const ext of pendingExtensions) ext.status = ExtensionStatus.Rejected;
+          await extensionRepo.save(pendingExtensions);
+        }
       }
 
       await declineRepository.save(declineRequest);
@@ -254,7 +263,14 @@ export class CoordinatorService {
         throw new CoordinatorServiceError(400, 'This reviewer already has an active assignment in the current round');
       }
 
-      if (oldAssignment.status !== AssignmentStatus.Declined) {
+      const statusesToMarkReassigned = new Set([
+        AssignmentStatus.Invited,
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingDecline,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.Overdue,
+      ]);
+      if (statusesToMarkReassigned.has(oldAssignment.status)) {
         oldAssignment.status = AssignmentStatus.Reassigned;
         await assignRepo.save(oldAssignment);
       }

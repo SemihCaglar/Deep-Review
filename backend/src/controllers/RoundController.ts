@@ -305,7 +305,7 @@ export class RoundController {
         await roundRepo.save(round);
       }
 
-      return res.status(200).json(round.proposedReviewers.map(u => ({ id: u.id, name: u.name })));
+      return res.status(200).json(round.proposedReviewers.map(u => ({ id: u.id, name: u.name, email: u.email })));
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -340,7 +340,7 @@ export class RoundController {
       round.proposedReviewers = (round.proposedReviewers ?? []).filter(r => r.id !== userId);
       await roundRepo.save(round);
 
-      return res.status(200).json(round.proposedReviewers.map(u => ({ id: u.id, name: u.name })));
+      return res.status(200).json(round.proposedReviewers.map(u => ({ id: u.id, name: u.name, email: u.email })));
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -367,7 +367,7 @@ export class RoundController {
         return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
       }
 
-      return res.status(200).json(round.proposedReviewers.map(u => ({ id: u.id, name: u.name })));
+      return res.status(200).json(round.proposedReviewers.map(u => ({ id: u.id, name: u.name, email: u.email })));
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -538,6 +538,7 @@ export class RoundController {
         AssignmentStatus.Accepted,
         AssignmentStatus.PendingExtension,
         AssignmentStatus.PendingDecline,
+        AssignmentStatus.Overdue,
       ]);
 
       const assignments = round.assignments ?? [];
@@ -545,9 +546,6 @@ export class RoundController {
       const statusCounts: Record<string, number> = {};
       for (const s of Object.values(AssignmentStatus)) statusCounts[s] = 0;
       for (const a of assignments) statusCounts[a.status]++;
-      if (statusCounts[AssignmentStatus.Cancelled] === 0 && statusCounts[AssignmentStatus.Reassigned] > 0) {
-        statusCounts[AssignmentStatus.Cancelled] = statusCounts[AssignmentStatus.Reassigned];
-      }
 
       const overdueAssignments = assignments
         .filter(a => activeStatuses.has(a.status) && a.deadline && a.deadline < now)

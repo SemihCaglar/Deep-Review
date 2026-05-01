@@ -19,7 +19,7 @@ Issue #24 covers:
 2. **Assignment deadline editor:** Coordinator can update a specific assignment deadline inline. The input pre-fills with the current `assignment.deadline` so the coordinator sees the existing value before editing.
 3. **Add Reviewer panel:** Coordinator selects from the `suggestReviewers` list (checkboxes). Clicking "Assign" calls `POST /assignments` followed immediately by `POST /assignments/invite` — invitation email is sent automatically without a separate button.
 4. **No standalone "Send Invitations" button:** The separate invite step was merged into the assign action. There is no UI path to assign without sending an invitation.
-5. **Pending decline requests:** Displayed per assignment. Coordinator approves or rejects inline. On approval the assignment moves to `Declined`; on rejection it stays unchanged.
+5. **Pending decline requests:** Displayed per assignment. Coordinator approves or rejects inline. On approval the assignment moves to `Declined`. On rejection the assignment reverts to `Accepted` (if the reviewer had previously accepted) or `Invited` (if the decline was submitted before accepting).
 6. **Pending extension requests:** Displayed per assignment with the reviewer's requested deadline and reason. Coordinator approves (sets `approvedDeadline`) or rejects inline.
 
 ---
@@ -28,15 +28,17 @@ Issue #24 covers:
 
 1. **Route:** `/my-reviews` in the Next.js App Router. Accessible to any authenticated user (lab members act as reviewers — there is no distinct Reviewer role).
 2. **Data source:** Page calls `GET /assignments/my` on load and after each action (`onRefresh` pattern).
-3. **Active vs Past grouping:** Assignments with status `Invited` or `Accepted` appear in the "Active Reviews" section. Assignments with status `Declined`, `Completed`, or `Cancelled` appear in "Past Reviews".
+3. **Active vs Past grouping:** Assignments with status `Invited`, `Accepted`, `PendingDecline`, or `PendingExtension` appear in the "Active Reviews" section — a pending request does not terminate an assignment without coordinator approval. Assignments with status `Declined`, `Completed`, `Overdue`, or `Cancelled` appear in "Past Reviews".
 4. **`Invited` state actions:**
-   - **Accept:** Calls `POST /responses/invitation` with `action = accept`. Assignment moves to `Accepted`.
-   - **Decline:** Opens a textarea for an optional reason, then calls `POST /responses/invitation` with `action = decline`. Creates a `DeclineRequest` (Pending). Assignment remains `Invited`. UI shows "Decline Pending Approval" badge until resolved.
+   - **Accept:** Calls `PATCH /responses/:id/accept`. Assignment moves to `Accepted`.
+   - **Decline:** Opens a textarea for a required reason, then calls `POST /responses/:id/decline-request`. Creates a `DeclineRequest` (Pending). Assignment moves to `PendingDecline`. UI shows "Decline Pending Approval" badge until resolved.
 5. **`Accepted` state actions:**
-   - **Submit Review:** Opens an optional summary textarea. Calls `POST /responses/complete`. Assignment moves to `Completed`.
+   - **Submit Review:** Opens an optional summary textarea. Calls `POST /responses/complete`. Assignment moves to `Completed`. Any pending decline or extension requests are auto-rejected on submission.
    - **Request Extension:** Opens a date picker and reason textarea. Calls `POST /responses/extension`. No maximum date constraint enforced on the frontend (mirrors the backend — only "must be after current deadline" is validated).
+   - **Request Decline:** Opens a textarea for a required reason, then calls `POST /responses/:id/decline-request`. Creates a `DeclineRequest` (Pending). Assignment moves to `PendingDecline`. UI shows "Decline Pending Approval" badge until resolved.
    - **Pending extension badge:** If a `pendingExtensionRequest` exists, it is shown as an info badge (requested date + reason). The "Request Extension" form is still accessible to overwrite a pending request.
-6. **No post-acceptance withdrawal:** The `/my-reviews` UI does not offer a "withdraw" or "decline" action to users in `Accepted` state, consistent with the removal of `POST /responses/decline`.
+6. **`PendingDecline` state actions:** Assignment is still active — the reviewer can still submit their review (calls `POST /responses/complete`, which auto-rejects the pending decline request) or update their decline reason (calls `POST /responses/:id/decline-request` again). The coordinator must explicitly approve the decline for the assignment to move to `Declined`.
+7. **`PendingExtension` state actions:** Assignment is still active — the reviewer can still submit their review (calls `POST /responses/complete`, which auto-rejects the pending extension request) or request a decline (calls `POST /responses/:id/decline-request`). The coordinator must explicitly approve the extension for the deadline to change.
 
 ---
 
@@ -98,5 +100,6 @@ Reviewers with a prior `Accepted` but not submitted assignment appear with a war
    - Complete review (with summary, double-complete error)
    - Suggestions after completion (completed reviewer excluded)
    - Cancel and re-assign (cancelled reviewer reappears in suggestions, new assignment created)
-   - Decline invitation (without reason → 400, with reason → pending, coordinator sees it)
-   - Process decline (reviewer forbidden, approve → Declined, double-process error, Declined excluded from suggestions)
+   - Decline invitation (without reason → 400, with reason → pending, coordinator sees it, assignment moves to PendingDecline)
+   - Late decline from Accepted (reviewer accepted then requests decline → PendingDecline, submission still allowed, completing auto-rejects pending decline)
+   - Process decline (reviewer forbidden, approve → Declined, reject from pre-accept → Invited, reject from post-accept → Accepted, double-process error, Declined excluded from suggestions)

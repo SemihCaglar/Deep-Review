@@ -370,28 +370,33 @@ export class AssignmentController {
       let sent = 0;
       let skipped = 0;
 
-      for (const assignmentId of assignmentIds) {
-        const assignment = await assignRepo.findOne({
-          where: { id: assignmentId },
-          relations: ['reviewer', 'round', 'round.paper', 'round.paper.coordinators'],
-        });
+      const assignments = await assignRepo.find({
+        where: { id: In(assignmentIds) },
+        relations: ['reviewer', 'round', 'round.paper', 'round.paper.coordinators'],
+      });
 
-        if (!assignment) { skipped++; continue; }
+      const foundIds = new Set(assignments.map(a => a.id));
+      skipped += assignmentIds.filter(id => !foundIds.has(id)).length;
 
+      for (const assignment of assignments) {
         const isOwner = assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
-        if (!isOwner) { skipped++; continue; }
-
-        if (!activeStatuses.has(assignment.status)) { skipped++; continue; }
+        if (!isOwner || !activeStatuses.has(assignment.status)) { skipped++; continue; }
 
         const paperTitle = assignment.round.paper.title;
         const deadline = assignment.deadline?.toISOString().split('T')[0] ?? 'N/A';
 
-        await sendEmail(
-          assignment.reviewer,
-          `Reminder: Review pending for "${paperTitle}"`,
-          `Hello ${assignment.reviewer.name},\n\nThis is a reminder from the coordinator that your review for paper "${paperTitle}" (Round ${assignment.round.roundNumber}) is pending.\n\nDeadline: ${deadline}\n\nPlease log in and submit your review.`,
-        );
-        sent++;
+        try {
+          await sendEmail(
+            assignment.reviewer,
+            `Reminder: Review pending for "${paperTitle}"`,
+            `Hello ${assignment.reviewer.name},\n\nThis is a reminder from the coordinator that your review for paper "${paperTitle}" (Round ${assignment.round.roundNumber}) is pending.\n\nDeadline: ${deadline}\n\nPlease log in and submit your review.`,
+          );
+          assignment.reminderSentAt = new Date();
+          await assignRepo.save(assignment);
+          sent++;
+        } catch {
+          skipped++;
+        }
       }
 
       return res.status(200).json({ message: `Reminders sent`, sent, skipped });
@@ -419,9 +424,14 @@ export class AssignmentController {
       const isOwner = assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
-      const cancellableStatuses = [AssignmentStatus.Invited];
+      const cancellableStatuses = [
+        AssignmentStatus.Invited,
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingDecline,
+        AssignmentStatus.PendingExtension,
+      ];
       if (!cancellableStatuses.includes(assignment.status)) {
-        return res.status(400).json({ message: `Cannot cancel assignment: it is currently '${assignment.status}'. Only Invited assignments can be cancelled.` });
+        return res.status(400).json({ message: `Cannot cancel assignment: it is currently '${assignment.status}'. Only active assignments (Invited, Accepted, PendingDecline, PendingExtension) can be cancelled.` });
       }
 
       assignment.status = AssignmentStatus.Cancelled;

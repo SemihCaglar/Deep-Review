@@ -273,10 +273,18 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
     const handleSaveLinks = async () => {
         setLinksError('');
+        const trimmedOverleafLink = localOverleafLink.trim();
+        const trimmedGithubLink = localGithubLink.trim();
+        if (trimmedOverleafLink && !/^https?:\/\/(www\.)?overleaf\.com\//i.test(trimmedOverleafLink)) {
+            setLinksError('Overleaf link must be a valid Overleaf URL (e.g. https://www.overleaf.com/...)');
+            return;
+        }
+        if (trimmedGithubLink && !/^https?:\/\/(www\.)?github\.com\//i.test(trimmedGithubLink)) {
+            setLinksError('GitHub link must be a valid GitHub URL (e.g. https://github.com/...)');
+            return;
+        }
         setSavingLinks(true);
         try {
-            const trimmedOverleafLink = localOverleafLink.trim();
-            const trimmedGithubLink = localGithubLink.trim();
             try {
                 await updateOverleafLinkRequest(paper.id, trimmedOverleafLink);
             } catch (err) {
@@ -1115,7 +1123,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                             )}
                         </div>
 
-                        {isEditingAbstract ? (
+                        {isEditingAbstract && canEditAbstract ? (
                             <div className="space-y-3">
                                 <textarea
                                     value={localAbstract}

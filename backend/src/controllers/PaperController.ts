@@ -77,13 +77,25 @@ export class PaperController {
   static async linkParentPapers(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
-  static async updateAbstract(req: Request<{ id: string }>, res: Response) {
+  static async updateAbstract(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const id = req.params.id as string;
       const { abstract } = req.body;
       if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-      const paper = await PaperService.updateAbstract(id, abstract);
-      res.status(200).json(paper);
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({ where: { id }, relations: ['coordinators', 'authors'] });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const canEdit = paper.coordinators?.some(c => c.id === user.id)
+        || paper.authors?.some(a => a.id === user.id);
+      if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
+
+      const updated = await PaperService.updateAbstract(id, abstract);
+      res.status(200).json(updated);
     } catch (e: any) {
       if (e.message === 'Paper not found') {
         return res.status(404).json({ message: e.message });
@@ -511,9 +523,15 @@ export class PaperController {
       if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
 
       const normalizedOverleafLink = overleafLink.trim();
+      if (normalizedOverleafLink && !/^https?:\/\/(www\.)?overleaf\.com\//i.test(normalizedOverleafLink)) {
+        return res.status(400).json({ message: 'Overleaf link must be a valid Overleaf URL (e.g. https://www.overleaf.com/...)' });
+      }
       paper.overleafLink = normalizedOverleafLink || null!;
       if (githubLink !== undefined) {
         const normalizedGithubLink = githubLink.trim();
+        if (normalizedGithubLink && !/^https?:\/\/(www\.)?github\.com\//i.test(normalizedGithubLink)) {
+          return res.status(400).json({ message: 'GitHub link must be a valid GitHub URL (e.g. https://github.com/...)' });
+        }
         paper.githubLink = normalizedGithubLink || null;
       }
       await paperRepo.save(paper);
@@ -554,6 +572,9 @@ export class PaperController {
       if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
 
       const normalizedGithubLink = githubLink.trim();
+      if (normalizedGithubLink && !/^https?:\/\/(www\.)?github\.com\//i.test(normalizedGithubLink)) {
+        return res.status(400).json({ message: 'GitHub link must be a valid GitHub URL (e.g. https://github.com/...)' });
+      }
       paper.githubLink = normalizedGithubLink || null;
       await paperRepo.save(paper);
 

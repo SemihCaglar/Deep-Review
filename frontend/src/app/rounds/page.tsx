@@ -134,9 +134,13 @@ function AssignmentRow({
     setBusy(true);
     setError('');
     try {
-      await sendRemindersRequest([assignment.id]);
-      setReminderSent(true);
-      setTimeout(() => setReminderSent(false), 3000);
+      const result = await sendRemindersRequest([assignment.id]);
+      if (result.sent > 0) {
+        setReminderSent(true);
+        setTimeout(() => setReminderSent(false), 3000);
+      } else {
+        setError('Reminder was not sent (assignment may not be in an active state).');
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to send reminder');
     } finally {

@@ -147,13 +147,6 @@ export class RoundService {
     const now = new Date();
 
     const assignRepo = AppDataSource.getRepository(Assignment);
-    const overdueAssignments = await assignRepo.find({
-      where: {
-        deadline: LessThan(now),
-        status: AssignmentStatus.Invited,
-      },
-      relations: ['round', 'round.paper', 'round.paper.coordinators', 'reviewer'],
-    });
 
     const activeStatuses = [
       AssignmentStatus.Invited,

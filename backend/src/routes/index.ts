@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { AccountController } from '../controllers/AccountController';
 import { AdminController } from '../controllers/AdminController';
-import { AIReviewController } from '../controllers/AIReviewController';
 import { AssignmentController } from '../controllers/AssignmentController';
 import { CoordinatorController } from '../controllers/CoordinatorController';
 import { PaperController } from '../controllers/PaperController';
@@ -57,14 +56,6 @@ router.get('/labs/:labId/topics', authenticateRequest, TopicController.getLabTop
 router.post('/labs/:labId/topics', authenticateRequest, TopicController.addTopicToLab);
 router.put('/labs/:labId/topics/:topicId', authenticateRequest, TopicController.updateTopicInLab);
 router.delete('/labs/:labId/topics/:topicId', authenticateRequest, TopicController.removeTopicFromLab);
-
-// ==== AI REVIEW ROUTES ====
-router.post('/ai/review', AIReviewController.runAIReview);
-router.get('/ai/report', AIReviewController.generateReviewReport);
-router.get('/ai/pdf', AIReviewController.generateAnnotatedPDF);
-router.get('/ai/scan', AIReviewController.performPCRelatedWorkScan);
-router.get('/ai/checklist', AIReviewController.getChecklist);
-router.post('/ai/validate', AIReviewController.validateAIOutput);
 
 // ==== ASSIGNMENT ROUTES ====
 router.get('/assignments/my', authenticateRequest, AssignmentController.getMyAssignments);
@@ -133,7 +124,7 @@ router.get('/rounds/:id/propose', authenticateRequest, RoundController.getPropos
 router.get('/rounds/:id/status', authenticateRequest, RoundController.trackReviewStatus);
 router.post('/rounds/:id/close', RoundController.closeRound);
 router.post('/rounds/next', authenticateRequest, RoundController.createReviewRound);
-router.post('/rounds/:id/ai', RoundController.startAIReview);
+router.post('/rounds/:id/ai', authenticateRequest, RoundController.startAIReview);
 router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
 router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistItem);
 router.put('/rounds/:id/checklist/:itemId', RoundController.updateChecklistItem);
