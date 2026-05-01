@@ -219,6 +219,7 @@ export class PaperController {
           'rounds.assignments.reviewer',
           'rounds.assignments.extensions',
           'rounds.assignments.declineRequests',
+          'rounds.assignments.rating',
           'rounds.checklistItems',
           'rounds.aiReviewReports',
           'labs',
@@ -264,6 +265,7 @@ export class PaperController {
             acceptedAt: assignment.acceptedAt,
             submittedAt: assignment.submittedAt,
             declineReason: assignment.declineReason,
+            hasRating: !!assignment.rating,
             declineRequests: (assignment.declineRequests ?? [])
               .slice()
               .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime())

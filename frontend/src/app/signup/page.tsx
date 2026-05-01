@@ -33,7 +33,7 @@ export default function SignupPage() {
     }
 
     if (!labId) {
-      setError('Please select your lab.');
+      setError('Please select a lab for signup.');
       return;
     }
 

@@ -266,6 +266,7 @@ export type PaperHistoryAssignment = {
   acceptedAt: string | null;
   submittedAt: string | null;
   declineReason: string | null;
+  hasRating?: boolean;
   declineRequests: PaperHistoryDeclineRequest[];
   extensions: PaperHistoryExtension[];
 };
@@ -738,6 +739,13 @@ export function getOverallAnalyticsRequest() {
   return apiRequest<OverallAnalyticsResponse>('/ratings/overall');
 }
 
+export function submitRatingRequest(assignmentId: string, qualityScore: number, quantityScore: number, timeScore: number) {
+  return apiRequest<{ message: string; rating: any }>('/ratings', {
+    method: 'POST',
+    body: { assignmentId, qualityScore, quantityScore, timeScore },
+  });
+}
+
 export function getUserAnalyticsRequest(userId: string) {
   return apiRequest<UserAnalyticsResponse>(`/ratings/user/${userId}`);
 }
@@ -823,4 +831,8 @@ function getErrorMessage(payload: unknown, fallback: string) {
   }
 
   return fallback || 'Request failed';
+}
+
+export function createUserRequest(data: { name: string; email: string; role: string; password?: string }) {
+  return apiRequest('/admin/users', { method: 'POST', body: data });
 }

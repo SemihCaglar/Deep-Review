@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Cpu, Download, ShieldCheck, Search } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Star, Cpu, Download, ShieldCheck, Search } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
@@ -14,8 +14,8 @@ import {
   AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest,
   getSuggestedReviewersRequest, SuggestedReviewer,
   getProposedReviewersRequest, addProposedReviewerRequest, removeProposedReviewerRequest,
-  updateOverleafLinkRequest, updatePaperStatusRequest,
-  startAIReviewRequest, runComplianceCheckRequest, getVenueRulesRequest,
+  updateOverleafLinkRequest, updateGithubLinkRequest, updatePaperStatusRequest,
+  submitRatingRequest, startAIReviewRequest, runComplianceCheckRequest, getVenueRulesRequest,
 } from '@/lib/api';
 
 
@@ -106,6 +106,15 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [roundErrors, setRoundErrors] = useState<Record<string, string>>({});
     const [editingRoundDeadline, setEditingRoundDeadline] = useState<string | null>(null);
     const [roundDeadlineDraft, setRoundDeadlineDraft] = useState('');
+
+    // Rating Modal state
+    const [ratingModalOpen, setRatingModalOpen] = useState(false);
+    const [ratingAssignmentId, setRatingAssignmentId] = useState<string | null>(null);
+    const [qualityScore, setQualityScore] = useState(5);
+    const [quantityScore, setQuantityScore] = useState(5);
+    const [timeScore, setTimeScore] = useState(5);
+    const [submittingRating, setSubmittingRating] = useState(false);
+    const [ratingError, setRatingError] = useState('');
 
     useEffect(() => {
         const fetchData = async () => {
@@ -464,6 +473,40 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
+    const handleOpenRatingModal = (assignmentId: string) => {
+        setRatingAssignmentId(assignmentId);
+        setQualityScore(5);
+        setQuantityScore(5);
+        setTimeScore(5);
+        setRatingError('');
+        setRatingModalOpen(true);
+    };
+
+    const handleSubmitRating = async () => {
+        if (!ratingAssignmentId) return;
+        setSubmittingRating(true);
+        setRatingError('');
+        try {
+            await submitRatingRequest(ratingAssignmentId, qualityScore, quantityScore, timeScore);
+            if (paperHistory) {
+                const updatedHistory = { ...paperHistory };
+                updatedHistory.rounds.forEach(r => {
+                    r.assignments.forEach(a => {
+                        if (a.assignmentId === ratingAssignmentId) {
+                            a.hasRating = true;
+                        }
+                    });
+                });
+                setPaperHistory(updatedHistory);
+            }
+            setRatingModalOpen(false);
+        } catch (e) {
+            setRatingError(e instanceof ApiError ? e.message : 'Failed to submit rating');
+        } finally {
+            setSubmittingRating(false);
+        }
+    };
+
     const formatDate = (value?: string | null) => {
         if (!value) return 'Not set';
         return new Date(value).toLocaleDateString();
@@ -677,6 +720,26 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                             </div>
                                                         </div>
                                                     ))}
+                                                </div>
+                                            )}
+
+                                            {assignment.status === 'Completed' && isAuthor && !assignment.hasRating && (
+                                                <div className="mt-4 flex justify-end">
+                                                    <button
+                                                        onClick={() => handleOpenRatingModal(assignment.assignmentId)}
+                                                        className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors"
+                                                    >
+                                                        <Star className="w-4 h-4" />
+                                                        Rate Reviewer
+                                                    </button>
+                                                </div>
+                                            )}
+                                            {assignment.status === 'Completed' && isAuthor && assignment.hasRating && (
+                                                <div className="mt-4 flex justify-end">
+                                                    <span className="flex items-center gap-2 px-3 py-1.5 text-slate-400 bg-white/5 border border-white/10 text-xs font-medium rounded-lg">
+                                                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                                        Review Rated
+                                                    </span>
                                                 </div>
                                             )}
                                         </div>
@@ -1701,6 +1764,80 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
                 </div>
             </div>
+
+            {/* Rating Modal */}
+            {ratingModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
+                        <button
+                            onClick={() => setRatingModalOpen(false)}
+                            className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+                        >
+                            <XCircle className="w-5 h-5" />
+                        </button>
+                        <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                            <Star className="w-5 h-5 text-amber-400" />
+                            Rate Reviewer
+                        </h2>
+                        <p className="text-sm text-slate-400 mb-6">
+                            Provide feedback on this review. This information is only visible to the lab coordinator.
+                        </p>
+
+                        {ratingError && (
+                            <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                                {ratingError}
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2 flex justify-between">
+                                    <span>Quality Score</span>
+                                    <span className="text-amber-400">{qualityScore}/5</span>
+                                </label>
+                                <input type="range" min="1" max="5" value={qualityScore} onChange={(e) => setQualityScore(parseInt(e.target.value))} className="w-full accent-blue-500" />
+                                <p className="text-xs text-slate-500 mt-1">How thorough and helpful was the review?</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2 flex justify-between">
+                                    <span>Quantity Score</span>
+                                    <span className="text-amber-400">{quantityScore}/5</span>
+                                </label>
+                                <input type="range" min="1" max="5" value={quantityScore} onChange={(e) => setQuantityScore(parseInt(e.target.value))} className="w-full accent-blue-500" />
+                                <p className="text-xs text-slate-500 mt-1">Was there a sufficient amount of feedback?</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2 flex justify-between">
+                                    <span>Timeliness Score</span>
+                                    <span className="text-amber-400">{timeScore}/5</span>
+                                </label>
+                                <input type="range" min="1" max="5" value={timeScore} onChange={(e) => setTimeScore(parseInt(e.target.value))} className="w-full accent-blue-500" />
+                                <p className="text-xs text-slate-500 mt-1">Did the reviewer respect the deadlines?</p>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 flex justify-end gap-3">
+                            <button
+                                onClick={() => setRatingModalOpen(false)}
+                                className="px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 transition-colors text-sm font-medium"
+                                disabled={submittingRating}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSubmitRating}
+                                disabled={submittingRating}
+                                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-colors flex items-center gap-2 text-sm font-medium disabled:opacity-50"
+                            >
+                                {submittingRating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                                {submittingRating ? 'Submitting...' : 'Submit Rating'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

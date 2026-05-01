@@ -17,6 +17,7 @@ import {
   CheckCircle,
   XCircle,
   ArrowRight,
+  Search,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { confirmCancel } from '@/lib/confirmAction';
@@ -129,6 +130,47 @@ export default function AdminPage() {
 }
 
 function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleCreateUser = async () => {
+    if (!newName.trim() || !newEmail.trim()) {
+      setErrorMsg('Name and email are required');
+      return;
+    }
+    if (!newPassword) {
+      setErrorMsg('Password is required');
+      return;
+    }
+    setIsSubmitting(true);
+    setErrorMsg('');
+    try {
+      await apiRequest('/admin/users', {
+        method: 'POST',
+        body: { name: newName, email: newEmail, role: 'LabMember', password: newPassword }
+      });
+      setShowCreateModal(false);
+      setNewName('');
+      setNewEmail('');
+      setNewPassword('');
+      refresh();
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Failed to create user');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const filteredUsers = (users ?? []).filter((u: any) =>
+    u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    u.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const handleLock = async (id: string, isLocked: boolean) => {
     try {
       await apiRequest(`/admin/users/${id}/${isLocked ? 'unlock' : 'lock'}`, { method: 'POST' });
@@ -146,12 +188,97 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
 
   return (
     <div className="glass rounded-2xl border border-white/10 overflow-hidden">
-      <div className="p-6 border-b border-white/5 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-white">System Users</h2>
-        <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors">
-          <PlusSquare className="w-4 h-4" />
-          Create User
-        </button>
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl relative">
+            <button
+              onClick={() => setShowCreateModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+            <h3 className="text-xl font-bold text-white mb-2">Create Lab Member</h3>
+            <p className="text-sm text-slate-400 mb-6">Create a new Lab Member account. To create a Coordinator, use the Labs tab.</p>
+
+            {errorMsg && (
+              <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {errorMsg}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="John Doe"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="john@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter a secure password"
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end gap-3">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateUser}
+                disabled={isSubmitting}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {isSubmitting ? 'Creating...' : 'Create User'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="p-6 border-b border-white/5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white">System Users</h2>
+          <button 
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors"
+          >
+            <PlusSquare className="w-4 h-4" />
+            Create Lab Member
+          </button>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search by name or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+          />
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
@@ -164,7 +291,7 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {users?.map((u: any) => (
+            {filteredUsers.map((u: any) => (
               <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
@@ -202,13 +329,15 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
                     >
                       {u.lockedUntil ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
                     </button>
-                    <button
-                      onClick={() => handleDelete(u.id)}
-                      className="p-2 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {u.role !== 'Coordinator' && (
+                      <button
+                        onClick={() => handleDelete(u.id)}
+                        className="p-2 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -221,25 +350,41 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
 }
 
 function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
-  const [assigningLabId, setAssigningLabId] = useState<string | null>(null);
-  const [allCoordinators, setAllCoordinators] = useState<any[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [newLabName, setNewLabName] = useState('');
-
-  useEffect(() => {
-    apiRequest<any[]>('/admin/users')
-      .then(users => setAllCoordinators(users.filter((u: any) => u.role === 'Coordinator')))
-      .catch(() => {});
-  }, []);
+  const [newLabDesc, setNewLabDesc] = useState('');
+  const [coordName, setCoordName] = useState('');
+  const [coordEmail, setCoordEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCreate = async () => {
-    if (!newLabName.trim()) return;
+    if (isSubmitting) return;
+    if (!newLabName.trim()) { alert('Lab name is required'); return; }
+    if (!coordName.trim()) { alert('Coordinator name is required'); return; }
+    if (!coordEmail.trim()) { alert('Coordinator email is required'); return; }
+    
+    setIsSubmitting(true);
     try {
-      await apiRequest('/admin/labs', { method: 'POST', body: { name: newLabName } });
+      await apiRequest('/admin/labs', { 
+        method: 'POST', 
+        body: { 
+          name: newLabName, 
+          description: newLabDesc,
+          coordinatorName: coordName,
+          coordinatorEmail: coordEmail 
+        } 
+      });
       setNewLabName('');
+      setNewLabDesc('');
+      setCoordName('');
+      setCoordEmail('');
       setIsCreating(false);
       refresh();
-    } catch (err: any) { alert(err.message); }
+    } catch (err: any) { 
+      alert(err.message); 
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -250,46 +395,8 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
     } catch (err: any) { alert(err.message); }
   };
 
-  const handleAssign = async (coordinatorId: string) => {
-    if (!assigningLabId) return;
-    try {
-      await apiRequest('/admin/labs/coordinator', {
-        method: 'POST',
-        body: { labId: assigningLabId, coordinatorId },
-      });
-      setAssigningLabId(null);
-      refresh();
-    } catch (err: any) { alert(err.message); }
-  };
-
   return (
     <div className="space-y-6">
-      {assigningLabId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass rounded-2xl border border-white/10 p-6 max-w-md w-full animate-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-semibold text-white mb-4">Assign Coordinator</h3>
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-              {allCoordinators.map(u => (
-                <button
-                  key={u.id}
-                  onClick={() => handleAssign(u.id)}
-                  className="w-full p-3 rounded-xl bg-white/5 hover:bg-blue-600/20 text-left border border-white/5 hover:border-blue-500/50 transition-all flex items-center justify-between group"
-                >
-                  <span className="text-sm text-slate-200">{u.name}</span>
-                  <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400" />
-                </button>
-              ))}
-              {allCoordinators.length === 0 && <p className="text-slate-500 italic text-center py-4">No coordinators found.</p>}
-            </div>
-            <button
-              onClick={async () => { if (await confirmCancel()) setAssigningLabId(null); }}
-              className="w-full mt-6 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <div className="glass rounded-2xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center p-8 text-center hover:border-blue-500/50 transition-all group">
@@ -308,18 +415,51 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
               </button>
             </>
           ) : (
-            <div className="w-full space-y-4">
+            <div className="w-full space-y-4 text-left">
               <input
                 type="text"
-                placeholder="Enter lab name..."
+                placeholder="Lab Name"
                 value={newLabName}
                 onChange={(e) => setNewLabName(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 autoFocus
               />
-              <div className="flex gap-2">
-                <button onClick={handleCreate} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors">Create</button>
-                <button onClick={async () => { if (await confirmCancel()) setIsCreating(false); }} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors">Cancel</button>
+              <input
+                type="text"
+                placeholder="Lab Description (Optional)"
+                value={newLabDesc}
+                onChange={(e) => setNewLabDesc(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="text"
+                placeholder="Coordinator Name"
+                value={coordName}
+                onChange={(e) => setCoordName(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="email"
+                placeholder="Coordinator Email"
+                value={coordEmail}
+                onChange={(e) => setCoordEmail(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="flex gap-2 pt-2">
+                <button 
+                  disabled={isSubmitting}
+                  onClick={handleCreate} 
+                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Creating...' : 'Create'}
+                </button>
+                <button 
+                  disabled={isSubmitting}
+                  onClick={() => setIsCreating(false)} 
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
@@ -350,13 +490,6 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
                   <span className="text-red-400/70 font-medium italic">Unassigned</span>
                 )}
               </div>
-              <button
-                onClick={() => setAssigningLabId(lab.id)}
-                className="w-full py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
-              >
-                {lab.coordinator ? 'Change Coordinator' : 'Assign Coordinator'}
-                <ArrowRight className="w-3 h-3" />
-              </button>
             </div>
           </div>
         ))}
