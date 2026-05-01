@@ -50,3 +50,4 @@ yarn-error.log*
 db/test.sqlite
 semih/
 backend/src/ai_content/secrets.yaml
+db/esra_m1.sqlite
