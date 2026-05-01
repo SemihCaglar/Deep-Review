@@ -25,6 +25,7 @@ import {
   processExtensionRequestApi,
   createRoundRequest,
   editRoundDeadlineRequest,
+  editSubmissionDeadlineRequest,
   updateRoundDetailsRequest,
   reassignReviewerRequest,
   updateOverleafLinkRequest,
@@ -78,6 +79,15 @@ function todayInputValue() {
   return new Date().toISOString().split('T')[0];
 }
 
+function dateInputToUtcIso(value: string) {
+  return `${value}T00:00:00.000Z`;
+}
+
+function maxDateInputValue(...values: Array<string | null | undefined>) {
+  const sorted = values.filter((value): value is string => Boolean(value)).sort();
+  return sorted[sorted.length - 1];
+}
+
 // ── Assignment row ────────────────────────────────────────────────────────────
 
 function AssignmentRow({
@@ -121,7 +131,7 @@ function AssignmentRow({
 
   const handleUpdateDeadline = () =>
     act(async () => {
-      await updateAssignmentDeadlineRequest(assignment.id, new Date(newDeadline).toISOString());
+      await updateAssignmentDeadlineRequest(assignment.id, dateInputToUtcIso(newDeadline));
       setShowDeadlineInput(false);
     });
 
@@ -133,7 +143,7 @@ function AssignmentRow({
       await processExtensionRequestApi(
         assignment.pendingExtensionRequest!.id,
         decision,
-        decision === 'approve' ? new Date(approvedDeadline).toISOString() : undefined,
+        decision === 'approve' ? dateInputToUtcIso(approvedDeadline) : undefined,
       );
       setShowExtApprove(false);
     });
@@ -547,10 +557,14 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
   const [savingDeadline, setSavingDeadline] = useState(false);
   const [deadlineError, setDeadlineError] = useState('');
 
+  const [editingSubmissionDeadline, setEditingSubmissionDeadline] = useState(false);
+  const [draftSubmissionDeadline, setDraftSubmissionDeadline] = useState(round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : '');
+  const [savingSubmissionDeadline, setSavingSubmissionDeadline] = useState(false);
+  const [submissionDeadlineError, setSubmissionDeadlineError] = useState('');
+
   const [editingDetails, setEditingDetails] = useState(false);
   const [draftVenueName, setDraftVenueName] = useState(round.targetVenue || '');
-  const [draftVenueUrl, setDraftVenueUrl] = useState((round as any).targetVenueUrl || '');
-  const [draftSubDeadline, setDraftSubDeadline] = useState(round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : '');
+  const [draftVenueUrl, setDraftVenueUrl] = useState(round.targetVenueUrl || '');
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState('');
 
@@ -560,24 +574,19 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
       setDetailsError('Venue name is required.');
       return;
     }
-    if (draftVenueUrl.trim() && !/^https?:\/\/.+/i.test(draftVenueUrl.trim())) {
+    if (!draftVenueUrl.trim()) {
+      setDetailsError('Venue URL is required.');
+      return;
+    }
+    if (!/^https?:\/\/.+/i.test(draftVenueUrl.trim())) {
       setDetailsError('Venue URL must start with http:// or https://.');
-      return;
-    }
-    if (round.venueCategory === 'Conference' && !draftSubDeadline) {
-      setDetailsError('Submission deadline is required for Conference rounds.');
-      return;
-    }
-    if (draftSubDeadline && draftDeadline && new Date(draftSubDeadline) < new Date(draftDeadline)) {
-      setDetailsError(`Submission deadline must be on or after the round deadline (${draftDeadline}).`);
       return;
     }
     setSavingDetails(true);
     try {
       await updateRoundDetailsRequest(round.id, {
         targetVenue: draftVenueName.trim(),
-        targetVenueUrl: draftVenueUrl.trim() || null,
-        ...(round.venueCategory === 'Conference' ? { submissionDeadline: draftSubDeadline ? new Date(draftSubDeadline).toISOString() : null } : {}),
+        targetVenueUrl: draftVenueUrl.trim(),
       });
       setEditingDetails(false);
       onRefresh();
@@ -593,13 +602,28 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
     setSavingDeadline(true);
     setDeadlineError('');
     try {
-      await editRoundDeadlineRequest(round.id, new Date(draftDeadline).toISOString());
+      await editRoundDeadlineRequest(round.id, dateInputToUtcIso(draftDeadline));
       setEditingDeadline(false);
       onRefresh();
     } catch (e) {
       setDeadlineError(e instanceof ApiError ? e.message : 'Failed to update deadline');
     } finally {
       setSavingDeadline(false);
+    }
+  };
+
+  const handleEditSubmissionDeadline = async () => {
+    if (!draftSubmissionDeadline) return;
+    setSavingSubmissionDeadline(true);
+    setSubmissionDeadlineError('');
+    try {
+      await editSubmissionDeadlineRequest(round.id, dateInputToUtcIso(draftSubmissionDeadline));
+      setEditingSubmissionDeadline(false);
+      onRefresh();
+    } catch (e) {
+      setSubmissionDeadlineError(e instanceof ApiError ? e.message : 'Failed to update submission deadline');
+    } finally {
+      setSavingSubmissionDeadline(false);
     }
   };
 
@@ -733,7 +757,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                       <AlertCircle className="w-3.5 h-3.5" /> Set the Overleaf link before approving
                     </p>
                   )}
-                  {!(round as any).targetVenueUrl?.trim() && (
+                  {!round.targetVenueUrl?.trim() && (
                     <p className="text-xs text-red-400 flex items-center gap-1">
                       <AlertCircle className="w-3.5 h-3.5" /> Set the venue URL before approving
                     </p>
@@ -742,7 +766,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                   {approveError && <p className="text-xs text-red-400 max-w-xs text-right">{approveError}</p>}
                   <button
                     onClick={handleApproveRound}
-                    disabled={approving || !paperHasOverleafLink || !(round as any).targetVenueUrl?.trim() || proposedReviewers.length === 0}
+                    disabled={approving || !paperHasOverleafLink || !round.targetVenueUrl?.trim() || proposedReviewers.length === 0}
                     title={proposedReviewers.length === 0 ? 'Add at least one proposed reviewer before approving' : undefined}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
@@ -759,19 +783,16 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                   {!editingDetails ? (
                     <div className="flex items-center gap-2">
                       <p className="text-white font-medium">{round.targetVenue || '—'}</p>
-                      <button onClick={() => { setDraftVenueName(round.targetVenue || ''); setDraftVenueUrl((round as any).targetVenueUrl || ''); setDraftSubDeadline(round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : ''); setDetailsError(''); setEditingDetails(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
+                      <button onClick={() => { setDraftVenueName(round.targetVenue || ''); setDraftVenueUrl(round.targetVenueUrl || ''); setDetailsError(''); setEditingDetails(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
                     </div>
                   ) : (
                     <div className="space-y-2 sm:col-span-2">
                       <div className="flex flex-col gap-2">
                         <input type="text" value={draftVenueName} onChange={(e) => setDraftVenueName(e.target.value)} placeholder="Venue name" className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white w-full" />
-                        <input type="url" value={draftVenueUrl} onChange={(e) => setDraftVenueUrl(e.target.value)} placeholder="Venue URL (optional)" className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white w-full" />
-                        {round.venueCategory === 'Conference' && (
-                          <input type="date" value={draftSubDeadline} onChange={(e) => setDraftSubDeadline(e.target.value)} min={todayInputValue()} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
-                        )}
+                        <input type="url" value={draftVenueUrl} onChange={(e) => setDraftVenueUrl(e.target.value)} placeholder="Venue URL" className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white w-full" />
                         {detailsError && <p className="text-xs text-red-400">{detailsError}</p>}
                         <div className="flex gap-2">
-                          <button onClick={handleSaveDetails} disabled={savingDetails || !draftVenueName} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50">{savingDetails ? 'Saving…' : 'Save'}</button>
+                          <button onClick={handleSaveDetails} disabled={savingDetails || !draftVenueName.trim() || !draftVenueUrl.trim()} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50">{savingDetails ? 'Saving…' : 'Save'}</button>
                           <button onClick={() => setEditingDetails(false)} className="px-3 py-1 text-xs text-slate-400 hover:text-white">Cancel</button>
                         </div>
                       </div>
@@ -780,8 +801,8 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                 </div>
                 <div>
                   <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Venue URL</p>
-                  {(round as any).targetVenueUrl ? (
-                    <a href={(round as any).targetVenueUrl} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 text-sm truncate block">{(round as any).targetVenueUrl}</a>
+                  {round.targetVenueUrl ? (
+                    <a href={round.targetVenueUrl} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 text-sm truncate block">{round.targetVenueUrl}</a>
                   ) : (
                     <p className="text-slate-500 text-sm">—</p>
                   )}
@@ -793,7 +814,21 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                 {round.venueCategory === 'Conference' && (
                   <div>
                     <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Submission Deadline</p>
-                    <p className="text-white font-medium">{formatDate(round.submissionDeadline)}</p>
+                    {!editingSubmissionDeadline ? (
+                      <div className="flex items-center gap-2">
+                        <p className="text-white font-medium">{formatDate(round.submissionDeadline)}</p>
+                        <button onClick={() => { setDraftSubmissionDeadline(round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : ''); setEditingSubmissionDeadline(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <input type="date" value={draftSubmissionDeadline} onChange={(e) => { setDraftSubmissionDeadline(e.target.value); setSubmissionDeadlineError(''); }} min={maxDateInputValue(todayInputValue(), draftDeadline || (round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : undefined))} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
+                          <button onClick={handleEditSubmissionDeadline} disabled={savingSubmissionDeadline || !draftSubmissionDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white disabled:opacity-50">Save</button>
+                          <button onClick={async () => { if (await confirmCancel()) { setEditingSubmissionDeadline(false); setSubmissionDeadlineError(''); } }} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
+                        </div>
+                        {submissionDeadlineError && <p className="text-xs text-red-400">{submissionDeadlineError}</p>}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div>
@@ -806,8 +841,8 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                   ) : (
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <input type="date" value={draftDeadline} onChange={(e) => { setDraftDeadline(e.target.value); setDeadlineError(''); }} min={todayInputValue()} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
-                        <button onClick={handleEditDeadline} disabled={savingDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white">Save</button>
+                        <input type="date" value={draftDeadline} onChange={(e) => { setDraftDeadline(e.target.value); setDeadlineError(''); }} min={todayInputValue()} max={round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : undefined} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
+                        <button onClick={handleEditDeadline} disabled={savingDeadline || !draftDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white disabled:opacity-50">Save</button>
                         <button onClick={async () => { if (await confirmCancel()) { setEditingDeadline(false); setDeadlineError(''); } }} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
                       </div>
                       {deadlineError && <p className="text-xs text-red-400">{deadlineError}</p>}
@@ -1299,16 +1334,32 @@ export default function RoundsPage() {
 
   const handleCreateRound = async () => {
     if (!selectedPaperId || !user.id) return;
+    if (!newRoundTargetVenue.trim()) {
+      setCreateError('Venue name is required.');
+      return;
+    }
+    if (!newRoundTargetVenueUrl.trim()) {
+      setCreateError('Venue URL is required.');
+      return;
+    }
+    if (!/^https?:\/\/.+/i.test(newRoundTargetVenueUrl.trim())) {
+      setCreateError('Venue URL must start with http:// or https://.');
+      return;
+    }
+    if (newRoundVenueCat === 'Conference' && !newRoundSubDeadline) {
+      setCreateError('Submission deadline is required for Conference rounds.');
+      return;
+    }
     setCreatingRound(true);
     setCreateError('');
     try {
       await createRoundRequest(
         selectedPaperId,
-        newRoundTargetVenue,
+        newRoundTargetVenue.trim(),
         newRoundVenueCat,
-        newRoundVenueCat === 'Conference' ? newRoundSubDeadline : undefined,
-        newRoundDeadline || undefined,
-        newRoundTargetVenueUrl || undefined,
+        newRoundVenueCat === 'Conference' ? dateInputToUtcIso(newRoundSubDeadline) : undefined,
+        newRoundDeadline ? dateInputToUtcIso(newRoundDeadline) : undefined,
+        newRoundTargetVenueUrl.trim(),
       );
       setShowCreateRound(false);
       setNewRoundTargetVenue('');
@@ -1456,7 +1507,7 @@ export default function RoundsPage() {
                    />
                  </div>
                  <div className="space-y-1 sm:col-span-2">
-                   <label className="text-xs text-slate-400 uppercase tracking-wider">Venue URL <span className="normal-case text-slate-500">(optional)</span></label>
+                   <label className="text-xs text-slate-400 uppercase tracking-wider">Venue URL</label>
                    <input
                      type="url"
                      value={newRoundTargetVenueUrl}
@@ -1493,7 +1544,7 @@ export default function RoundsPage() {
                <div className="flex gap-3 pt-2">
                  <button
                    onClick={handleCreateRound}
-                   disabled={creatingRound || !newRoundTargetVenue || (newRoundVenueCat === 'Conference' && !newRoundSubDeadline)}
+                   disabled={creatingRound || !newRoundTargetVenue.trim() || !newRoundTargetVenueUrl.trim() || (newRoundVenueCat === 'Conference' && !newRoundSubDeadline)}
                    className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors"
                  >
                    {creatingRound ? 'Saving...' : 'Create Draft'}

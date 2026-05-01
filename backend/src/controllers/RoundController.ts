@@ -10,6 +10,34 @@ import { RoundService, RoundServiceError } from '../services/RoundService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class RoundController {
+  private static parseDate(value: unknown): Date | null {
+    if (typeof value !== 'string' && !(value instanceof Date)) {
+      return null;
+    }
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private static parseRequiredUrl(value: unknown): string | null {
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    if (!/^https?:\/\/.+/i.test(trimmed)) {
+      return null;
+    }
+
+    return trimmed;
+  }
+
+  private static isBeforeTodayUtc(value: Date): boolean {
+    const todayUtc = new Date().toISOString().split('T')[0];
+    const valueUtc = value.toISOString().split('T')[0];
+    return valueUtc < todayUtc;
+  }
+
   static async createReviewRound(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -21,6 +49,11 @@ export class RoundController {
         return res.status(400).json({ message: 'Missing required fields: paperId, targetVenue, venueCategory' });
       }
 
+      const normalizedVenueUrl = RoundController.parseRequiredUrl(targetVenueUrl);
+      if (!normalizedVenueUrl) {
+        return res.status(400).json({ message: 'targetVenueUrl is required and must start with http:// or https://' });
+      }
+
       if (!Object.values(VenueCategory).includes(venueCategory)) {
         return res.status(400).json({ message: `venueCategory must be one of: ${Object.values(VenueCategory).join(', ')}` });
       }
@@ -29,16 +62,27 @@ export class RoundController {
         return res.status(400).json({ message: 'submissionDeadline is required for Conference rounds' });
       }
 
-      if (submissionDeadline && isNaN(new Date(submissionDeadline).getTime())) {
+      const parsedSubmissionDeadline = submissionDeadline ? RoundController.parseDate(submissionDeadline) : null;
+      const parsedDeadline = deadline ? RoundController.parseDate(deadline) : null;
+
+      if (submissionDeadline && !parsedSubmissionDeadline) {
         return res.status(400).json({ message: 'Invalid submissionDeadline format' });
       }
 
-      if (deadline && isNaN(new Date(deadline).getTime())) {
+      if (deadline && !parsedDeadline) {
         return res.status(400).json({ message: 'Invalid deadline format' });
       }
 
-      if (submissionDeadline && deadline) {
-        if (new Date(deadline).getTime() > new Date(submissionDeadline).getTime()) {
+      if (parsedSubmissionDeadline && RoundController.isBeforeTodayUtc(parsedSubmissionDeadline)) {
+        return res.status(400).json({ message: 'Submission deadline cannot be before today (UTC)' });
+      }
+
+      if (parsedDeadline && RoundController.isBeforeTodayUtc(parsedDeadline)) {
+        return res.status(400).json({ message: 'Round deadline cannot be before today (UTC)' });
+      }
+
+      if (parsedSubmissionDeadline && parsedDeadline) {
+        if (parsedDeadline.getTime() > parsedSubmissionDeadline.getTime()) {
           return res.status(400).json({ message: 'Round deadline cannot exceed the submission deadline' });
         }
       }
@@ -72,10 +116,10 @@ export class RoundController {
       round.roundNumber = existingRounds.length + 1;
       round.status = RoundStatus.Draft;
       round.targetVenue = targetVenue;
-      round.targetVenueUrl = targetVenueUrl ? String(targetVenueUrl).trim() : null;
+      round.targetVenueUrl = normalizedVenueUrl;
       round.venueCategory = venueCategory as VenueCategory;
-      round.submissionDeadline = submissionDeadline ? new Date(submissionDeadline) : null;
-      round.deadline = deadline ? new Date(deadline) : null;
+      round.submissionDeadline = parsedSubmissionDeadline;
+      round.deadline = parsedDeadline;
       round.startedAt = null;
       round.completedAt = null;
 
@@ -98,7 +142,11 @@ export class RoundController {
 
       if (!id) return res.status(400).json({ message: 'Missing round id' });
       if (!deadline) return res.status(400).json({ message: 'Missing new deadline' });
-      if (isNaN(new Date(deadline).getTime())) return res.status(400).json({ message: 'Invalid deadline format' });
+      const newDeadline = RoundController.parseDate(deadline);
+      if (!newDeadline) return res.status(400).json({ message: 'Invalid deadline format' });
+      if (RoundController.isBeforeTodayUtc(newDeadline)) {
+        return res.status(400).json({ message: 'Round deadline cannot be before today (UTC)' });
+      }
 
       const roundRepo = AppDataSource.getRepository(Round);
       const round = await roundRepo.findOne({
@@ -117,7 +165,6 @@ export class RoundController {
         return res.status(400).json({ message: `Cannot update deadline: the round is currently '${round.status}'. Deadline changes are only allowed while the round is in Draft status.` });
       }
 
-      const newDeadline = new Date(deadline);
       if (round.submissionDeadline && newDeadline.getTime() > round.submissionDeadline.getTime()) {
         const cap = round.submissionDeadline.toISOString().split('T')[0];
         return res.status(400).json({ message: `Round deadline cannot exceed the conference submission deadline (${cap}).` });
@@ -144,8 +191,20 @@ export class RoundController {
       if (targetVenue !== undefined && (typeof targetVenue !== 'string' || !targetVenue.trim())) {
         return res.status(400).json({ message: 'targetVenue must be a non-empty string' });
       }
-      if (submissionDeadline !== undefined && submissionDeadline !== null && isNaN(new Date(submissionDeadline).getTime())) {
+      const newSubDeadline = submissionDeadline !== undefined && submissionDeadline !== null
+        ? RoundController.parseDate(submissionDeadline)
+        : null;
+
+      if (submissionDeadline !== undefined && submissionDeadline !== null && !newSubDeadline) {
         return res.status(400).json({ message: 'Invalid submissionDeadline format' });
+      }
+
+      if (newSubDeadline && RoundController.isBeforeTodayUtc(newSubDeadline)) {
+        return res.status(400).json({ message: 'Submission deadline cannot be before today (UTC)' });
+      }
+
+      if (targetVenueUrl !== undefined && !RoundController.parseRequiredUrl(targetVenueUrl)) {
+        return res.status(400).json({ message: 'targetVenueUrl is required and must start with http:// or https://' });
       }
 
       const roundRepo = AppDataSource.getRepository(Round);
@@ -166,9 +225,8 @@ export class RoundController {
       }
 
       if (targetVenue !== undefined) round.targetVenue = targetVenue.trim();
-      if (targetVenueUrl !== undefined) round.targetVenueUrl = targetVenueUrl ? String(targetVenueUrl).trim() : null;
+      if (targetVenueUrl !== undefined) round.targetVenueUrl = RoundController.parseRequiredUrl(targetVenueUrl);
       if (submissionDeadline !== undefined) {
-        const newSubDeadline = submissionDeadline ? new Date(submissionDeadline) : null;
         if (newSubDeadline && round.deadline && round.deadline.getTime() > newSubDeadline.getTime()) {
           return res.status(400).json({ message: 'Submission deadline cannot be before the round deadline' });
         }
@@ -481,6 +539,7 @@ export class RoundController {
         roundNumber: r.roundNumber,
         status: r.status,
         targetVenue: r.targetVenue,
+        targetVenueUrl: r.targetVenueUrl,
         venueCategory: r.venueCategory,
         submissionDeadline: r.submissionDeadline,
         deadline: r.deadline,
@@ -537,6 +596,7 @@ export class RoundController {
         deadline: round.deadline,
         status: round.status,
         targetVenue: round.targetVenue,
+        targetVenueUrl: round.targetVenueUrl,
         venueCategory: round.venueCategory,
         submissionDeadline: round.submissionDeadline,
         startedAt: round.startedAt,
