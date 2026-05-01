@@ -2,33 +2,101 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { KeyRound, UserCircle2, X } from 'lucide-react';
+import { KeyRound, Plus, Tags, Trash2, UserCircle2, X } from 'lucide-react';
 import { useUser } from '@/components/context/UserContext';
-import { ApiError, changePasswordRequest } from '@/lib/api';
+import {
+  ApiError,
+  changePasswordRequest,
+  getCurrentProfileRequest,
+  getTopicsRequest,
+  updateInterestsRequest,
+  type TopicOption,
+} from '@/lib/api';
+import {
+  getStoredUser,
+  mapStoredUserToLegacyUser,
+  setStoredUser,
+  type StoredAuthUser,
+  type StoredTopic,
+} from '@/lib/auth';
 
 type ProfileModalProps = {
   onClose: () => void;
 };
 
-type ProfileModalView = 'summary' | 'change-password';
+type ProfileModalView = 'summary' | 'change-password' | 'edit-interests';
 
 export default function ProfileModal({ onClose }: ProfileModalProps) {
-  const { user } = useUser();
+  const { user, setUser } = useUser();
   const [mounted, setMounted] = React.useState(false);
   const [view, setView] = React.useState<ProfileModalView>('summary');
+  const [profileUser, setProfileUser] = React.useState<StoredAuthUser | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = React.useState(true);
   const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
   const [confirmNewPassword, setConfirmNewPassword] = React.useState('');
+  const [topics, setTopics] = React.useState<TopicOption[]>([]);
+  const [selectedTopicIds, setSelectedTopicIds] = React.useState<string[]>([]);
+  const [otherInterestInputs, setOtherInterestInputs] = React.useState<string[]>(['']);
+  const [isTopicsLoading, setIsTopicsLoading] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [feedback, setFeedback] = React.useState('');
   const [error, setError] = React.useState('');
+  const setLegacyUserRef = React.useRef(setUser);
+
+  const displayName = profileUser?.name ?? user.name;
+  const displayEmail = profileUser?.email ?? user.email;
+  const isLabMember = profileUser?.role === 'LabMember';
+  const otherTopic = topics.find(topic => topic.name === 'Other');
+  const isOtherSelected = !!otherTopic && selectedTopicIds.includes(otherTopic.id);
+
+  const normalInterestPills =
+    profileUser?.interests
+      ?.filter(topic => topic.name !== 'Other')
+      .map(topic => ({ id: topic.id, label: topic.name })) ?? [];
+  const otherInterestPills =
+    profileUser?.interests?.some(topic => topic.name === 'Other')
+      ? (profileUser.otherInterests ?? []).map((interest, index) => ({
+          id: `other-${index}`,
+          label: interest,
+        }))
+      : [];
+  const interestPills = [...normalInterestPills, ...otherInterestPills];
+
+  const syncProfileUser = React.useCallback(
+    (nextUser: StoredAuthUser) => {
+      setStoredUser(nextUser);
+      setProfileUser(nextUser);
+      setLegacyUserRef.current(mapStoredUserToLegacyUser(nextUser));
+    },
+    [],
+  );
+
+  const refreshProfile = React.useCallback(async () => {
+    const cachedUser = getStoredUser();
+
+    if (cachedUser) {
+      setProfileUser(cachedUser);
+    }
+
+    try {
+      const response = await getCurrentProfileRequest();
+      syncProfileUser(response.user);
+      setSelectedTopicIds(response.user.interests?.map(topic => topic.id) ?? []);
+      setOtherInterestInputs(response.user.otherInterests?.length ? response.user.otherInterests : ['']);
+      setError('');
+    } catch (caughtError) {
+      setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load profile.');
+    } finally {
+      setIsProfileLoading(false);
+    }
+  }, [syncProfileUser]);
 
   const showSummary = () => {
     setView('summary');
     setCurrentPassword('');
     setNewPassword('');
     setConfirmNewPassword('');
-    setFeedback('');
     setError('');
   };
 
@@ -39,6 +107,33 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
     setConfirmNewPassword('');
     setFeedback('');
     setError('');
+  };
+
+  const openEditInterests = async () => {
+    if (!isLabMember) {
+      return;
+    }
+
+    setView('edit-interests');
+    setFeedback('');
+    setError('');
+    setSelectedTopicIds(profileUser?.interests?.map(topic => topic.id) ?? []);
+    setOtherInterestInputs(profileUser?.otherInterests?.length ? profileUser.otherInterests : ['']);
+
+    if (topics.length) {
+      return;
+    }
+
+    setIsTopicsLoading(true);
+
+    try {
+      const fetchedTopics = await getTopicsRequest();
+      setTopics(fetchedTopics);
+    } catch (caughtError) {
+      setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load interests.');
+    } finally {
+      setIsTopicsLoading(false);
+    }
   };
 
   const handleChangePassword = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -61,9 +156,94 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
     }
   };
 
+  const toggleTopic = (topicId: string) => {
+    setSelectedTopicIds(current =>
+      current.includes(topicId) ? current.filter(id => id !== topicId) : [...current, topicId],
+    );
+    setFeedback('');
+    setError('');
+  };
+
+  const updateOtherInterest = (index: number, value: string) => {
+    setOtherInterestInputs(current => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
+    setFeedback('');
+    setError('');
+  };
+
+  const addOtherInterestInput = () => {
+    setOtherInterestInputs(current => [...current, '']);
+    setFeedback('');
+    setError('');
+  };
+
+  const removeOtherInterestInput = (index: number) => {
+    setOtherInterestInputs(current => {
+      const next = current.filter((_, itemIndex) => itemIndex !== index);
+      return next.length ? next : [''];
+    });
+    setFeedback('');
+    setError('');
+  };
+
+  const handleInterestsSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!profileUser || !isLabMember) {
+      return;
+    }
+
+    const normalizedOtherInterests = Array.from(
+      new Set(otherInterestInputs.map(value => value.trim()).filter(Boolean)),
+    );
+
+    if (isOtherSelected && normalizedOtherInterests.length === 0) {
+      setError('Please add at least one custom interest when Other is selected.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFeedback('');
+    setError('');
+
+    try {
+      const response = await updateInterestsRequest(
+        selectedTopicIds,
+        isOtherSelected ? normalizedOtherInterests : [],
+      );
+      const selectedTopics: StoredTopic[] = topics.filter(topic => selectedTopicIds.includes(topic.id));
+      const nextUser: StoredAuthUser = {
+        ...profileUser,
+        ...response.user,
+        interests: selectedTopics,
+        otherInterests: isOtherSelected ? normalizedOtherInterests : [],
+      };
+
+      syncProfileUser(nextUser);
+      setFeedback('Interests updated successfully.');
+      setView('summary');
+      void refreshProfile();
+    } catch (caughtError) {
+      setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to update interests.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   React.useEffect(() => {
     setMounted(true);
   }, []);
+
+  React.useEffect(() => {
+    setLegacyUserRef.current = setUser;
+  }, [setUser]);
+
+  React.useEffect(() => {
+    if (!mounted) {
+      return;
+    }
+
+    void refreshProfile();
+  }, [mounted, refreshProfile]);
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -92,14 +272,8 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
       <div className="glass relative mx-auto max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 p-6 shadow-2xl">
         <div className="mb-5 flex min-w-0 items-start justify-between gap-4">
           <div className="min-w-0 overflow-hidden">
-            <h2 className="break-words text-xl font-semibold text-white">
-              {view === 'change-password' ? 'Change Password' : 'My Profile'}
-            </h2>
-            <p className="break-words text-sm text-slate-400">
-              {view === 'change-password'
-                ? 'Update your account password securely.'
-                : 'Account details and profile settings.'}
-            </p>
+            <h2 className="break-words text-xl font-semibold text-white">{getTitle(view)}</h2>
+            <p className="break-words text-sm text-slate-400">{getSubtitle(view)}</p>
           </div>
           <button
             type="button"
@@ -119,22 +293,63 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
                   <UserCircle2 className="h-7 w-7" />
                 </div>
                 <div className="min-w-0 overflow-hidden">
-                  <h3 className="truncate text-xl font-semibold text-white">{user.name}</h3>
-                  <p className="truncate text-sm text-slate-400">{user.email}</p>
+                  <h3 className="truncate text-xl font-semibold text-white">{displayName}</h3>
+                  <p className="truncate text-sm text-slate-400">{displayEmail}</p>
                 </div>
               </div>
 
               <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                 <div className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-background/60 p-4">
                   <p className="mb-2 break-words text-xs uppercase tracking-wider text-slate-500">Full Name</p>
-                  <p className="break-words font-medium text-slate-100">{user.name}</p>
+                  <p className="break-words font-medium text-slate-100">{displayName}</p>
                 </div>
                 <div className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-background/60 p-4">
                   <p className="mb-2 break-words text-xs uppercase tracking-wider text-slate-500">Email</p>
-                  <p className="break-all font-medium text-slate-100">{user.email}</p>
+                  <p className="break-all font-medium text-slate-100">{displayEmail}</p>
                 </div>
               </div>
             </section>
+
+            {isLabMember ? (
+              <section className="min-w-0 overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03] p-5">
+                <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Tags className="h-5 w-5 shrink-0 text-blue-300" />
+                    <h3 className="min-w-0 break-words text-lg font-semibold text-white">Interests</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openEditInterests}
+                    className="min-w-0 break-words text-sm text-blue-400 transition-colors hover:text-blue-300"
+                  >
+                    Add / Remove Interests
+                  </button>
+                </div>
+
+                {isProfileLoading ? (
+                  <p className="break-words text-sm text-slate-400">Loading profile...</p>
+                ) : error ? (
+                  <div className="break-words rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                    {error}
+                  </div>
+                ) : interestPills.length ? (
+                  <div className="flex min-w-0 flex-wrap gap-2">
+                    {interestPills.map(topic => (
+                      <span
+                        key={topic.id}
+                        className="max-w-full break-words rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-sm text-blue-200"
+                      >
+                        {topic.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="break-words text-sm text-slate-400">
+                    You have not selected any topic interests yet.
+                  </p>
+                )}
+              </section>
+            ) : null}
 
             {feedback ? (
               <div className="break-words rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
@@ -201,10 +416,137 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
             </div>
           </form>
         ) : null}
+
+        {view === 'edit-interests' ? (
+          <form onSubmit={handleInterestsSubmit} className="min-w-0 space-y-5">
+            {isTopicsLoading ? (
+              <p className="break-words text-sm text-slate-400">Loading interests...</p>
+            ) : (
+              <div className="min-w-0 space-y-4">
+                <p className="break-words text-sm text-slate-400">
+                  Selected topics: <span className="font-medium text-slate-200">{selectedTopicIds.length}</span>
+                </p>
+                <div className="flex min-w-0 flex-wrap gap-2">
+                  {topics.map(topic => {
+                    const selected = selectedTopicIds.includes(topic.id);
+
+                    return (
+                      <button
+                        key={topic.id}
+                        type="button"
+                        onClick={() => toggleTopic(topic.id)}
+                        aria-pressed={selected}
+                        className={`max-w-full break-words rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                          selected
+                            ? 'border-blue-500/50 bg-blue-600/20 text-blue-300'
+                            : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'
+                        }`}
+                        disabled={isSubmitting}
+                      >
+                        {topic.name}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {isOtherSelected ? (
+                  <div className="min-w-0 space-y-3">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                      <label className="min-w-0 break-words text-sm font-medium text-slate-300">
+                        Please specify
+                      </label>
+                      <button
+                        type="button"
+                        onClick={addOtherInterestInput}
+                        className="inline-flex min-w-0 items-center gap-1.5 break-words text-sm text-blue-400 transition-colors hover:text-blue-300 disabled:opacity-60"
+                        disabled={isSubmitting}
+                      >
+                        <Plus className="h-4 w-4 shrink-0" />
+                        Add another
+                      </button>
+                    </div>
+                    <div className="min-w-0 space-y-3">
+                      {otherInterestInputs.map((value, index) => (
+                        <div key={`other-interest-${index}`} className="flex min-w-0 flex-wrap items-center gap-3 sm:flex-nowrap">
+                          <input
+                            value={value}
+                            onChange={event => updateOtherInterest(index, event.target.value)}
+                            className="min-w-0 flex-1 rounded-xl border border-white/10 bg-background px-4 py-3 text-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                            disabled={isSubmitting}
+                            placeholder="Describe a custom interest"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeOtherInterestInput(index)}
+                            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-slate-300 transition-colors hover:bg-white/10 disabled:opacity-60"
+                            disabled={isSubmitting || otherInterestInputs.length === 1}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {error ? (
+              <div className="break-words rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {error}
+              </div>
+            ) : null}
+
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                disabled={isSubmitting || isTopicsLoading}
+                className="inline-flex min-w-0 items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-600/60"
+              >
+                <span className="min-w-0 break-words">
+                  {isSubmitting ? 'Saving...' : 'Save Interests'}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={showSummary}
+                disabled={isSubmitting}
+                className="min-w-0 break-words text-sm text-slate-400 transition-colors hover:text-slate-200 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : null}
       </div>
     </div>,
     document.body,
   );
+}
+
+function getTitle(view: ProfileModalView) {
+  if (view === 'change-password') {
+    return 'Change Password';
+  }
+
+  if (view === 'edit-interests') {
+    return 'Edit Interests';
+  }
+
+  return 'My Profile';
+}
+
+function getSubtitle(view: ProfileModalView) {
+  if (view === 'change-password') {
+    return 'Update your account password securely.';
+  }
+
+  if (view === 'edit-interests') {
+    return 'Choose your topics and add custom interests when needed.';
+  }
+
+  return 'Account details and profile settings.';
 }
 
 function PasswordField({
