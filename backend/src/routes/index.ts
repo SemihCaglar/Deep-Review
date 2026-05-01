@@ -12,7 +12,7 @@ import { SearchController } from '../controllers/SearchController';
 import { TopicController } from '../controllers/TopicController';
 import { authenticateRequest, requireAdmin, requireCoordinator } from '../middleware/auth';
 
-import multer from 'multer';
+import multer, { FileFilterCallback } from 'multer';
 
 const router = Router();
 
@@ -20,19 +20,21 @@ const router = Router();
 const pdfUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
     if (file.mimetype === 'application/pdf') cb(null, true);
-    else cb(new Error('Only PDF files are allowed') as any, false);
+    else cb(new Error('Only PDF files are allowed'));
   }
 });
 
 // Custom middleware to handle Multer errors and return JSON instead of HTML
 const handlePdfUpload = (req: Request, res: Response, next: NextFunction) => {
-  pdfUpload.single('pdf')(req, res, (err) => {
+  pdfUpload.single('pdf')(req, res, (err: unknown) => {
     if (err instanceof multer.MulterError) {
       return res.status(400).json({ message: `Upload error: ${err.message}` });
-    } else if (err) {
+    } else if (err instanceof Error) {
       return res.status(400).json({ message: err.message });
+    } else if (err) {
+      return res.status(400).json({ message: 'Upload failed' });
     }
     next();
   });
@@ -145,6 +147,7 @@ router.post('/rounds', authenticateRequest, RoundController.createReviewRound);
 router.post('/rounds/:id/start', authenticateRequest, RoundController.startRound);
 router.post('/rounds/:id/approve', authenticateRequest, RoundController.approveRound);
 router.put('/rounds/:id/deadline', authenticateRequest, RoundController.editRoundDeadline);
+router.put('/rounds/:id/details', authenticateRequest, RoundController.updateRoundDetails);
 router.get('/rounds/:id/suggest', authenticateRequest, RoundController.suggestReviewers);
 router.post('/rounds/:id/propose', authenticateRequest, RoundController.addProposeReviewer);
 router.delete('/rounds/:id/propose/:userId', authenticateRequest, RoundController.removeProposedReviewer);
