@@ -265,6 +265,7 @@ export type PaperHistoryAssignment = {
   acceptedAt: string | null;
   submittedAt: string | null;
   declineReason: string | null;
+  hasRating?: boolean;
   declineRequests: PaperHistoryDeclineRequest[];
   extensions: PaperHistoryExtension[];
 };
@@ -702,6 +703,13 @@ export type UserAnalyticsResponse = ReviewerRanking & {
 
 export function getOverallAnalyticsRequest() {
   return apiRequest<OverallAnalyticsResponse>('/ratings/overall');
+}
+
+export function submitRatingRequest(assignmentId: string, qualityScore: number, quantityScore: number, timeScore: number) {
+  return apiRequest<{ message: string; rating: any }>('/ratings', {
+    method: 'POST',
+    body: { assignmentId, qualityScore, quantityScore, timeScore },
+  });
 }
 
 export function getUserAnalyticsRequest(userId: string) {
