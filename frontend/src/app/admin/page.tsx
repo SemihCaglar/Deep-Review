@@ -20,6 +20,7 @@ import {
   Search,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
+import { confirmCancel } from '@/lib/confirmAction';
 
 type Tab = 'users' | 'labs' | 'topics' | 'templates' | 'policies' | 'logs';
 
@@ -396,6 +397,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
 
   return (
     <div className="space-y-6">
+
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <div className="glass rounded-2xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center p-8 text-center hover:border-blue-500/50 transition-all group">
           {!isCreating ? (
@@ -618,7 +620,7 @@ function TemplatesTab({ templates, refresh }: { templates: any[]; refresh: () =>
                 />
                 <div className="flex gap-2">
                   <button onClick={handleUpdate} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium">Save</button>
-                  <button onClick={() => setEditing(null)} className="px-4 py-2 bg-white/5 text-slate-300 rounded-xl text-sm font-medium">Cancel</button>
+                  <button onClick={async () => { if (await confirmCancel()) setEditing(null); }} className="px-4 py-2 bg-white/5 text-slate-300 rounded-xl text-sm font-medium">Cancel</button>
                 </div>
               </div>
             ) : (

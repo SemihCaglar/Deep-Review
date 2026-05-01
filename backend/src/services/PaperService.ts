@@ -1,7 +1,7 @@
 import { AppDataSource } from '../data-source';
 import { Paper, PaperStatus } from '../entities/Paper';
 import { Topic } from '../entities/Topic';
-import { User } from '../entities/User';
+import { User, UserRole } from '../entities/User';
 import { RegisterPaperDto } from '../dtos/PaperDto';
 import { In } from 'typeorm';
 
@@ -41,7 +41,6 @@ export class PaperService {
       title: dto.title,
       abstractText: dto.abstractText,
       overleafLink: dto.overleafLink?.trim() || null!,
-      githubLink: dto.githubLink?.trim() || null,
       status: PaperStatus.Draft,
       creationTime: new Date(),
     });
@@ -80,6 +79,12 @@ export class PaperService {
       const foundAuthors = await userRepo.find({ where: { id: In(authorIds) } });
       if (foundAuthors.length !== new Set(authorIds).size) {
         throw new Error('One or more invalid author IDs provided.');
+      }
+      const restricted = foundAuthors.find(
+        u => u.id !== creator.id && (u.role === UserRole.Coordinator || u.role === UserRole.Admin)
+      );
+      if (restricted) {
+        throw new Error(`User "${restricted.name}" has the role ${restricted.role} and cannot be assigned as an author.`);
       }
       paper.authors = foundAuthors;
     } else {
@@ -186,6 +191,10 @@ export class PaperService {
       const foundAuthors = await userRepo.find({ where: { id: In(authorIds) } });
       if (foundAuthors.length !== new Set(authorIds).size) {
         throw new Error('One or more invalid author IDs provided.');
+      }
+      const restricted = foundAuthors.find(u => u.role === UserRole.Coordinator || u.role === UserRole.Admin);
+      if (restricted) {
+        throw new Error(`User "${restricted.name}" has the role ${restricted.role} and cannot be assigned as an author.`);
       }
       paper.authors = foundAuthors;
     } else {
