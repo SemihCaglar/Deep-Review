@@ -13,6 +13,7 @@ import {
 } from '@/lib/api';
 import { getStoredUser, mapStoredUserToLegacyUser, setStoredUser, type StoredAuthUser, type StoredTopic } from '@/lib/auth';
 import { useUser } from '@/components/context/UserContext';
+import { confirmCancel } from '@/lib/confirmAction';
 
 export default function EditInterestsPage() {
   const router = useRouter();
@@ -245,7 +246,13 @@ export default function EditInterestsPage() {
             >
               {isSaving ? 'Saving...' : 'Save Interests'}
             </button>
-            <Link href="/profile" className="text-sm text-slate-400 hover:text-slate-200 transition-colors">
+            <Link
+              href="/profile"
+              onClick={(event) => {
+                if (!confirmCancel()) event.preventDefault();
+              }}
+              className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
+            >
               Cancel
             </Link>
           </div>
