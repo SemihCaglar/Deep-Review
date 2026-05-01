@@ -79,11 +79,13 @@ function todayInputValue() {
 function AssignmentRow({
   assignment,
   roundDeadline,
+  roundStatus,
   onRefresh,
   onReassign
 }: {
   assignment: RoundAssignment;
   roundDeadline: string | null;
+  roundStatus: RoundWithAssignments['status'];
   onRefresh: () => void;
   onReassign: (id: string) => void;
 }) {
@@ -149,7 +151,7 @@ function AssignmentRow({
 
   const isCancelable = ['Invited', 'Accepted'].includes(assignment.status);
   const isRemindable = ['Invited', 'Accepted', 'PendingExtension', 'PendingDecline'].includes(assignment.status);
-  const isReassignable = ['Declined', 'Cancelled'].includes(assignment.status);
+  const isReassignable = roundStatus !== 'Completed' && ['Declined', 'Cancelled'].includes(assignment.status);
   const isCompleted = assignment.status === 'Completed';
 
   return (
@@ -936,6 +938,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                   key={a.id}
                   assignment={a}
                   roundDeadline={round.deadline}
+                  roundStatus={round.status}
                   onRefresh={onRefresh}
                   onReassign={openAddPanel}
                 />
