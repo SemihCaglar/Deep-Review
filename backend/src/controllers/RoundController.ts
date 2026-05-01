@@ -675,11 +675,6 @@ export class RoundController {
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
 
-      // Guardrail: Can only be run after Human Review concludes
-      if (round.status !== RoundStatus.Completed) {
-        return res.status(400).json({ message: 'AI Review can only be triggered after the human review phase concludes (Round Status must be Completed).' });
-      }
-
       // Authorization: Only Authors or Coordinators can trigger
       const isAuthor = round.paper.authors?.some(a => a.id === user.id);
       const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
@@ -748,10 +743,6 @@ export class RoundController {
       });
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
-
-      if (round.status !== RoundStatus.Completed) {
-        return res.status(400).json({ message: 'Compliance check can only be run after the review round is Completed.' });
-      }
 
       // Authorization: Only Authors or Coordinators can trigger
       const isAuthor = round.paper.authors?.some(a => a.id === user.id);
