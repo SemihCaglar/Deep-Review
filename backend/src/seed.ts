@@ -66,8 +66,8 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   // 3. Coordinator
   const coordinator = await ensureUser(userRepo, {
     create: () => Object.assign(new Coordinator(), {
-      name: 'Eray Tüzün',
-      email: 'eraytuzun@cs.bilkent.edu.tr',
+      name: 'Semih Çağlar',
+      email: 'semih.caglar@ug.bilkent.edu.tr',
     }),
     password: '123',
   }) as Coordinator;
@@ -243,11 +243,11 @@ async function ensureDefaultPolicies(policyRepo: ReturnType<typeof AppDataSource
   ];
 
   for (const item of defaults) {
-    const existing = await policyRepo.findOne({ 
-      where: { 
-        key: item.key, 
-        lab: IsNull() 
-      } as any 
+    const existing = await policyRepo.findOne({
+      where: {
+        key: item.key,
+        lab: IsNull()
+      } as any
     });
     if (!existing) {
       await policyRepo.save(policyRepo.create({ key: item.key, value: item.value, lab: null }));
@@ -270,11 +270,11 @@ async function ensureDefaultTemplates(templateRepo: ReturnType<typeof AppDataSou
   ];
 
   for (const item of defaults) {
-    const existing = await templateRepo.findOne({ 
-      where: { 
-        name: item.name, 
-        lab: IsNull() 
-      } as any 
+    const existing = await templateRepo.findOne({
+      where: {
+        name: item.name,
+        lab: IsNull()
+      } as any
     });
     if (!existing) {
       await templateRepo.save(templateRepo.create({ ...item, lab: null }));
