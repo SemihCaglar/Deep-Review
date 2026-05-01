@@ -248,8 +248,11 @@ export default function EditInterestsPage() {
             </button>
             <Link
               href="/profile"
-              onClick={(event) => {
-                if (!confirmCancel()) event.preventDefault();
+              onClick={async (event) => {
+                event.preventDefault();
+                if (await confirmCancel()) {
+                  router.push('/profile');
+                }
               }}
               className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
             >

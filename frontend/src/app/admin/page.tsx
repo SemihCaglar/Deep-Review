@@ -282,7 +282,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
               {allCoordinators.length === 0 && <p className="text-slate-500 italic text-center py-4">No coordinators found.</p>}
             </div>
             <button
-              onClick={() => { if (confirmCancel()) setAssigningLabId(null); }}
+              onClick={async () => { if (await confirmCancel()) setAssigningLabId(null); }}
               className="w-full mt-6 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors"
             >
               Cancel
@@ -319,7 +319,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
               />
               <div className="flex gap-2">
                 <button onClick={handleCreate} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors">Create</button>
-                <button onClick={() => { if (confirmCancel()) setIsCreating(false); }} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors">Cancel</button>
+                <button onClick={async () => { if (await confirmCancel()) setIsCreating(false); }} className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors">Cancel</button>
               </div>
             </div>
           )}
@@ -487,7 +487,7 @@ function TemplatesTab({ templates, refresh }: { templates: any[]; refresh: () =>
                 />
                 <div className="flex gap-2">
                   <button onClick={handleUpdate} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium">Save</button>
-                  <button onClick={() => { if (confirmCancel()) setEditing(null); }} className="px-4 py-2 bg-white/5 text-slate-300 rounded-xl text-sm font-medium">Cancel</button>
+                  <button onClick={async () => { if (await confirmCancel()) setEditing(null); }} className="px-4 py-2 bg-white/5 text-slate-300 rounded-xl text-sm font-medium">Cancel</button>
                 </div>
               </div>
             ) : (

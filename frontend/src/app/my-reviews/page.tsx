@@ -299,7 +299,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       Send Request to Coordinator
                     </button>
-                    <button onClick={() => { if (confirmCancel()) setShowDeclineForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={async () => { if (await confirmCancel()) setShowDeclineForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>
@@ -372,7 +372,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       Submit Review
                     </button>
-                    <button onClick={() => { if (confirmCancel()) setShowCompleteForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={async () => { if (await confirmCancel()) setShowCompleteForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>
@@ -415,7 +415,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       {assignment.pendingExtensionRequest ? 'Update Request' : 'Submit Request'}
                     </button>
-                    <button onClick={() => { if (confirmCancel()) setShowExtForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={async () => { if (await confirmCancel()) setShowExtForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>
@@ -447,7 +447,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       Submit Decline Request
                     </button>
-                    <button onClick={() => { if (confirmCancel()) setShowLateDeclineForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={() => setShowLateDeclineForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>
