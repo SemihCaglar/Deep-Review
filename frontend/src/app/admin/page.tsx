@@ -167,8 +167,10 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
   };
 
   const filteredUsers = (users ?? []).filter((u: any) =>
-    u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email?.toLowerCase().includes(searchQuery.toLowerCase())
+    u.role !== 'Admin' && (
+      u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
   const handleLock = async (id: string, isLocked: boolean) => {

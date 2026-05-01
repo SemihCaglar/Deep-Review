@@ -284,7 +284,7 @@ export default function RegisterPaper() {
                             </div>
 
                             <div className="pt-6 border-t border-white/5">
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Topics & Keywords <span className="text-red-400">*</span></label>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Topics & Keywords</label>
                                 <p className="text-slate-500 text-sm mb-4">Select relevant areas to help assign appropriate reviewers.</p>
 
                                 <div className="relative mb-4">
@@ -355,7 +355,7 @@ export default function RegisterPaper() {
                         </button>
                         <button
                             type="submit"
-                            disabled={isSubmitting || (step === 2 && selectedTopics.length === 0)}
+                            disabled={isSubmitting}
                             className="px-6 py-2.5 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                             {isSubmitting && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
