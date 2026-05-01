@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { In, Not } from 'typeorm';
+import { In } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { LabMember } from '../entities/LabMember';
 import { PasswordResetToken } from '../entities/PasswordResetToken';
@@ -32,9 +32,11 @@ export class AccountController {
       typeof password !== 'string' ||
       !name.trim() ||
       !email.trim() ||
-      !password
+      !password ||
+      typeof labId !== 'string' ||
+      !labId.trim()
     ) {
-      return res.status(400).json({ message: 'name, email, and password are required' });
+      return res.status(400).json({ message: 'name, email, password, and labId are required' });
     }
 
     const memberRepo = AppDataSource.getRepository(LabMember);
@@ -48,10 +50,11 @@ export class AccountController {
       return res.status(409).json({ message: 'Email is already in use' });
     }
 
-    let requestedLab = null;
-    if (labId) {
-      const labRepo = AppDataSource.getRepository(Lab);
-      requestedLab = await labRepo.findOne({ where: { id: labId } });
+    const labRepo = AppDataSource.getRepository(Lab);
+    const requestedLab = await labRepo.findOne({ where: { id: labId.trim() } });
+
+    if (!requestedLab) {
+      return res.status(400).json({ message: 'Selected lab was not found' });
     }
 
     const member = memberRepo.create({
@@ -308,11 +311,19 @@ export class AccountController {
       return res.status(403).json({ message: 'Coordinator access is required' });
     }
 
+    const visibleLabIds = await AccountController.getVisibleLabIds(authenticatedUser);
+    if (visibleLabIds.length === 0) {
+      return res.status(200).json({ users: [] });
+    }
+
     const userRepo = AppDataSource.getRepository<User>('User');
-    const pendingUsers = await userRepo.find({
-      where: { approvalStatus: ApprovalStatus.Pending },
-      order: { createdAt: 'ASC' },
-    });
+    const pendingUsers = await userRepo
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.requestedLab', 'requestedLab')
+      .where('user.approvalStatus = :status', { status: ApprovalStatus.Pending })
+      .andWhere('requestedLab.id IN (:...labIds)', { labIds: visibleLabIds })
+      .orderBy('user.createdAt', 'ASC')
+      .getMany();
 
     return res.status(200).json({
       users: pendingUsers.map(user => ({
@@ -321,6 +332,7 @@ export class AccountController {
         email: user.email,
         createdAt: user.createdAt,
         approvalStatus: user.approvalStatus,
+        requestedLab: user.requestedLab ? { id: user.requestedLab.id, name: user.requestedLab.name } : null,
       })),
     });
   }
@@ -335,14 +347,22 @@ export class AccountController {
       return res.status(403).json({ message: 'Coordinator access is required' });
     }
 
+    const visibleLabIds = await AccountController.getVisibleLabIds(authenticatedUser);
+    if (visibleLabIds.length === 0) {
+      return res.status(200).json({ users: [] });
+    }
+
     const userRepo = AppDataSource.getRepository<User>('User');
-    const reviewedUsers = await userRepo.find({
-      where: [
-        { approvalStatus: ApprovalStatus.Approved, role: UserRole.LabMember },
-        { approvalStatus: ApprovalStatus.Rejected, role: UserRole.LabMember },
-      ],
-      order: { approvalReviewedAt: 'DESC' },
-    });
+    const reviewedUsers = await userRepo
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.requestedLab', 'requestedLab')
+      .where('user.role = :role', { role: UserRole.LabMember })
+      .andWhere('user.approvalStatus IN (:...statuses)', {
+        statuses: [ApprovalStatus.Approved, ApprovalStatus.Rejected],
+      })
+      .andWhere('requestedLab.id IN (:...labIds)', { labIds: visibleLabIds })
+      .orderBy('user.approvalReviewedAt', 'DESC')
+      .getMany();
 
     return res.status(200).json({
       users: reviewedUsers.map(user => ({
@@ -353,6 +373,7 @@ export class AccountController {
         approvalStatus: user.approvalStatus,
         approvalReviewedAt: user.approvalReviewedAt,
         approvalNote: user.approvalNote,
+        requestedLab: user.requestedLab ? { id: user.requestedLab.id, name: user.requestedLab.name } : null,
       })),
     });
   }
@@ -363,14 +384,20 @@ export class AccountController {
       return res.status(401).json({ message: 'Authentication required' });
     }
 
+    const visibleLabIds = await AccountController.getVisibleLabIds(authenticatedUser);
+    if (visibleLabIds.length === 0) {
+      return res.status(200).json({ users: [] });
+    }
+
     const userRepo = AppDataSource.getRepository<User>('User');
-    const approvedUsers = await userRepo.find({
-      where: { 
-        approvalStatus: ApprovalStatus.Approved,
-        role: Not(UserRole.Admin)
-      },
-      order: { name: 'ASC' },
-    });
+    const approvedUsers = await userRepo
+      .createQueryBuilder('user')
+      .innerJoin('user.labs', 'lab')
+      .where('user.approvalStatus = :status', { status: ApprovalStatus.Approved })
+      .andWhere('user.role != :adminRole', { adminRole: UserRole.Admin })
+      .andWhere('lab.id IN (:...labIds)', { labIds: visibleLabIds })
+      .orderBy('user.name', 'ASC')
+      .getMany();
 
     return res.status(200).json({
       users: approvedUsers.map(user => ({
@@ -524,7 +551,7 @@ export class AccountController {
     }
 
     const memberRepo = AppDataSource.getRepository(LabMember);
-    const member = await memberRepo.findOne({ where: { id } });
+    const member = await memberRepo.findOne({ where: { id }, relations: ['requestedLab'] });
 
     if (!member) {
       return res.status(404).json({ message: 'Pending signup not found' });
@@ -534,13 +561,40 @@ export class AccountController {
       return res.status(409).json({ message: 'Only pending signups can be approved' });
     }
 
+    if (!(await AccountController.canReviewSignup(authenticatedUser, member))) {
+      return res.status(403).json({ message: 'You can only approve signups for your lab' });
+    }
+
     const note = AccountController.parseApprovalNote(req.body?.note);
 
     member.approvalStatus = ApprovalStatus.Approved;
     member.approvalReviewedAt = new Date();
     member.approvalNote = note;
 
-    const savedMember = await memberRepo.save(member);
+    await memberRepo.save(member);
+
+    if (member.requestedLab) {
+      const labRepo = AppDataSource.getRepository(Lab);
+      const lab = await labRepo.findOne({
+        where: { id: member.requestedLab.id },
+        relations: ['members'],
+      });
+
+      if (!lab) {
+        return res.status(400).json({ message: 'Requested lab was not found' });
+      }
+
+      lab.members = lab.members ?? [];
+      if (!lab.members.some(existingMember => existingMember.id === member.id)) {
+        lab.members.push(member);
+        await labRepo.save(lab);
+      }
+    }
+
+    const savedMember = await memberRepo.findOne({
+      where: { id: member.id },
+      relations: ['labs', 'requestedLab'],
+    }) ?? member;
 
     return res.status(200).json({
       message: 'Signup approved',
@@ -565,7 +619,7 @@ export class AccountController {
     }
 
     const memberRepo = AppDataSource.getRepository(LabMember);
-    const member = await memberRepo.findOne({ where: { id } });
+    const member = await memberRepo.findOne({ where: { id }, relations: ['requestedLab'] });
 
     if (!member) {
       return res.status(404).json({ message: 'Pending signup not found' });
@@ -573,6 +627,10 @@ export class AccountController {
 
     if (member.approvalStatus !== ApprovalStatus.Pending) {
       return res.status(409).json({ message: 'Only pending signups can be rejected' });
+    }
+
+    if (!(await AccountController.canReviewSignup(authenticatedUser, member))) {
+      return res.status(403).json({ message: 'You can only reject signups for your lab' });
     }
 
     const note = AccountController.parseApprovalNote(req.body?.note);
@@ -609,6 +667,33 @@ export class AccountController {
 
   private static isCoordinatorOrAdmin(user: User) {
     return user.role === UserRole.Coordinator;
+  }
+
+  private static async getVisibleLabIds(user: User): Promise<string[]> {
+    if (user.role === UserRole.Coordinator) {
+      const coordinator = await AppDataSource.getRepository(Coordinator).findOne({
+        where: { id: user.id },
+        relations: ['lab', 'labs'],
+      });
+      const ids = [
+        coordinator?.lab?.id,
+        ...(coordinator?.labs ?? []).map(lab => lab.id),
+      ].filter((id): id is string => Boolean(id));
+
+      return [...new Set(ids)];
+    }
+
+    const fullUser = await AppDataSource.getRepository<User>('User').findOne({
+      where: { id: user.id },
+      relations: ['labs'],
+    });
+
+    return [...new Set((fullUser?.labs ?? []).map(lab => lab.id))];
+  }
+
+  private static async canReviewSignup(reviewer: User, member: LabMember): Promise<boolean> {
+    const visibleLabIds = await AccountController.getVisibleLabIds(reviewer);
+    return Boolean(member.requestedLab && visibleLabIds.includes(member.requestedLab.id));
   }
 
   private static serializeAccount(member: User, options: { includeInterests?: boolean } = {}) {
