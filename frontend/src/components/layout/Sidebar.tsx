@@ -4,13 +4,15 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { Home, FileText, CheckCircle, UserCircle2, LogOut, PlusSquare, UserCheck, Users, Shield, ClipboardList } from 'lucide-react';
+import { Home, FileText, CheckCircle, LogOut, PlusSquare, UserCheck, Users, Shield, ClipboardList } from 'lucide-react';
+import ProfileModal from './ProfileModal';
 
 export default function Sidebar() {
     const { user, logout } = useUser();
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const router = useRouter();
+    const [isProfileOpen, setIsProfileOpen] = React.useState(false);
 
     const handleLogout = () => {
         logout();
@@ -21,14 +23,12 @@ export default function Sidebar() {
             if (user.isAdmin) {
             return [
                 { name: 'My Dashboard', href: '/dashboard', icon: Home },
-                { name: 'My Profile', href: '/profile', icon: UserCircle2 },
                 { name: 'Admin Dashboard', href: '/admin', icon: Shield },
             ];
         }
 
         const base = [
             { name: 'My Dashboard', href: '/dashboard', icon: Home },
-            { name: 'My Profile', href: '/profile', icon: UserCircle2 },
             { name: 'Lab Members', href: '/lab-members', icon: Users },
             ...(user.isCoordinator ? [{ name: 'Pending Approvals', href: '/pending-approvals', icon: UserCheck }] : []),
         ];
@@ -56,7 +56,12 @@ export default function Sidebar() {
             </div>
 
             <div className="px-4 mb-8">
-                <div className="p-3 rounded-lg bg-white/5 border border-white/10 flex items-center gap-3">
+                <button
+                    type="button"
+                    onClick={() => setIsProfileOpen(true)}
+                    className="flex w-full items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-3 text-left transition-colors hover:border-blue-400/30 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                    aria-label="Open profile"
+                >
                     <div className="w-8 h-8 rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center font-semibold text-sm border border-blue-500/20">
                         {user.name.charAt(0)}
                     </div>
@@ -66,7 +71,7 @@ export default function Sidebar() {
                             {user.isAdmin ? 'Admin' : user.isCoordinator ? 'Coordinator' : 'Standard User'}
                         </p>
                     </div>
-                </div>
+                </button>
             </div>
 
             <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
@@ -76,8 +81,6 @@ export default function Sidebar() {
 
                     if (item.href === '/dashboard') {
                         isActive = pathname === '/dashboard';
-                    } else if (item.href === '/profile') {
-                        isActive = pathname === '/profile' || pathname.startsWith('/profile/');
                     } else if (item.href === '/lab-members') {
                         isActive = pathname === '/lab-members';
                     } else if (item.href === '/pending-approvals') {
@@ -122,6 +125,8 @@ export default function Sidebar() {
                     Log out
                 </button>
             </div>
+
+            {isProfileOpen ? <ProfileModal onClose={() => setIsProfileOpen(false)} /> : null}
         </aside>
     );
 }
