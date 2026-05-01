@@ -94,12 +94,14 @@ function AssignmentRow({
   assignment,
   roundDeadline,
   roundStatus,
+  repeatedInRounds,
   onRefresh,
   onReassign
 }: {
   assignment: RoundAssignment;
   roundDeadline: string | null;
   roundStatus: RoundWithAssignments['status'];
+  repeatedInRounds: number[];
   onRefresh: () => void;
   onReassign: (id: string) => void;
 }) {
@@ -181,7 +183,18 @@ function AssignmentRow({
             {assignment.reviewer.name.charAt(0)}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium text-white truncate">{assignment.reviewer.name}</p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-sm font-medium text-white truncate">{assignment.reviewer.name}</p>
+              {repeatedInRounds.length > 0 && (
+                <span
+                  title={`Also assigned in round(s): ${repeatedInRounds.join(', ')}`}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-[10px] font-medium text-amber-300 shrink-0"
+                >
+                  <AlertCircle className="w-3 h-3" />
+                  R{repeatedInRounds.join(', R')}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-500 truncate">{assignment.reviewer.email}</p>
           </div>
         </div>
@@ -401,7 +414,19 @@ function AssignmentRow({
 
 // ── Round card ────────────────────────────────────────────────────────────────
 
-function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { round: RoundWithAssignments; onRefresh: () => void; coordinatorId: string; paperHasOverleafLink: boolean }) {
+function RoundCard({
+  round,
+  onRefresh,
+  coordinatorId,
+  paperHasOverleafLink,
+  reviewerRoundNumbers,
+}: {
+  round: RoundWithAssignments;
+  onRefresh: () => void;
+  coordinatorId: string;
+  paperHasOverleafLink: boolean;
+  reviewerRoundNumbers: Record<string, number[]>;
+}) {
   const [expanded, setExpanded] = useState(true);
 
   // Add Reviewer / Reassign panel
@@ -1180,6 +1205,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                   assignment={a}
                   roundDeadline={round.deadline}
                   roundStatus={round.status}
+                  repeatedInRounds={(reviewerRoundNumbers[a.reviewer.id] ?? []).filter(roundNumber => roundNumber !== round.roundNumber)}
                   onRefresh={onRefresh}
                   onReassign={openAddPanel}
                 />
@@ -1442,6 +1468,25 @@ export default function RoundsPage() {
   
   const latestRound = rounds.length > 0 ? rounds[rounds.length - 1] : null;
   const canCreateNextRound = !latestRound || latestRound.status === 'Completed';
+  const reviewerRoundNumbers = React.useMemo(() => {
+    const byReviewer: Record<string, Set<number>> = {};
+
+    rounds.forEach(round => {
+      round.assignments.forEach(assignment => {
+        if (!byReviewer[assignment.reviewer.id]) {
+          byReviewer[assignment.reviewer.id] = new Set<number>();
+        }
+        byReviewer[assignment.reviewer.id].add(round.roundNumber);
+      });
+    });
+
+    return Object.fromEntries(
+      Object.entries(byReviewer).map(([reviewerId, roundNumbers]) => [
+        reviewerId,
+        Array.from(roundNumbers).sort((a, b) => a - b),
+      ]),
+    );
+  }, [rounds]);
 
   return (
     <div className="max-w-5xl mx-auto py-6 space-y-8 animate-in fade-in duration-500 mb-20">
@@ -1630,7 +1675,14 @@ export default function RoundsPage() {
             </div>
           ) : (
             rounds.map(round => (
-              <RoundCard key={round.id} round={round} onRefresh={handleRefresh} coordinatorId={user.id} paperHasOverleafLink={!!selectedPaper?.overleafLink?.trim()} />
+              <RoundCard
+                key={round.id}
+                round={round}
+                onRefresh={handleRefresh}
+                coordinatorId={user.id}
+                paperHasOverleafLink={!!selectedPaper?.overleafLink?.trim()}
+                reviewerRoundNumbers={reviewerRoundNumbers}
+              />
             ))
           )}
         </section>
