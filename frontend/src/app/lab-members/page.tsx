@@ -56,19 +56,36 @@ export default function LabMembersPage() {
           <p className="text-sm text-slate-400">Loading lab members...</p>
         ) : members.length ? (
           <div className="space-y-4">
-            {[...members].sort((a, b) => (a.role === 'Coordinator' ? -1 : b.role === 'Coordinator' ? 1 : 0)).map(member => (
-              <div key={member.id} className="rounded-2xl border border-white/10 bg-background/60 p-5">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-lg font-semibold text-white">{member.name}</p>
-                    <p className="text-sm text-slate-300 mt-1">{member.email}</p>
+            {[...members].sort((a, b) => (a.role === 'Coordinator' ? -1 : b.role === 'Coordinator' ? 1 : 0)).map(member => {
+              const isCoordinator = member.role === 'Coordinator';
+
+              return (
+                <div
+                  key={member.id}
+                  className={`rounded-2xl border p-5 ${
+                    isCoordinator
+                      ? 'border-blue-400/25 bg-blue-500/[0.07] shadow-[0_0_24px_rgba(59,130,246,0.08)]'
+                      : 'border-white/10 bg-background/60'
+                  }`}
+                >
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-lg font-semibold text-white">{member.name}</p>
+                      <p className="text-sm text-slate-300 mt-1">{member.email}</p>
+                    </div>
+                    <span
+                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
+                        isCoordinator
+                          ? 'border-blue-400/35 bg-blue-500/15 text-blue-100'
+                          : 'border-blue-500/20 bg-blue-500/10 text-blue-200'
+                      }`}
+                    >
+                      {roleLabel(member.role)}
+                    </span>
                   </div>
-                  <span className="inline-flex rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-200">
-                    {roleLabel(member.role)}
-                  </span>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-sm text-slate-400">No approved lab members are available yet.</p>
