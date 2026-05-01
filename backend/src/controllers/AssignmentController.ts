@@ -360,10 +360,10 @@ export class AssignmentController {
       }
 
       const activeStatuses = new Set([
-        AssignmentStatus.Invited,
         AssignmentStatus.Accepted,
         AssignmentStatus.PendingExtension,
         AssignmentStatus.PendingDecline,
+        AssignmentStatus.Overdue,
       ]);
 
       const assignRepo = AppDataSource.getRepository(Assignment);
