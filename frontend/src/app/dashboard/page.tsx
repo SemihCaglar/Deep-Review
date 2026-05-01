@@ -23,6 +23,7 @@ import {
   getPendingSignupsRequest,
   getOverallAnalyticsRequest,
   type OverallAnalyticsResponse,
+  type MyAssignment,
   type ReviewerRanking,
 } from '@/lib/api';
 import { useUser } from '@/components/context/UserContext';
@@ -38,6 +39,16 @@ type PendingReviewerRequest = {
   roundNumber: number;
   reviewerName: string;
   reason: string;
+};
+
+type PendingRoundStartRequest = {
+  id: string;
+  paperId: string;
+  paperTitle: string;
+  roundNumber: number;
+  targetVenue: string;
+  venueCategory: string;
+  deadline: string | null;
 };
 
 type ReviewerRequestDecision = {
@@ -123,6 +134,26 @@ const COUNT_COLUMNS: { label: string; key: SortKey; field: keyof ReviewerRanking
   { label: 'Declined',  key: 'totalDeclined',   field: 'totalDeclined',   color: 'text-red-400' },
 ];
 
+const ACTIVE_REVIEW_STATUSES = ['Invited', 'Accepted', 'PendingDecline', 'PendingExtension', 'Overdue'];
+
+function assignmentStatusLabel(status: string) {
+  switch (status) {
+    case 'PendingDecline': return 'Decline requested';
+    case 'PendingExtension': return 'Extension requested';
+    default: return status;
+  }
+}
+
+function assignmentStatusClass(status: string) {
+  switch (status) {
+    case 'Accepted': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    case 'Overdue': return 'bg-red-500/10 text-red-400 border-red-500/20';
+    case 'PendingDecline': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+    case 'PendingExtension': return 'bg-sky-500/10 text-sky-400 border-sky-500/20';
+    default: return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+  }
+}
+
 // --- Main Component ---
 
 export default function DashboardPage() {
@@ -135,6 +166,7 @@ export default function DashboardPage() {
 
   // Coordinator State (Reviewer Requests)
   const [reviewerRequests, setReviewerRequests] = React.useState<PendingReviewerRequest[]>([]);
+  const [roundStartRequests, setRoundStartRequests] = React.useState<PendingRoundStartRequest[]>([]);
   const [reviewerRequestsError, setReviewerRequestsError] = React.useState('');
 
   // Coordinator State (Analytics/Leaderboard)
@@ -145,6 +177,8 @@ export default function DashboardPage() {
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc');
 
   // Reviewer State (Request Decisions/Notifications)
+  const [myReviewAssignments, setMyReviewAssignments] = React.useState<MyAssignment[]>([]);
+  const [isLoadingMyReviews, setIsLoadingMyReviews] = React.useState(false);
   const [requestDecisions, setRequestDecisions] = React.useState<ReviewerRequestDecision[]>([]);
   const [requestDecisionsError, setRequestDecisionsError] = React.useState('');
   const [selectedDecisionIds, setSelectedDecisionIds] = React.useState<Set<string>>(new Set());
@@ -178,6 +212,20 @@ export default function DashboardPage() {
         })),
       );
 
+      const roundRequests = roundsByPaper.flatMap(({ paper, rounds }) =>
+        rounds
+          .filter(round => round.status === 'Draft')
+          .map(round => ({
+            id: round.id,
+            paperId: paper.id,
+            paperTitle: paper.title,
+            roundNumber: round.roundNumber,
+            targetVenue: round.targetVenue,
+            venueCategory: round.venueCategory,
+            deadline: round.deadline,
+          })),
+      );
+
       const requests = roundsByPaper.flatMap(({ paper, rounds }) =>
         rounds.flatMap(round =>
           round.assignments.flatMap(assignment => {
@@ -208,6 +256,7 @@ export default function DashboardPage() {
           }),
         ),
       );
+      setRoundStartRequests(roundRequests);
       setReviewerRequests(requests);
     } catch (caughtError) {
       setReviewerRequestsError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load reviewer requests.');
@@ -230,9 +279,19 @@ export default function DashboardPage() {
 
   const loadRequestDecisions = React.useCallback(async () => {
     if (user.isCoordinator || user.isAdmin) return;
+    setIsLoadingMyReviews(true);
     setRequestDecisionsError('');
     try {
       const assignments = await getMyAssignmentsRequest();
+      const activeAssignments = assignments
+        .filter(assignment => ACTIVE_REVIEW_STATUSES.includes(assignment.status))
+        .sort((a, b) => {
+          const left = a.deadline ? new Date(a.deadline).getTime() : Number.MAX_SAFE_INTEGER;
+          const right = b.deadline ? new Date(b.deadline).getTime() : Number.MAX_SAFE_INTEGER;
+          return left - right;
+        });
+      setMyReviewAssignments(activeAssignments);
+
       const decisions = assignments.flatMap(assignment => {
         const declineDecisions = assignment.resolvedDeclineRequests.map(request => ({
           id: request.id,
@@ -263,6 +322,8 @@ export default function DashboardPage() {
       setRequestDecisions(decisions);
     } catch (caughtError) {
       setRequestDecisionsError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load request decisions.');
+    } finally {
+      setIsLoadingMyReviews(false);
     }
   }, [user.isCoordinator, user.isAdmin]);
 
@@ -342,12 +403,13 @@ export default function DashboardPage() {
   const stats: DashboardStat[] = user.isCoordinator
     ? [
         { label: 'Pending Approvals', value: isLoadingPending ? '...' : pendingCount, icon: UserCheck, color: 'text-blue-400', bg: 'bg-blue-500/10', href: '/pending-approvals' },
+        { label: 'Round Requests', value: roundStartRequests.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '/rounds' },
         { label: 'Coordinator Access', value: 1, icon: FileText, color: 'text-white', bg: 'bg-white/10' },
       ]
     : [
         { label: 'Account Status', value: 'Active', icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
         { label: 'Profile Access', value: 'Ready', icon: FileText, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-        { label: 'Review Access', value: 'Open', icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+        { label: 'Assigned Reviews', value: isLoadingMyReviews ? '...' : myReviewAssignments.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '/my-reviews' },
       ];
 
   const visibleRequestDecisions = requestDecisions.slice(0, 5);
@@ -400,10 +462,10 @@ export default function DashboardPage() {
 
       {/* --- Coordinator Section: Leaderboard & Requests --- */}
       {user.isCoordinator && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="space-y-8">
           
-          {/* Leaderboard (Take up 2/3 of space) */}
-          <div className="lg:col-span-2 space-y-4">
+          {/* Leaderboard */}
+          <section className="space-y-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <BarChart2 className="w-5 h-5 text-blue-400" />
               Reviewer Leaderboard
@@ -475,22 +537,53 @@ export default function DashboardPage() {
                 )}
               </>
             )}
-          </div>
+          </section>
 
-          {/* Reviewer Requests (Take up 1/3 of space) */}
-          <div className="space-y-4">
+          {/* Requests */}
+          <section className="space-y-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-amber-400" />
-              Reviewer Requests
+              Pending Requests
             </h2>
 
-            <section className="glass rounded-2xl border border-white/5 p-6 h-full">
+            <section className="glass rounded-2xl border border-white/5 p-6">
+              {reviewerRequestsError ? (
+                <p className="text-sm text-red-400">{reviewerRequestsError}</p>
+              ) : roundStartRequests.length === 0 ? (
+                <p className="text-sm text-slate-500">No pending round start requests.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {roundStartRequests.slice(0, 5).map(request => (
+                    <div key={request.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                            Round start
+                          </span>
+                          <span className="text-xs text-slate-500">Round {request.roundNumber}</span>
+                        </div>
+                        <Link href={`/rounds?paper=${request.paperId}`} className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors">
+                          Open
+                        </Link>
+                      </div>
+                      <p className="text-sm font-semibold text-white truncate">{request.paperTitle}</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {request.targetVenue} · {request.venueCategory} · due {formatDate(request.deadline)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="glass rounded-2xl border border-white/5 p-6">
+              <h3 className="text-sm font-semibold text-white mb-4">Reviewer Requests</h3>
               {reviewerRequestsError ? (
                 <p className="text-sm text-red-400">{reviewerRequestsError}</p>
               ) : reviewerRequests.length === 0 ? (
                 <p className="text-sm text-slate-500">No pending reviewer requests.</p>
               ) : (
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {reviewerRequests.slice(0, 5).map(request => (
                     <div key={request.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
@@ -511,7 +604,7 @@ export default function DashboardPage() {
                 </div>
               )}
             </section>
-          </div>
+          </section>
         </div>
       )}
 
@@ -520,8 +613,48 @@ export default function DashboardPage() {
         <section className="glass rounded-2xl border border-white/5 p-6">
           <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-400" />
+              Assigned Reviews
+            </h2>
+            <Link href="/my-reviews" className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors">
+              Open my reviews
+            </Link>
+          </div>
+
+          {requestDecisionsError ? (
+            <p className="text-sm text-red-400">{requestDecisionsError}</p>
+          ) : isLoadingMyReviews ? (
+            <p className="text-sm text-slate-500">Loading review assignments...</p>
+          ) : myReviewAssignments.length === 0 ? (
+            <p className="text-sm text-slate-500">No active review assignments yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {myReviewAssignments.slice(0, 5).map(assignment => (
+                <div key={assignment.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${assignmentStatusClass(assignment.status)}`}>
+                        {assignmentStatusLabel(assignment.status)}
+                      </span>
+                      <span className="text-xs text-slate-500">Round {assignment.round.roundNumber}</span>
+                    </div>
+                    <span className="text-xs text-slate-500">Due {formatDate(assignment.deadline)}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-white truncate">{assignment.paper.title}</p>
+                  <p className="text-xs text-slate-400 mt-1">{assignment.round.targetVenue}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {!user.isCoordinator && !user.isAdmin && (
+        <section className="glass rounded-2xl border border-white/5 p-6">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-blue-400" />
-              Request Decisions
+              Responses to Requests
             </h2>
             <div className="flex items-center gap-3">
               {requestDecisions.length > 0 && (
@@ -548,7 +681,7 @@ export default function DashboardPage() {
           {requestDecisionsError ? (
             <p className="text-sm text-red-400">{requestDecisionsError}</p>
           ) : requestDecisions.length === 0 ? (
-            <p className="text-sm text-slate-500">No extension or decline request decisions yet.</p>
+            <p className="text-sm text-slate-500">No responses to extension or decline requests yet.</p>
           ) : (
             <div className="space-y-3">
               {visibleRequestDecisions.map(decision => {
