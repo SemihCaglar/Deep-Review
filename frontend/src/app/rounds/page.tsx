@@ -626,7 +626,17 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
   const aiFileRef = useRef<HTMLInputElement>(null);
   const [runningAI, setRunningAI] = useState(false);
   const [aiError, setAiError] = useState('');
+  const [aiStatus, setAiStatus] = useState('');
   const [localAiResult, setLocalAiResult] = useState<any>(null);
+
+  const AI_PHASES = [
+    { at: 0,  msg: 'Uploading PDF to agent…' },
+    { at: 4,  msg: 'Agent is reading the paper…' },
+    { at: 12, msg: 'Analyzing content and generating feedback…' },
+    { at: 22, msg: 'Annotating PDF…' },
+    { at: 32, msg: 'Downloading annotated PDF…' },
+    { at: 42, msg: 'Almost done…' },
+  ];
 
   const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -634,13 +644,25 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
     e.target.value = '';
     setRunningAI(true);
     setAiError('');
+    setAiStatus(AI_PHASES[0].msg);
+
+    const start = Date.now();
+    const ticker = setInterval(() => {
+      const elapsed = (Date.now() - start) / 1000;
+      const phase = [...AI_PHASES].reverse().find(p => elapsed >= p.at);
+      if (phase) setAiStatus(phase.msg);
+    }, 1000);
+
     try {
       const res = await startAIReviewRequest(round.id, file);
       setLocalAiResult(res.data);
+      setAiStatus('');
       onRefresh();
     } catch (err: any) {
       setAiError(err.message || 'AI Review failed');
+      setAiStatus('');
     } finally {
+      clearInterval(ticker);
       setRunningAI(false);
     }
   };
@@ -1088,8 +1110,11 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {runningAI ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
-                Run AI Review
+                {runningAI ? 'Running…' : 'Run AI Review'}
               </button>
+              {aiStatus && (
+                <span className="text-xs text-indigo-300 animate-pulse">{aiStatus}</span>
+              )}
               <button
                 onClick={() => complianceFileRef.current?.click()}
                 disabled={runningCompliance}

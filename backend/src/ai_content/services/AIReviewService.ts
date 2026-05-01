@@ -4,7 +4,8 @@ import { AzureOpenAIClient } from '../utils/AzureOpenAIClient';
 import { PdfAgentService } from './PdfAgentService';
 import fs from 'node:fs';
 import path from 'node:path';
-const pdfParse = require('pdf-parse');
+const pdfParseLib = require('pdf-parse');
+const pdfParse: (buf: Buffer) => Promise<{ text: string }> = pdfParseLib.default ?? pdfParseLib;
 
 export class AIReviewService {
   static async getVenueRules(venueName: string): Promise<any> {
