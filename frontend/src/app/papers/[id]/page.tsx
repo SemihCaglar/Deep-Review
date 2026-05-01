@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
-import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError } from '@/lib/api';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, ShieldCheck, Cpu, Download } from 'lucide-react';
+import { getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest, getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory, getLabMembersRequest, ApiError, updateOverleafLinkRequest, updateOverleafGitUrlRequest, updatePaperVenueRequest, startAIReviewRequest, runComplianceCheckRequest, getVenueRulesRequest } from '@/lib/api';
 
 function todayInputValue() {
     const today = new Date();
@@ -19,7 +19,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [paper, setPaper] = useState<Paper | null>(null);
     const [loading, setLoading] = useState(true);
     const [availableTopics, setAvailableTopics] = useState<TopicOption[]>([]);
-    
+
     const [isArchiving, setIsArchiving] = useState(false);
     const [declineReason, setDeclineReason] = useState('');
     const [showDeclineForm, setShowDeclineForm] = useState(false);
@@ -47,6 +47,19 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [paperHistory, setPaperHistory] = useState<PaperHistory | null>(null);
     const [historyError, setHistoryError] = useState('');
 
+    const [isEditingOverleaf, setIsEditingOverleaf] = useState(false);
+    const [isEditingGit, setIsEditingGit] = useState(false);
+    const [localOverleaf, setLocalOverleaf] = useState('');
+    const [localGit, setLocalGit] = useState('');
+    const [isSavingOverleaf, setIsSavingOverleaf] = useState(false);
+    const [isSavingGit, setIsSavingGit] = useState(false);
+    const [isEditingVenue, setIsEditingVenue] = useState(false);
+    const [localVenue, setLocalVenue] = useState('');
+    const [isSavingVenue, setIsSavingVenue] = useState(false);
+    const [runningAI, setRunningAI] = useState<string | null>(null);
+    const [runningCompliance, setRunningCompliance] = useState<string | null>(null);
+    const [aiError, setAiError] = useState('');
+
     useEffect(() => {
         const fetchData = async () => {
             try {
@@ -56,8 +69,11 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 ]);
                 setPaper(paperData);
                 setLocalAbstract(paperData.abstractText || '');
+                setLocalVenue(paperData.targetVenue || '');
                 setLocalTopics(paperData.topics?.map((t: any) => t.id) || []);
                 setLocalAuthors(paperData.authors?.map((a: any) => a.id) || []);
+                setLocalOverleaf(paperData.overleafLink || '');
+                setLocalGit(paperData.overleafGitUrl || '');
                 setAvailableTopics(topicsData);
 
                 // Set initial deadline from mock data if it matches
@@ -65,7 +81,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 if (activeRound) {
                     setLocalDeadline(activeRound.deadline || '');
                 }
-                
+
                 // Fetch lab members for author editing
                 const membersRes = await getLabMembersRequest();
                 setAvailableUsers(membersRes.users);
@@ -188,6 +204,51 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
+    const handleSaveOverleaf = async () => {
+        if (!paper) return;
+        setIsSavingOverleaf(true);
+        try {
+            const res = await updateOverleafLinkRequest(paper.id, localOverleaf.trim());
+            setPaper({ ...paper, overleafLink: res.overleafLink });
+            setIsEditingOverleaf(false);
+        } catch (err) {
+            console.error('Failed to save Overleaf link', err);
+            alert(err instanceof ApiError ? err.message : 'Failed to save');
+        } finally {
+            setIsSavingOverleaf(false);
+        }
+    };
+
+    const handleSaveGit = async () => {
+        if (!paper) return;
+        setIsSavingGit(true);
+        try {
+            const res = await updateOverleafGitUrlRequest(paper.id, localGit.trim());
+            setPaper({ ...paper, overleafGitUrl: res.overleafGitUrl });
+            setIsEditingGit(false);
+        } catch (err) {
+            console.error('Failed to save Git URL', err);
+            alert(err instanceof ApiError ? err.message : 'Failed to save');
+        } finally {
+            setIsSavingGit(false);
+        }
+    };
+
+    const handleSaveVenue = async () => {
+        if (!paper || !localVenue.trim()) return;
+        setIsSavingVenue(true);
+        try {
+            const updatedPaper = await updatePaperVenueRequest(paper.id, localVenue.trim());
+            setPaper(updatedPaper);
+            setIsEditingVenue(false);
+        } catch (err) {
+            console.error('Failed to update venue', err);
+            alert('Failed to update venue');
+        } finally {
+            setIsSavingVenue(false);
+        }
+    };
+
     const toggleAuthor = (id: string) => {
         if (localAuthors.includes(id)) {
             setLocalAuthors(localAuthors.filter(a => a !== id));
@@ -200,7 +261,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         const newAuthors = [...localAuthors];
         const targetIndex = direction === 'up' ? index - 1 : index + 1;
         if (targetIndex < 0 || targetIndex >= newAuthors.length) return;
-        
+
         [newAuthors[index], newAuthors[targetIndex]] = [newAuthors[targetIndex], newAuthors[index]];
         setLocalAuthors(newAuthors);
     };
@@ -271,6 +332,41 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
             default:
                 return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+        }
+    };
+
+    const handleStartAIReview = async (roundId: string) => {
+        setRunningAI(roundId);
+        setAiError('');
+        try {
+            await startAIReviewRequest(roundId);
+            // Refresh paper history
+            const historyData = await getPaperHistoryRequest(params.id);
+            setPaperHistory(historyData);
+        } catch (err: any) {
+            setAiError(err.message || 'Failed to start AI Review');
+        } finally {
+            setRunningAI(null);
+        }
+    };
+
+    const handleRunComplianceCheck = async (roundId: string, targetVenue: string) => {
+        setRunningCompliance(roundId);
+        setAiError('');
+        try {
+            // Fetch venue rules first
+            const venueRules = await getVenueRulesRequest(roundId);
+
+            // Pass them to compliance check
+            await runComplianceCheckRequest(roundId, venueRules);
+
+            // Refresh paper history
+            const historyData = await getPaperHistoryRequest(params.id);
+            setPaperHistory(historyData);
+        } catch (err: any) {
+            setAiError(err.message || 'Failed to run Compliance Check');
+        } finally {
+            setRunningCompliance(null);
         }
     };
 
@@ -416,10 +512,41 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     ))}
                                 </div>
 
-                                {(checklistItems.length > 0 || aiReports.length > 0) && (
+                                {(checklistItems.length > 0 || aiReports.length > 0 || round.aiReviewReport || round.complianceReport || round.annotatedPdfUrl || round.roundStatus === 'Completed') && (
                                     <div className="p-5 border-t border-white/5 bg-black/10">
-                                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Artifacts</h4>
-                                        <div className="space-y-3">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                                            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Post-Review Phase & Artifacts</h4>
+
+                                            {/* AI Actions */}
+                                            {round.roundStatus === 'Completed' && (user.isCoordinator || user.id === paper.authors?.[0]?.id || paper.authors?.some(a => a.id === user.id)) && (
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleRunComplianceCheck(round.id, paperHistory?.targetVenue || paper.targetVenue || '')}
+                                                        disabled={runningCompliance === round.id || runningAI === round.id}
+                                                        className="px-3 py-1.5 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/20 text-xs font-medium rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
+                                                    >
+                                                        {runningCompliance === round.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                                                        Run Compliance Check
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleStartAIReview(round.id)}
+                                                        disabled={runningCompliance === round.id || runningAI === round.id}
+                                                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-500 shadow-sm text-xs font-medium rounded-md transition-colors flex items-center gap-2 disabled:opacity-50"
+                                                    >
+                                                        {runningAI === round.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cpu className="w-3.5 h-3.5" />}
+                                                        Generate AI Review
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {aiError && (runningAI === round.id || runningCompliance === round.id) && (
+                                            <div className="mb-4 p-3 rounded-lg border border-red-500/20 bg-red-500/5 text-sm text-red-400">
+                                                {aiError}
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-4">
                                             {aiReports.map(report => (
                                                 <div key={report.id} className="flex flex-wrap items-center gap-3 text-sm">
                                                     {report.generatedReportUrl && (
@@ -436,8 +563,100 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     )}
                                                 </div>
                                             ))}
+
+                                            {/* New AI Review Report */}
+                                            {round.aiReviewReport && (
+                                                <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4 mt-2">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <Cpu className="w-4 h-4 text-indigo-400" />
+                                                        <h5 className="text-sm font-semibold text-indigo-300">AI Review Generated</h5>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <p className="text-xs text-slate-500 mb-1">Checklist Compliance</p>
+                                                            <div className="space-y-1">
+                                                                {round.aiReviewReport.checklist?.map((item: any, i: number) => (
+                                                                    <div key={i} className="flex items-start gap-2 text-xs">
+                                                                        {item.status === 'Pass' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+                                                                        <span className="text-slate-300">{item.requirement}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-slate-500 mb-1">Methodology Review</p>
+                                                            <p className="text-xs text-slate-300 line-clamp-4">{round.aiReviewReport.methodologyReview}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* New Compliance Report */}
+                                            {round.complianceReport && (
+                                                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4 mt-2">
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <ShieldCheck className="w-4 h-4 text-blue-400" />
+                                                        <h5 className="text-sm font-semibold text-blue-300">Compliance Check</h5>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <p className="text-xs text-slate-500 mb-1">Anonymity Validation</p>
+                                                            <div className="space-y-1">
+                                                                {round.complianceReport.anonymityViolations?.length > 0 ? (
+                                                                    round.complianceReport.anonymityViolations.map((v: string, i: number) => (
+                                                                        <div key={i} className="flex items-start gap-2 text-xs">
+                                                                            <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                                                                            <span className="text-slate-300">{v}</span>
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <div className="flex items-center gap-2 text-xs text-emerald-400">
+                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> No anonymity violations found.
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-slate-500 mb-1">Formatting Validation</p>
+                                                            <div className="space-y-1">
+                                                                {round.complianceReport.formattingViolations?.length > 0 ? (
+                                                                    round.complianceReport.formattingViolations.map((v: string, i: number) => (
+                                                                        <div key={i} className="flex items-start gap-2 text-xs">
+                                                                            <XCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                                                            <span className="text-slate-300">{v}</span>
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <div className="flex items-center gap-2 text-xs text-emerald-400">
+                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> Formatting looks correct.
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Download Links */}
+                                            {(round.annotatedPdfUrl || round.sourceZipUrl) && (
+                                                <div className="flex flex-wrap gap-3 mt-4">
+                                                    {round.annotatedPdfUrl && (
+                                                        <a href={round.annotatedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-sm font-medium transition-colors">
+                                                            <ExternalLink className="w-4 h-4" />
+                                                            View Annotated PDF
+                                                        </a>
+                                                    )}
+                                                    {round.sourceZipUrl && (
+                                                        <a href={round.sourceZipUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-lg text-sm font-medium transition-colors">
+                                                            <Download className="w-4 h-4" />
+                                                            Download Source ZIP
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            )}
+
                                             {checklistItems.length > 0 && (
-                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
                                                     {checklistItems.map(item => (
                                                         <div key={item.id} className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] p-3">
                                                             <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${item.isChecked ? 'text-emerald-400' : 'text-slate-600'}`} />
@@ -471,6 +690,50 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border uppercase tracking-wider ${getStatusColor(effectivePaperStatus)}`}>
                             {effectivePaperStatus}
                         </span>
+                    </div>
+
+                    {/* Target Venue */}
+                    <div className="flex items-center gap-2 mb-3">
+                        {isEditingVenue ? (
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={localVenue}
+                                    onChange={(e) => setLocalVenue(e.target.value)}
+                                    className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all w-64"
+                                    placeholder="Target Venue..."
+                                />
+                                <button
+                                    onClick={handleSaveVenue}
+                                    disabled={isSavingVenue}
+                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors"
+                                >
+                                    {isSavingVenue ? 'Saving...' : 'Save'}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setLocalVenue(paper.targetVenue || '');
+                                        setIsEditingVenue(false);
+                                    }}
+                                    className="px-2 py-1 text-xs text-slate-400 hover:text-white"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2 group/venue">
+                                <span className="text-slate-400 text-sm">Target Venue:</span>
+                                <span className="text-blue-400 font-medium text-sm">{paper.targetVenue || 'Not specified'}</span>
+                                {canEditAbstract && (
+                                    <button
+                                        onClick={() => setIsEditingVenue(true)}
+                                        className="opacity-0 group-hover/venue:opacity-100 transition-opacity text-xs text-slate-500 hover:text-blue-400 p-1"
+                                    >
+                                        <Edit className="w-3 h-3" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-2 mb-4 flex-wrap group/topics cursor-pointer relative">
@@ -558,12 +821,105 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
 
                     <div className="flex flex-wrap items-center gap-3">
-                        {paper.overleafLink && (
-                            <a href={paper.overleafLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 bg-blue-500/10 px-3 py-1.5 rounded-lg transition-colors border border-blue-500/20 w-fit">
-                                <ExternalLink className="w-4 h-4" />
-                                Open Overleaf Manuscript
-                            </a>
-                        )}
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                {paper.overleafLink ? (
+                                    <a href={paper.overleafLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 bg-blue-500/10 px-3 py-1.5 rounded-lg transition-colors border border-blue-500/20 w-fit">
+                                        <ExternalLink className="w-4 h-4" />
+                                        Open Overleaf Manuscript
+                                    </a>
+                                ) : (
+                                    <span className="text-sm text-slate-500 italic px-3 py-1.5 rounded-lg border border-dashed border-white/10">
+                                        No Overleaf link provided
+                                    </span>
+                                )}
+                                {(paper.authors?.some(a => a.id === user.id) || paper.coordinators?.some(c => c.id === user.id)) && !isEditingOverleaf && (
+                                    <button
+                                        onClick={() => setIsEditingOverleaf(true)}
+                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 hover:bg-blue-500/5 rounded transition-colors"
+                                    >
+                                        <Edit className="w-3 h-3" /> Edit
+                                    </button>
+                                )}
+                            </div>
+                            {isEditingOverleaf && (
+                                <div className="flex items-center gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        placeholder="https://www.overleaf.com/..."
+                                        value={localOverleaf}
+                                        onChange={(e) => setLocalOverleaf(e.target.value)}
+                                        className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all w-64"
+                                    />
+                                    <button
+                                        onClick={handleSaveOverleaf}
+                                        disabled={isSavingOverleaf}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[10px] font-medium rounded-lg transition-colors"
+                                    >
+                                        {isSavingOverleaf ? 'Saving...' : 'Save'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setLocalOverleaf(paper.overleafLink || '');
+                                            setIsEditingOverleaf(false);
+                                        }}
+                                        className="px-2 py-1 text-[10px] text-slate-400 hover:text-white"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                {paper.overleafGitUrl ? (
+                                    <div className="inline-flex items-center gap-2 text-sm text-slate-400 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 w-fit">
+                                        <span className="font-semibold text-[10px] uppercase tracking-wider text-slate-500">Overleaf Git:</span>
+                                        <span className="font-mono text-xs select-all">{paper.overleafGitUrl}</span>
+                                    </div>
+                                ) : (
+                                    <span className="text-sm text-slate-500 italic px-3 py-1.5 rounded-lg border border-dashed border-white/10">
+                                        No Git URL provided
+                                    </span>
+                                )}
+                                {(paper.authors?.some(a => a.id === user.id) || paper.coordinators?.some(c => c.id === user.id)) && !isEditingGit && (
+                                    <button
+                                        onClick={() => setIsEditingGit(true)}
+                                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 hover:bg-blue-500/5 rounded transition-colors"
+                                    >
+                                        <Edit className="w-3 h-3" /> Edit
+                                    </button>
+                                )}
+                            </div>
+                            {isEditingGit && (
+                                <div className="flex items-center gap-2 mt-1">
+                                    <input
+                                        type="text"
+                                        placeholder="https://git.overleaf.com/..."
+                                        value={localGit}
+                                        onChange={(e) => setLocalGit(e.target.value)}
+                                        className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all w-64"
+                                    />
+                                    <button
+                                        onClick={handleSaveGit}
+                                        disabled={isSavingGit}
+                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-[10px] font-medium rounded-lg transition-colors"
+                                    >
+                                        {isSavingGit ? 'Saving...' : 'Save'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setLocalGit(paper.overleafGitUrl || '');
+                                            setIsEditingGit(false);
+                                        }}
+                                        className="px-2 py-1 text-[10px] text-slate-400 hover:text-white"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -624,14 +980,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 Archive Paper
                             </button>
 
-                            <button
-                                disabled={!allReviewsComplete}
-                                className={`w-full px-5 py-2.5 border text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 
-                                ${allReviewsComplete ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20' : 'bg-slate-800/50 text-slate-500 border-slate-700 cursor-not-allowed'}`}
-                            >
-                                <Play className="w-4 h-4" />
-                                Run AI Analysis
-                            </button>
                         </>
                     )}
 
@@ -862,7 +1210,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 </button>
                             )}
                         </h3>
-                         <div className="space-y-4">
+                        <div className="space-y-4">
                             {isEditingAuthors ? (
                                 <div className="space-y-6">
                                     <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
@@ -882,7 +1230,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             </button>
                                         ))}
                                     </div>
-                                    
+
                                     <div className="pt-4 border-t border-white/10 space-y-2">
                                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Order</h4>
                                         {localAuthors.map((id, index) => {

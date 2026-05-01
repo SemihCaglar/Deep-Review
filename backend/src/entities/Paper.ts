@@ -25,6 +25,9 @@ export class Paper {
   @Column('text')
   abstractText: string;
 
+  @Column({ nullable: true })
+  targetVenue: string;
+
   @Column()
   creationTime: Date;
 
@@ -37,6 +40,9 @@ export class Paper {
 
   @Column({ nullable: true })
   overleafLink: string;
+
+  @Column({ nullable: true })
+  overleafGitUrl: string;
 
   @ManyToMany('User', 'writtenPapers')
   authors: User[];

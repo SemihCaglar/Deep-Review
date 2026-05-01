@@ -19,6 +19,9 @@ export class Lab {
   @Column('text', { nullable: true })
   description: string;
 
+  @Column('varchar', { nullable: true, length: 255 })
+  overleafGitToken: string | null;
+
   @OneToOne('Coordinator', 'lab')
   @JoinColumn()
   coordinator: Coordinator;

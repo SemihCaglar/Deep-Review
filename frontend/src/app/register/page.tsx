@@ -11,7 +11,7 @@ export default function RegisterPaper() {
     const router = useRouter();
     const [step, setStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    
+
     const [availableUsers, setAvailableUsers] = useState<LabMember[]>([]);
     const [topicsList, setTopicsList] = useState<TopicOption[]>([]);
 
@@ -20,6 +20,7 @@ export default function RegisterPaper() {
     const [abstractText, setAbstractText] = useState('');
     const [targetVenue, setTargetVenue] = useState('');
     const [overleafLink, setOverleafLink] = useState('');
+    const [overleafGitUrl, setOverleafGitUrl] = useState('');
     const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
     const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
 
@@ -32,7 +33,7 @@ export default function RegisterPaper() {
                 ]);
                 setAvailableUsers(membersRes.users);
                 setTopicsList(topicsRes);
-                
+
                 // Automatically add current user to authors if not already there
                 if (user?.id && !selectedAuthors.includes(user.id)) {
                     setSelectedAuthors([user.id]);
@@ -67,7 +68,7 @@ export default function RegisterPaper() {
         const newAuthors = [...selectedAuthors];
         const targetIndex = direction === 'up' ? index - 1 : index + 1;
         if (targetIndex < 0 || targetIndex >= newAuthors.length) return;
-        
+
         [newAuthors[index], newAuthors[targetIndex]] = [newAuthors[targetIndex], newAuthors[index]];
         setSelectedAuthors(newAuthors);
     };
@@ -92,13 +93,14 @@ export default function RegisterPaper() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        
+
         try {
             await registerPaperRequest({
                 title,
                 abstractText,
                 targetVenue,
                 overleafLink,
+                overleafGitUrl,
                 authors: selectedAuthors,
                 topics: selectedTopics,
             });
@@ -157,6 +159,11 @@ export default function RegisterPaper() {
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Overleaf Link (Optional)</label>
                                 <input type="url" value={overleafLink} onChange={e => setOverleafLink(e.target.value)} placeholder="https://v2.overleaf.com/read/..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-sm" />
                             </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Overleaf Git URL (Optional)</label>
+                                <p className="text-slate-500 text-xs mb-2">To enable AI Annotated PDFs, please turn on 'Link Sharing' in your Overleaf project settings. Then paste your project's Git URL below.</p>
+                                <input type="url" value={overleafGitUrl} onChange={e => setOverleafGitUrl(e.target.value)} placeholder="https://git.overleaf.com/..." className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-sm" />
+                            </div>
                         </div>
                     )}
 
@@ -166,7 +173,7 @@ export default function RegisterPaper() {
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Assign Authors</label>
                                 <p className="text-slate-500 text-sm mb-4">Select users from the system to be attached as authors. They will receive formal email invitations upon registration.</p>
 
-                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                                     {availableUsers.filter(u => u.id !== user.id && u.role !== 'Coordinator').map(u => (
                                         <button
                                             key={u.id}
@@ -201,17 +208,17 @@ export default function RegisterPaper() {
                                                             </div>
                                                         </div>
                                                         <div className="flex gap-1">
-                                                            <button 
-                                                                type="button" 
-                                                                disabled={index === 0} 
+                                                            <button
+                                                                type="button"
+                                                                disabled={index === 0}
                                                                 onClick={() => moveAuthor(index, 'up')}
                                                                 className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 disabled:opacity-20"
                                                             >
                                                                 <ArrowUp className="w-4 h-4" />
                                                             </button>
-                                                            <button 
-                                                                type="button" 
-                                                                disabled={index === selectedAuthors.length - 1} 
+                                                            <button
+                                                                type="button"
+                                                                disabled={index === selectedAuthors.length - 1}
                                                                 onClick={() => moveAuthor(index, 'down')}
                                                                 className="p-1.5 hover:bg-white/10 rounded-lg text-slate-400 disabled:opacity-20"
                                                             >
