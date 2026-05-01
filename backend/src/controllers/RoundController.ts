@@ -541,6 +541,9 @@ export class RoundController {
         submissionDeadline: round.submissionDeadline,
         startedAt: round.startedAt,
         completedAt: round.completedAt,
+        aiReviewReport: round.aiReviewReport ?? null,
+        annotatedPdfUrl: round.annotatedPdfUrl ?? null,
+        complianceReport: round.complianceReport ?? null,
         assignments: (round.assignments ?? []).map(a => ({
           id: a.id,
           status: a.status,
