@@ -283,7 +283,6 @@ export type PaperHistoryRound = {
   aiReviewReport?: any | null;
   complianceReport?: any | null;
   annotatedPdfUrl?: string | null;
-  sourceZipUrl?: string | null;
 };
 
 export type PaperHistory = {
@@ -601,17 +600,49 @@ export function getUserAnalyticsRequest(userId: string) {
 
 // ==== AI POST-REVIEW API FUNCTIONS ====
 
-export function startAIReviewRequest(roundId: string) {
-  return apiRequest<{ message: string; data: any }>(`/rounds/${roundId}/ai`, {
-    method: 'POST'
+/**
+ * Starts an AI review by uploading the paper's PDF.
+ * Sends multipart/form-data with a 'pdf' field.
+ */
+export async function startAIReviewRequest(roundId: string, pdfFile: File): Promise<{ message: string; data: any }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('pdf', pdfFile);
+
+  const response = await fetch(buildUrl(`/rounds/${roundId}/ai`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
   });
+
+  const payload = await parseResponseBody(response);
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
+  return payload as { message: string; data: any };
 }
 
-export function runComplianceCheckRequest(roundId: string, venueRules: any) {
-  return apiRequest<{ message: string; data: any }>(`/rounds/${roundId}/compliance`, {
+/**
+ * Runs the compliance check by uploading the paper's PDF.
+ * Sends multipart/form-data with a 'pdf' field + venueRules as stringified JSON.
+ */
+export async function runComplianceCheckRequest(roundId: string, pdfFile: File, venueRules: any = {}): Promise<{ message: string; data: any }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('pdf', pdfFile);
+  formData.append('venueRules', JSON.stringify(venueRules));
+
+  const response = await fetch(buildUrl(`/rounds/${roundId}/compliance`), {
     method: 'POST',
-    body: { venueRules }
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
   });
+
+  const payload = await parseResponseBody(response);
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
+  return payload as { message: string; data: any };
 }
 
 export function getVenueRulesRequest(roundId: string) {

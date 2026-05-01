@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
@@ -50,6 +50,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [runningAI, setRunningAI] = useState<string | null>(null);
     const [runningCompliance, setRunningCompliance] = useState<string | null>(null);
     const [aiError, setAiError] = useState('');
+    const aiFileInputRef = useRef<HTMLInputElement>(null);
+    const complianceFileInputRef = useRef<HTMLInputElement>(null);
+    const [pendingAIRoundId, setPendingAIRoundId] = useState<string | null>(null);
+    const [pendingComplianceRoundId, setPendingComplianceRoundId] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -278,38 +282,52 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
-    const handleStartAIReview = async (roundId: string) => {
-        setRunningAI(roundId);
+    const handleStartAIReview = (roundId: string) => {
+        setPendingAIRoundId(roundId);
+        aiFileInputRef.current?.click();
+    };
+
+    const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !pendingAIRoundId) return;
+        e.target.value = '';
+        setRunningAI(pendingAIRoundId);
         setAiError('');
         try {
-            await startAIReviewRequest(roundId);
-            // Refresh paper history
+            await startAIReviewRequest(pendingAIRoundId, file);
             const historyData = await getPaperHistoryRequest(params.id);
             setPaperHistory(historyData);
         } catch (err: any) {
             setAiError(err.message || 'Failed to start AI Review');
         } finally {
             setRunningAI(null);
+            setPendingAIRoundId(null);
         }
     };
 
-    const handleRunComplianceCheck = async (roundId: string, targetVenue: string) => {
-        setRunningCompliance(roundId);
+    const handleRunComplianceCheck = (roundId: string, _targetVenue: string) => {
+        setPendingComplianceRoundId(roundId);
+        complianceFileInputRef.current?.click();
+    };
+
+    const handleComplianceFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !pendingComplianceRoundId) return;
+        e.target.value = '';
+        setRunningCompliance(pendingComplianceRoundId);
         setAiError('');
         try {
-            // Fetch venue rules first
-            const venueRules = await getVenueRulesRequest(roundId);
-            
-            // Pass them to compliance check
-            await runComplianceCheckRequest(roundId, venueRules);
-            
-            // Refresh paper history
+            // Optionally fetch venue rules first
+            let venueRules = {};
+            try { venueRules = await getVenueRulesRequest(pendingComplianceRoundId); } catch {}
+            await runComplianceCheckRequest(pendingComplianceRoundId, file, venueRules);
             const historyData = await getPaperHistoryRequest(params.id);
             setPaperHistory(historyData);
         } catch (err: any) {
             setAiError(err.message || 'Failed to run Compliance Check');
         } finally {
             setRunningCompliance(null);
+            setPendingComplianceRoundId(null);
         }
     };
 
@@ -621,6 +639,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
     return (
         <div className="max-w-5xl mx-auto py-4 animate-in fade-in duration-500 mb-20">
+            {/* Hidden file inputs for PDF uploads */}
+            <input ref={aiFileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
+            <input ref={complianceFileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleComplianceFileSelected} />
+
             <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors mb-6">
                 <ArrowLeft className="w-4 h-4" />
                 Back to Papers

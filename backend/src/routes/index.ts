@@ -11,7 +11,19 @@ import { SearchController } from '../controllers/SearchController';
 import { TopicController } from '../controllers/TopicController';
 import { authenticateRequest, requireAdmin, requireCoordinator } from '../middleware/auth';
 
+import multer from 'multer';
+
 const router = Router();
+
+// Multer: in-memory PDF upload (max 20MB)
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new Error('Only PDF files are allowed'));
+  }
+});
 
 // ==== ACCOUNT ROUTES ====
 router.post('/account/signup', AccountController.signUp);
@@ -125,9 +137,9 @@ router.get('/rounds/:id/status', RoundController.trackReviewStatus);
 router.post('/rounds/:id/alerts', RoundController.alertOverdueReviews);
 router.post('/rounds/:id/close', RoundController.closeRound);
 router.post('/rounds/next', authenticateRequest, RoundController.createReviewRound);
-router.post('/rounds/:id/ai', authenticateRequest, RoundController.startAIReview);
+router.post('/rounds/:id/ai', authenticateRequest, pdfUpload.single('pdf'), RoundController.startAIReview);
 router.get('/rounds/:id/venue-rules', authenticateRequest, RoundController.getVenueRules);
-router.post('/rounds/:id/compliance', authenticateRequest, RoundController.runComplianceCheck);
+router.post('/rounds/:id/compliance', authenticateRequest, pdfUpload.single('pdf'), RoundController.runComplianceCheck);
 router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
 router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistItem);
 router.put('/rounds/:id/checklist/:itemId', RoundController.updateChecklistItem);

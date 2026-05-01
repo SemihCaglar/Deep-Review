@@ -1,9 +1,9 @@
-import { OverleafGitService } from './OverleafGitService';
 import { AIGuardrailService } from './AIGuardrailService';
 import { ChecklistService } from './ChecklistService';
 import { AzureOpenAIClient } from '../utils/AzureOpenAIClient';
-import { LatexSanitizer } from '../utils/LatexSanitizer';
-import fs from 'fs';
+import { PDFAnnotationAgent } from './PDFAnnotationAgent';
+const pdfParse = require('pdf-parse');
+
 export class AIReviewService {
   /**
    * Queries Azure OpenAI to extract basic rules for a specific academic venue.
@@ -13,7 +13,7 @@ export class AIReviewService {
     console.log(`[AIReviewService] Fetching venue rules for: ${venueName}`);
     const systemPrompt = "You are an academic expert. Provide the basic submission rules (e.g., max page limit, abstract word count limit, blind review policy) for the requested venue. Return ONLY a JSON object. If you do not know the venue, return an empty JSON object {}.";
     const userPrompt = `Venue: ${venueName}`;
-    
+
     try {
       const responseText = await AzureOpenAIClient.sendPrompt(systemPrompt, userPrompt);
       const cleanedText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -26,121 +26,80 @@ export class AIReviewService {
 
   /**
    * Main orchestration method for generating an AI Review for a given paper/round.
+   * Accepts a PDF buffer directly — no Overleaf or LaTeX source needed.
    */
-  static async generateAIReview(paperId: string, roundId: string, overleafGitUrl: string, coordinatorToken: string): Promise<any> {
+  static async generateAIReview(paperId: string, roundId: string, pdfBuffer: Buffer): Promise<any> {
     console.log(`[AIReviewService] Starting AI Review pipeline for Paper ${paperId}, Round ${roundId}`);
 
-    // 1. Clone the repository
-    const tempDir = await OverleafGitService.cloneProject(overleafGitUrl, coordinatorToken);
+    // 1. Extract text from PDF
+    console.log(`[AIReviewService] Extracting text from PDF...`);
+    const pdfData = await pdfParse(pdfBuffer);
+    const paperText = pdfData.text;
 
-    try {
-      // 2. Read LaTeX source
-      console.log(`[AIReviewService] Reading all LaTeX sources from ${tempDir}`);
-      const texFiles = OverleafGitService.readAllTexFiles(tempDir);
-      
-      if (texFiles.length === 0) {
-        throw new Error("No .tex files found in the repository.");
-      }
+    if (!paperText || paperText.trim().length === 0) {
+      throw new Error('The uploaded PDF appears to be empty or could not be parsed.');
+    }
 
-      let paperContent = "";
-      for (const file of texFiles) {
-        paperContent += `\n=== ${file.filename} ===\n${file.content}\n`;
-      }
+    // Truncate to avoid hitting API token limits
+    const maxContentLength = 80000;
+    const contentToSend = paperText.length > maxContentLength
+      ? paperText.substring(0, maxContentLength) + '\n...[TRUNCATED]...'
+      : paperText;
 
-      // 3. Generate Draft Review Feedback & Inline Annotations
-      console.log(`[AIReviewService] Calling Azure OpenAI to generate review feedback...`);
-      const systemPrompt = `You are an expert academic reviewer. Review the provided paper content, which may be split across multiple .tex files.
-You MUST output your response as a strictly formatted JSON object with two fields:
+    // 2. Generate Draft Review Feedback & Structured Annotations
+    console.log(`[AIReviewService] Calling Azure OpenAI to generate review feedback...`);
+    const systemPrompt = `You are an expert academic reviewer. Review the provided paper content (extracted from a PDF).
+You MUST output your response as a strictly formatted JSON object with three fields:
 1. "summaryReport": A high-level, critical, constructive review report (string).
-2. "inlineAnnotations": An array of specific issues to highlight in the LaTeX code.
-
-Each annotation in the array MUST have:
-- "file": The exact filename as provided in the === headers ===.
-- "line": The approximate line number in that file where the issue occurs (integer).
-- "comment": A concise review comment to inject. Do NOT use LaTeX special characters.
+2. "annotations": An array of specific issues to highlight. Each must have:
+   - "page": The approximate page number (1-indexed integer) where the issue occurs.
+   - "comment": A concise review comment (string, max 80 chars). Do NOT use special characters.
+3. "detectedPaperType": Detected paper type (e.g., "Research", "Survey", "Case Study", "Engineering").
 
 Return ONLY the JSON. No markdown ticks.`;
-      
-      // Truncate paperContent to avoid hitting API limits
-      const maxContentLength = 80000;
-      let contentToSend = paperContent;
-      if (paperContent.length > maxContentLength) {
-        console.warn(`[AIReviewService] Paper content exceeds ${maxContentLength} characters, truncating.`);
-        contentToSend = paperContent.substring(0, maxContentLength) + "\n...[TRUNCATED]...";
-      }
-      
-      const aiResponse = await AzureOpenAIClient.sendPrompt(systemPrompt, `Here is the paper content:\n${contentToSend}`);
-      let reviewData;
-      try {
-        const cleanedText = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-        reviewData = JSON.parse(cleanedText);
-      } catch (e) {
-        console.warn("[AIReviewService] Failed to parse AI review JSON, falling back to empty annotations.");
-        reviewData = { summaryReport: aiResponse, inlineAnnotations: [] };
-      }
 
-      // 4. PC/Jury Related-Work Scan & Guardrails
-      console.log(`[AIReviewService] Generating suggested citations...`);
-      const rawCitations = [{ title: "Fake Paper 2024", authors: ["John Doe"] }];
-      const validatedCitations = await AIGuardrailService.validateCitations(rawCitations);
+    const aiResponse = await AzureOpenAIClient.sendPrompt(systemPrompt, `Here is the paper content:\n${contentToSend}`);
 
-      // 5. Checklist Prediction
-      console.log(`[AIReviewService] Determining paper type and pre-filling checklist...`);
-      const paperType = "CaseStudy"; // Predicted by AI
-      const emptyChecklist = ChecklistService.generateChecklistForType(paperType);
-      const preFilledChecklist = await ChecklistService.preFillChecklist(emptyChecklist, paperContent);
-
-      // 6. Inject Annotations, Compile, and Archive
-      console.log(`[AIReviewService] Injecting LaTeX comments...`);
-      
-      // Group annotations by file to handle line shifting
-      const annotationsByFile: Record<string, any[]> = {};
-      for (const ann of reviewData.inlineAnnotations || []) {
-        if (!annotationsByFile[ann.file]) annotationsByFile[ann.file] = [];
-        annotationsByFile[ann.file].push(ann);
-      }
-
-      for (const [filename, annotations] of Object.entries(annotationsByFile)) {
-        const targetFile = texFiles.find(f => f.filename === filename);
-        if (!targetFile) continue;
-
-        const lines = targetFile.content.split('\n');
-        
-        // Sort descending to avoid line shift issues during insertion
-        annotations.sort((a, b) => b.line - a.line);
-        
-        for (const ann of annotations) {
-          const safeLineIndex = Math.max(0, Math.min(ann.line - 1, lines.length - 1));
-          const safeComment = LatexSanitizer.escapeLatex(ann.comment);
-          // Insert the inline todonotes command right before the target line
-          // Wait, user prefers highlighting/banner style, we will use \todo[inline, color=yellow]
-          lines.splice(safeLineIndex, 0, `\\todo[inline, color=yellow]{AI Review: ${safeComment}}`);
-        }
-        
-        fs.writeFileSync(targetFile.fullPath, lines.join('\n'));
-      }
-
-      console.log(`[AIReviewService] Compiling PDF...`);
-      const pdfPath = await OverleafGitService.compileToPdf(tempDir);
-
-      console.log(`[AIReviewService] Archiving modified source code...`);
-      const zipFilename = `paper_${paperId}_round_${roundId}_annotated.zip`;
-      const zipPath = await OverleafGitService.archiveProject(tempDir, zipFilename);
-
-      return {
-        success: true,
-        summaryReport: reviewData.summaryReport,
-        reportUrl: "/downloads/mock_report.pdf", 
-        annotatedPdfUrl: "/downloads/mock_annotated.pdf", // In reality, expose pdfPath
-        sourceZipUrl: `/downloads/${zipFilename}`,
-        suggestedCitations: validatedCitations,
-        checklist: preFilledChecklist,
-        paperType
-      };
-
-    } finally {
-      // 7. Cleanup
-      await OverleafGitService.cleanup(tempDir);
+    let reviewData: { summaryReport: string; annotations: { page: number; comment: string }[]; detectedPaperType: string };
+    try {
+      const cleanedText = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+      reviewData = JSON.parse(cleanedText);
+    } catch (e) {
+      console.warn("[AIReviewService] Failed to parse AI review JSON, falling back to no annotations.");
+      reviewData = { summaryReport: aiResponse, annotations: [], detectedPaperType: 'Unknown' };
     }
+
+    // 3. Citation Guardrails
+    console.log(`[AIReviewService] Validating suggested citations...`);
+    const rawCitations = [{ title: "Fake Paper 2024", authors: ["John Doe"] }];
+    const validatedCitations = await AIGuardrailService.validateCitations(rawCitations);
+
+    // 4. Checklist Prediction
+    console.log(`[AIReviewService] Pre-filling checklist for paper type: ${reviewData.detectedPaperType}...`);
+    const paperType = reviewData.detectedPaperType || 'CaseStudy';
+    const emptyChecklist = ChecklistService.generateChecklistForType(paperType);
+    const preFilledChecklist = await ChecklistService.preFillChecklist(emptyChecklist, contentToSend);
+
+    // 5. Annotate PDF using the PDFAnnotationAgent
+    console.log(`[AIReviewService] Injecting annotations into PDF...`);
+    const outputFilename = `paper_${paperId}_round_${roundId}_annotated.pdf`;
+    const annotatedPdfPath = await PDFAnnotationAgent.annotate(
+      pdfBuffer,
+      reviewData.annotations || [],
+      outputFilename
+    );
+
+    // Produce a public URL (relative path from server root)
+    const annotatedPdfUrl = `/downloads/${outputFilename}`;
+
+    return {
+      success: true,
+      summaryReport: reviewData.summaryReport,
+      annotatedPdfUrl,
+      annotations: reviewData.annotations,
+      suggestedCitations: validatedCitations,
+      checklist: preFilledChecklist,
+      paperType,
+    };
   }
 }

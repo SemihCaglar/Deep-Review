@@ -381,7 +381,7 @@ export class RoundController {
       const roundRepo = AppDataSource.getRepository(Round);
       const round = await roundRepo.findOne({
         where: { id: id as string },
-        relations: ['paper', 'paper.authors', 'paper.coordinators', 'paper.labs']
+        relations: ['paper', 'paper.authors', 'paper.coordinators']
       });
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
@@ -394,32 +394,24 @@ export class RoundController {
       // Authorization: Only Authors or Coordinators can trigger
       const isAuthor = round.paper.authors?.some(a => a.id === user.id);
       const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
-      
+
       if (!isAuthor && !isCoordinator) {
         return res.status(403).json({ message: 'Forbidden: You must be an author or coordinator of this paper.' });
       }
 
-      // Ensure we have Overleaf credentials
-      const overleafGitUrl = round.paper.overleafLink;
-      if (!overleafGitUrl) {
-        return res.status(400).json({ message: 'No Overleaf Git URL provided for this paper.' });
-      }
-
-      const lab = round.paper.labs?.[0];
-      const coordinatorToken = lab?.overleafGitToken;
-      
-      if (!coordinatorToken) {
-        return res.status(400).json({ message: 'The Coordinator has not configured a global Overleaf Git Token for this lab.' });
+      // Get the uploaded PDF from multer
+      const file = (req as any).file;
+      if (!file || !file.buffer) {
+        return res.status(400).json({ message: 'No PDF file uploaded. Please attach a PDF to run the AI review.' });
       }
 
       // Execute AI Pipeline
       const { AIReviewService } = require('../ai_content/services/AIReviewService');
-      const result = await AIReviewService.generateAIReview(round.paper.id, round.id, overleafGitUrl, coordinatorToken);
+      const result = await AIReviewService.generateAIReview(round.paper.id, round.id, file.buffer);
 
       // Persist results
       round.aiReviewReport = result;
       round.annotatedPdfUrl = result.annotatedPdfUrl;
-      round.sourceZipUrl = result.sourceZipUrl;
       await roundRepo.save(round);
 
       return res.status(200).json({
@@ -463,46 +455,36 @@ export class RoundController {
       const roundRepo = AppDataSource.getRepository(Round);
       const round = await roundRepo.findOne({
         where: { id: id as string },
-        relations: ['paper', 'paper.authors', 'paper.coordinators', 'paper.labs']
+        relations: ['paper', 'paper.authors', 'paper.coordinators']
       });
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
 
-      if (round.status !== 'Completed') {
+      if (round.status !== RoundStatus.Completed) {
         return res.status(400).json({ message: 'Compliance check can only be run after the review round is Completed.' });
       }
 
       // Authorization: Only Authors or Coordinators can trigger
       const isAuthor = round.paper.authors?.some(a => a.id === user.id);
       const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
-      
+
       if (!isAuthor && !isCoordinator) {
         return res.status(403).json({ message: 'Forbidden: You must be an author or coordinator of this paper.' });
       }
 
-      const overleafGitUrl = round.paper.overleafLink;
-      if (!overleafGitUrl) {
-        return res.status(400).json({ message: 'No Overleaf Git URL provided for this paper.' });
-      }
-
-      const lab = round.paper.labs?.[0];
-      const coordinatorToken = lab?.overleafGitToken;
-      
-      if (!coordinatorToken) {
-        return res.status(400).json({ message: 'The Coordinator has not configured a global Overleaf Git Token for this lab.' });
+      // Get uploaded PDF
+      const file = (req as any).file;
+      if (!file || !file.buffer) {
+        return res.status(400).json({ message: 'No PDF file uploaded. Please attach a PDF to run the compliance check.' });
       }
 
       // We expect the frontend to pass the manually approved/corrected venue rules
-      const venueRules = req.body.venueRules;
-      if (!venueRules) {
-        return res.status(400).json({ message: 'Missing venueRules in request body. Fetch rules first and pass them.' });
-      }
+      const venueRules = req.body.venueRules ? JSON.parse(req.body.venueRules) : {};
 
       const { ComplianceService } = require('../ai_content/services/ComplianceService');
       const complianceReport = await ComplianceService.verifyCompliance(
         round.paper.id,
-        overleafGitUrl,
-        coordinatorToken,
+        file.buffer,
         venueRules
       );
 
