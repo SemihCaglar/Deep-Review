@@ -487,6 +487,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
   const [approving, setApproving] = useState(false);
   const [approveMsg, setApproveMsg] = useState('');
   const [approveError, setApproveError] = useState('');
+  const [approvingProposedId, setApprovingProposedId] = useState<string | null>(null);
 
   const loadProposed = async () => {
     setLoadingProposed(true);
@@ -528,6 +529,21 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
     }
   };
 
+  const handleApproveProposed = async (reviewerId: string) => {
+    setApprovingProposedId(reviewerId);
+    setProposeError('');
+    try {
+      await assignReviewersRequest(round.id, [reviewerId]);
+      const updated = await removeProposedReviewerRequest(round.id, reviewerId);
+      setProposedReviewers(updated);
+      onRefresh();
+    } catch (e) {
+      setProposeError(e instanceof ApiError ? e.message : 'Failed to assign proposed reviewer');
+    } finally {
+      setApprovingProposedId(null);
+    }
+  };
+
   const handleRemoveProposed = async (userId: string) => {
     try {
       const updated = await removeProposedReviewerRequest(round.id, userId);
@@ -565,6 +581,9 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
   const [editingDetails, setEditingDetails] = useState(false);
   const [draftVenueName, setDraftVenueName] = useState(round.targetVenue || '');
   const [draftVenueUrl, setDraftVenueUrl] = useState(round.targetVenueUrl || '');
+  const [draftVenueCategory, setDraftVenueCategory] = useState<'Conference' | 'Journal'>(
+    round.venueCategory === 'Journal' ? 'Journal' : 'Conference',
+  );
   const [savingDetails, setSavingDetails] = useState(false);
   const [detailsError, setDetailsError] = useState('');
 
@@ -587,6 +606,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
       await updateRoundDetailsRequest(round.id, {
         targetVenue: draftVenueName.trim(),
         targetVenueUrl: draftVenueUrl.trim(),
+        venueCategory: draftVenueCategory,
       });
       setEditingDetails(false);
       onRefresh();
@@ -717,6 +737,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
   const pendingCount = round.assignments.filter(
     a => a.pendingDeclineRequest || a.pendingExtensionRequest,
   ).length;
+  const draftReviewerCount = proposedReviewers.length + round.assignments.length;
 
   return (
     <div className="glass rounded-2xl border border-white/5 overflow-hidden">
@@ -766,8 +787,8 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                   {approveError && <p className="text-xs text-red-400 max-w-xs text-right">{approveError}</p>}
                   <button
                     onClick={handleApproveRound}
-                    disabled={approving || !paperHasOverleafLink || !round.targetVenueUrl?.trim() || proposedReviewers.length === 0}
-                    title={proposedReviewers.length === 0 ? 'Add at least one proposed reviewer before approving' : undefined}
+                    disabled={approving || !paperHasOverleafLink || !round.targetVenueUrl?.trim() || draftReviewerCount === 0}
+                    title={draftReviewerCount === 0 ? 'Add at least one reviewer before approving' : undefined}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
@@ -777,40 +798,60 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
               </div>
 
               {/* Round config info */}
+              <div className="rounded-lg border border-white/5 bg-white/[0.015] px-3 py-2 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Venue Details</p>
+                  {!editingDetails && (
+                    <button
+                      onClick={() => { setDraftVenueName(round.targetVenue || ''); setDraftVenueUrl(round.targetVenueUrl || ''); setDraftVenueCategory(round.venueCategory === 'Journal' ? 'Journal' : 'Conference'); setDetailsError(''); setEditingDetails(true); }}
+                      className="text-xs text-blue-400 hover:text-blue-300 px-2 py-0.5 rounded border border-blue-500/20"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-3">
+                    <p className="text-slate-500 text-xs">Target Venue</p>
+                    {editingDetails ? (
+                      <input type="text" value={draftVenueName} onChange={(e) => setDraftVenueName(e.target.value)} placeholder="Venue name" className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white w-full" />
+                    ) : (
+                      <p className="text-sm text-white truncate">{round.targetVenue || '—'}</p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-3">
+                    <p className="text-slate-500 text-xs">Venue URL</p>
+                    {editingDetails ? (
+                      <input type="url" value={draftVenueUrl} onChange={(e) => setDraftVenueUrl(e.target.value)} placeholder="https://venue.example" className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white w-full" />
+                    ) : round.targetVenueUrl ? (
+                      <a href={round.targetVenueUrl} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 text-sm truncate block">{round.targetVenueUrl}</a>
+                    ) : (
+                      <p className="text-slate-500 text-sm">—</p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-[112px_minmax(0,1fr)] items-center gap-3">
+                    <p className="text-slate-500 text-xs">Venue Category</p>
+                    {editingDetails ? (
+                      <select value={draftVenueCategory} onChange={(e) => setDraftVenueCategory(e.target.value as 'Conference' | 'Journal')} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white w-full">
+                        <option value="Conference">Conference</option>
+                        <option value="Journal">Journal</option>
+                      </select>
+                    ) : (
+                      <p className="text-sm text-white">{round.venueCategory || '—'}</p>
+                    )}
+                  </div>
+                </div>
+                {editingDetails && (
+                <div className="pt-2 border-t border-white/5 space-y-2">
+                  {detailsError && <p className="text-xs text-red-400">{detailsError}</p>}
+                  <div className="flex gap-2">
+                    <button onClick={handleSaveDetails} disabled={savingDetails || !draftVenueName.trim() || !draftVenueUrl.trim()} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50">{savingDetails ? 'Saving…' : 'Save'}</button>
+                    <button onClick={() => setEditingDetails(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancel</button>
+                  </div>
+                </div>
+                )}
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Target Venue</p>
-                  {!editingDetails ? (
-                    <div className="flex items-center gap-2">
-                      <p className="text-white font-medium">{round.targetVenue || '—'}</p>
-                      <button onClick={() => { setDraftVenueName(round.targetVenue || ''); setDraftVenueUrl(round.targetVenueUrl || ''); setDetailsError(''); setEditingDetails(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 sm:col-span-2">
-                      <div className="flex flex-col gap-2">
-                        <input type="text" value={draftVenueName} onChange={(e) => setDraftVenueName(e.target.value)} placeholder="Venue name" className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white w-full" />
-                        <input type="url" value={draftVenueUrl} onChange={(e) => setDraftVenueUrl(e.target.value)} placeholder="Venue URL" className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white w-full" />
-                        {detailsError && <p className="text-xs text-red-400">{detailsError}</p>}
-                        <div className="flex gap-2">
-                          <button onClick={handleSaveDetails} disabled={savingDetails || !draftVenueName.trim() || !draftVenueUrl.trim()} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50">{savingDetails ? 'Saving…' : 'Save'}</button>
-                          <button onClick={() => setEditingDetails(false)} className="px-3 py-1 text-xs text-slate-400 hover:text-white">Cancel</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Venue URL</p>
-                  {round.targetVenueUrl ? (
-                    <a href={round.targetVenueUrl} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 text-sm truncate block">{round.targetVenueUrl}</a>
-                  ) : (
-                    <p className="text-slate-500 text-sm">—</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Venue Category</p>
-                  <p className="text-white font-medium">{round.venueCategory || '—'}</p>
-                </div>
                 {round.venueCategory === 'Conference' && (
                   <div>
                     <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Submission Deadline</p>
@@ -876,13 +917,23 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                       </div>
                       <span className="text-sm text-white">{r.name}</span>
                     </div>
-                    <button
-                      onClick={() => handleRemoveProposed(r.id)}
-                      className="text-slate-500 hover:text-red-400 transition-colors"
-                      title="Remove from proposed list"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleApproveProposed(r.id)}
+                        disabled={approvingProposedId === r.id}
+                        className="text-slate-500 hover:text-emerald-400 transition-colors disabled:opacity-50"
+                        title="Assign reviewer to this round"
+                      >
+                        {approvingProposedId === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => handleRemoveProposed(r.id)}
+                        className="text-slate-500 hover:text-red-400 transition-colors"
+                        title="Remove from proposed list"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
 
@@ -1136,85 +1187,89 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
             </div>
           )}
 
-          {/* AI Tools */}
-          <div className="pt-3 border-t border-white/5 space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => aiFileRef.current?.click()}
-                disabled={runningAI}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {runningAI ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
-                {runningAI ? 'Running…' : 'Run AI Review'}
-              </button>
-              {aiStatus && (
-                <span className="text-xs text-indigo-300 animate-pulse">{aiStatus}</span>
-              )}
-              <button
-                onClick={() => complianceFileRef.current?.click()}
-                disabled={runningCompliance}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {runningCompliance ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-                Compliance Check
-              </button>
-              {aiError && <p className="text-xs text-red-400">{aiError}</p>}
-              {complianceError && <p className="text-xs text-red-400">{complianceError}</p>}
-            </div>
-
-            {/* AI Review result */}
-            {(() => {
-              const report = localAiResult || round.aiReviewReport;
-              const pdfUrl = localAiResult?.annotatedPdfUrl || round.annotatedPdfUrl;
-              if (!report) return null;
-              return (
-                <div className="p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">AI Review</p>
-                      {report.paperType && (
-                        <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{report.paperType}</span>
-                      )}
-                    </div>
-                    {pdfUrl && (
-                      <a href={pdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
-                        <Download className="w-3 h-3" /> Annotated PDF
-                      </a>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed line-clamp-5">{report.summaryReport}</p>
+          {round.status !== 'Draft' && (
+            <>
+              {/* AI Tools */}
+              <div className="pt-3 border-t border-white/5 space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => aiFileRef.current?.click()}
+                    disabled={runningAI}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {runningAI ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
+                    {runningAI ? 'Running…' : 'Run AI Review'}
+                  </button>
+                  {aiStatus && (
+                    <span className="text-xs text-indigo-300 animate-pulse">{aiStatus}</span>
+                  )}
+                  <button
+                    onClick={() => complianceFileRef.current?.click()}
+                    disabled={runningCompliance}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {runningCompliance ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+                    Compliance Check
+                  </button>
+                  {aiError && <p className="text-xs text-red-400">{aiError}</p>}
+                  {complianceError && <p className="text-xs text-red-400">{complianceError}</p>}
                 </div>
-              );
-            })()}
 
-            {/* Compliance result */}
-            {(() => {
-              const comp = localComplianceResult || round.complianceReport;
-              if (!comp) return null;
-              return (
-                <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
-                  <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Compliance Check</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(comp).map(([key, val]: [string, any]) => (
-                      <div key={key} className="flex items-start gap-1.5">
-                        {val.isCompliant
-                          ? <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />
-                          : <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />}
-                        <div>
-                          <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-                          <p className="text-[10px] text-slate-300">{val.details}</p>
+                {/* AI Review result */}
+                {(() => {
+                  const report = localAiResult || round.aiReviewReport;
+                  const pdfUrl = localAiResult?.annotatedPdfUrl || round.annotatedPdfUrl;
+                  if (!report) return null;
+                  return (
+                    <div className="p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">AI Review</p>
+                          {report.paperType && (
+                            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{report.paperType}</span>
+                          )}
                         </div>
+                        {pdfUrl && (
+                          <a href={pdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
+                            <Download className="w-3 h-3" /> Annotated PDF
+                          </a>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
+                      <p className="text-xs text-slate-300 leading-relaxed line-clamp-5">{report.summaryReport}</p>
+                    </div>
+                  );
+                })()}
 
-          {/* Hidden file inputs */}
-          <input ref={aiFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
-          <input ref={complianceFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleComplianceFileSelected} />
+                {/* Compliance result */}
+                {(() => {
+                  const comp = localComplianceResult || round.complianceReport;
+                  if (!comp) return null;
+                  return (
+                    <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
+                      <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Compliance Check</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {Object.entries(comp).map(([key, val]: [string, any]) => (
+                          <div key={key} className="flex items-start gap-1.5">
+                            {val.isCompliant
+                              ? <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />
+                              : <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />}
+                            <div>
+                              <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                              <p className="text-[10px] text-slate-300">{val.details}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Hidden file inputs */}
+              <input ref={aiFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
+              <input ref={complianceFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleComplianceFileSelected} />
+            </>
+          )}
         </div>
       )}
     </div>

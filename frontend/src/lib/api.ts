@@ -616,7 +616,7 @@ export function editRoundDeadlineRequest(roundId: string, deadline: string) {
   });
 }
 
-export function updateRoundDetailsRequest(roundId: string, details: { targetVenue?: string; targetVenueUrl?: string | null; submissionDeadline?: string | null }) {
+export function updateRoundDetailsRequest(roundId: string, details: { targetVenue?: string; targetVenueUrl?: string | null; venueCategory?: 'Conference' | 'Journal'; submissionDeadline?: string | null }) {
   return apiRequest<{ id: string }>(`/rounds/${roundId}/details`, {
     method: 'PUT',
     body: details,

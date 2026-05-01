@@ -76,6 +76,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [savingLinks, setSavingLinks] = useState(false);
     const [paperHistory, setPaperHistory] = useState<PaperHistory | null>(null);
     const [historyError, setHistoryError] = useState('');
+    const [historyExpanded, setHistoryExpanded] = useState(false);
+    const [expandedHistoryRounds, setExpandedHistoryRounds] = useState<Set<string>>(new Set());
+    const [expandedHistoryAssignments, setExpandedHistoryAssignments] = useState<Set<string>>(new Set());
+    const [expandedHistoryCategories, setExpandedHistoryCategories] = useState<Set<string>>(new Set());
 
     // Author round proposal state
     const [authorRounds, setAuthorRounds] = useState<AuthorRound[]>([]);
@@ -556,24 +560,58 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
+    const toggleHistoryRound = (key: string) => {
+        setExpandedHistoryRounds(prev => {
+            const next = new Set(prev);
+            next.has(key) ? next.delete(key) : next.add(key);
+            return next;
+        });
+    };
+
+    const toggleHistoryAssignment = (key: string) => {
+        setExpandedHistoryAssignments(prev => {
+            const next = new Set(prev);
+            next.has(key) ? next.delete(key) : next.add(key);
+            return next;
+        });
+    };
+
+    const toggleHistoryCategory = (key: string) => {
+        setExpandedHistoryCategories(prev => {
+            const next = new Set(prev);
+            next.has(key) ? next.delete(key) : next.add(key);
+            return next;
+        });
+    };
+
     const renderPaperHistory = () => {
         const isAuthor = paperHistory?.authors?.some(a => a.id === user.id) || paper.authors?.some(a => a.id === user.id);
         const isCoordinator = user.isCoordinator;
 
         return (
             <div className="glass p-8 rounded-2xl border border-white/5">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
-                <div>
-                    <h2 className="text-xl font-semibold text-white">History & Activity Log</h2>
-                    <p className="text-sm text-slate-500 mt-1">
-                        {paperHistory?.title || paper.title} · {paperHistory?.targetVenue || paper.targetVenue}
-                    </p>
+            <button
+                onClick={() => setHistoryExpanded(prev => !prev)}
+                className="w-full flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 text-left"
+            >
+                <div className="flex items-start gap-3">
+                    <div className="mt-1 text-slate-500">
+                        {historyExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-semibold text-white">History & Activity Log</h2>
+                        <p className="text-sm text-slate-500 mt-1">
+                            {paperHistory?.title || paper.title} · {paperHistory?.targetVenue || paper.targetVenue}
+                        </p>
+                    </div>
                 </div>
                 <span className={`w-fit px-2.5 py-1 rounded-full text-xs font-semibold border uppercase tracking-wider ${getStatusColor(paperHistory?.status || effectivePaperStatus)}`}>
                     {paperHistory?.status || effectivePaperStatus}
                 </span>
-            </div>
+            </button>
 
+            {historyExpanded && (
+            <div className="mt-6">
             {historyError && !paperHistory ? (
                 <p className="text-sm text-slate-500">{historyError}</p>
             ) : !paperHistory?.rounds?.length ? (
@@ -608,42 +646,88 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
 
                     {paperHistory.rounds.map(round => {
+                        const roundKey = round.id || `round-${round.roundNumber}`;
+                        const isRoundExpanded = expandedHistoryRounds.has(roundKey);
                         return (
                             <section key={round.id || round.roundNumber} className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
-                                <div className="p-5 border-b border-white/5">
+                                <button
+                                    onClick={() => toggleHistoryRound(roundKey)}
+                                    className="w-full p-5 border-b border-white/5 text-left hover:bg-white/[0.02] transition-colors"
+                                >
                                     <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <div>
+                                        <div className="flex items-start gap-3">
+                                            <div className="mt-0.5 text-slate-500">
+                                                {isRoundExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                            </div>
+                                            <div>
                                             <h3 className="text-white font-semibold">Round {round.roundNumber}</h3>
                                             <p className="text-xs text-slate-500 mt-1">
                                                 Started: {formatDateTime(round.startedAt)} · Completed: {formatDateTime(round.completedAt)}
                                             </p>
+                                            </div>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-2 text-xs">
+                                            <span className={`px-2.5 py-1 rounded-full border ${getStatusColor(round.roundStatus)}`}>
+                                                {round.roundStatus}
+                                            </span>
                                             <span className="px-2.5 py-1 rounded-full border border-white/10 bg-white/5 text-slate-300">
                                                 Deadline: {formatDate(round.deadline)}
                                             </span>
                                         </div>
                                     </div>
-                                </div>
+                                </button>
 
+                                {isRoundExpanded && (
                                 <div className="divide-y divide-white/5">
                                     {round.assignments.length === 0 ? (
                                         <p className="p-5 text-sm text-slate-500">No reviewers assigned in this round.</p>
-                                    ) : round.assignments.map(assignment => (
+                                    ) : round.assignments.map(assignment => {
+                                        const assignmentKey = assignment.assignmentId;
+                                        const isAssignmentExpanded = expandedHistoryAssignments.has(assignmentKey);
+                                        const declineCategoryKey = `${assignmentKey}:declines`;
+                                        const extensionCategoryKey = `${assignmentKey}:extensions`;
+                                        const isDeclinesExpanded = expandedHistoryCategories.has(declineCategoryKey);
+                                        const isExtensionsExpanded = expandedHistoryCategories.has(extensionCategoryKey);
+                                        const declineItemCount = assignment.declineRequests.length + (assignment.declineReason ? 1 : 0);
+
+                                        return (
                                         <div key={assignment.assignmentId} className="p-5">
-                                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                                                <div>
-                                                    <p className="text-sm font-medium text-white">
-                                                        {assignment.reviewerName || 'Unassigned reviewer'}
-                                                    </p>
-                                                    {assignment.reviewerEmail && (
-                                                        <p className="text-xs text-slate-500 mt-0.5">{assignment.reviewerEmail}</p>
-                                                    )}
+                                            <button
+                                                onClick={() => toggleHistoryAssignment(assignmentKey)}
+                                                className="w-full flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 text-left"
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <div className="mt-0.5 text-slate-500">
+                                                        {isAssignmentExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-medium text-white">
+                                                            {assignment.reviewerName || 'Unassigned reviewer'}
+                                                        </p>
+                                                        {assignment.reviewerEmail && (
+                                                            <p className="text-xs text-slate-500 mt-0.5">{assignment.reviewerEmail}</p>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                                <span className={`w-fit px-2.5 py-1 rounded-full text-xs font-medium border ${getAssignmentStatusColor(assignment.status)}`}>
-                                                    {assignment.status}
-                                                </span>
-                                            </div>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {declineItemCount > 0 && (
+                                                        <span className="px-2 py-0.5 rounded-full text-xs border border-red-500/20 bg-red-500/10 text-red-300">
+                                                            {declineItemCount} decline
+                                                        </span>
+                                                    )}
+                                                    {assignment.extensions.length > 0 && (
+                                                        <span className="px-2 py-0.5 rounded-full text-xs border border-amber-500/20 bg-amber-500/10 text-amber-300">
+                                                            {assignment.extensions.length} extension
+                                                        </span>
+                                                    )}
+                                                    <span className={`w-fit px-2.5 py-1 rounded-full text-xs font-medium border ${getAssignmentStatusColor(assignment.status)}`}>
+                                                        {assignment.status}
+                                                    </span>
+                                                </div>
+                                            </button>
+
+                                            {isAssignmentExpanded && (
+                                            <>
 
                                             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-400">
                                                 <span>Invited: {formatDateTime(assignment.invitedAt)}</span>
@@ -652,15 +736,23 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                 <span>Assignment deadline: {formatDate(assignment.deadline)}</span>
                                             </div>
 
-                                            {assignment.declineReason && (
-                                                <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/5 p-3">
-                                                    <p className="text-xs font-semibold text-red-300">Decline reason</p>
-                                                    <p className="text-sm text-slate-300 mt-1">{assignment.declineReason}</p>
-                                                </div>
-                                            )}
-
-                                            {assignment.declineRequests.length > 0 && (
+                                            {declineItemCount > 0 && (
                                                 <div className="mt-4 space-y-2">
+                                                    <button
+                                                        onClick={() => toggleHistoryCategory(declineCategoryKey)}
+                                                        className="w-full flex items-center justify-between rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-left"
+                                                    >
+                                                        <span className="text-xs font-semibold text-red-300">Declines ({declineItemCount})</span>
+                                                        {isDeclinesExpanded ? <ChevronUp className="w-4 h-4 text-red-300" /> : <ChevronDown className="w-4 h-4 text-red-300" />}
+                                                    </button>
+                                                    {isDeclinesExpanded && (
+                                                    <div className="space-y-2">
+                                                    {assignment.declineReason && (
+                                                        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                                                            <p className="text-xs font-semibold text-red-300">Decline reason</p>
+                                                            <p className="text-sm text-slate-300 mt-1">{assignment.declineReason}</p>
+                                                        </div>
+                                                    )}
                                                     {assignment.declineRequests.map(request => (
                                                         <div key={request.id} className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
                                                             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -671,11 +763,22 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                             <p className="text-xs text-slate-500 mt-2">Requested: {formatDateTime(request.requestedAt)}</p>
                                                         </div>
                                                     ))}
+                                                    </div>
+                                                    )}
                                                 </div>
                                             )}
 
                                             {assignment.extensions.length > 0 && (
                                                 <div className="mt-4 space-y-2">
+                                                    <button
+                                                        onClick={() => toggleHistoryCategory(extensionCategoryKey)}
+                                                        className="w-full flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-left"
+                                                    >
+                                                        <span className="text-xs font-semibold text-amber-300">Extension Requests ({assignment.extensions.length})</span>
+                                                        {isExtensionsExpanded ? <ChevronUp className="w-4 h-4 text-amber-300" /> : <ChevronDown className="w-4 h-4 text-amber-300" />}
+                                                    </button>
+                                                    {isExtensionsExpanded && (
+                                                    <div className="space-y-2">
                                                     {assignment.extensions.map(extension => (
                                                         <div key={extension.id} className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
                                                             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -690,6 +793,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                             </div>
                                                         </div>
                                                     ))}
+                                                    </div>
+                                                    )}
                                                 </div>
                                             )}
 
@@ -712,14 +817,20 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     </span>
                                                 </div>
                                             )}
+                                            </>
+                                            )}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
+                                )}
 
                             </section>
                         );
                     })}
                 </div>
+            )}
+            </div>
             )}
         </div>
         );

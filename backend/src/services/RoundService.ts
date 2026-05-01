@@ -96,8 +96,8 @@ export class RoundService {
         throw new RoundServiceError(400, 'The venue URL must be set before approving the round. Please add the target venue URL first.');
       }
 
-      if (!round.proposedReviewers || round.proposedReviewers.length === 0) {
-        throw new RoundServiceError(400, 'At least one reviewer must be in the proposed list before approving. Add reviewers from the suggestions panel first.');
+      if ((!round.proposedReviewers || round.proposedReviewers.length === 0) && (!round.assignments || round.assignments.length === 0)) {
+        throw new RoundServiceError(400, 'At least one reviewer must be assigned or proposed before approving. Add reviewers from the suggestions panel first.');
       }
 
       const paperLabIds = round.paper.labs?.map(l => l.id) ?? [];
@@ -133,6 +133,23 @@ export class RoundService {
           'You have been invited to review a paper',
           `Hello ${reviewer.name},\n\nYou have been invited to review the paper "${round.paper.title}" (Round ${round.roundNumber}).\n\nPlease log in to accept or decline.\n\nDeadline: ${round.deadline?.toISOString().split('T')[0] ?? 'TBD'}`,
         ).catch(err => console.error('[approveRound] invite email failed:', err));
+
+        assigned++;
+      }
+
+      const pendingExistingInvitations = (round.assignments ?? []).filter(
+        assignment => assignment.status === AssignmentStatus.Invited && !assignment.invitationSent,
+      );
+
+      for (const assignment of pendingExistingInvitations) {
+        assignment.invitationSent = true;
+        await assignRepo.save(assignment);
+
+        await sendEmail(
+          assignment.reviewer,
+          'You have been invited to review a paper',
+          `Hello ${assignment.reviewer.name},\n\nYou have been invited to review the paper "${round.paper.title}" (Round ${round.roundNumber}).\n\nPlease log in to accept or decline.\n\nDeadline: ${assignment.deadline?.toISOString().split('T')[0] ?? 'TBD'}`,
+        ).catch(err => console.error('[approveRound] existing invite email failed:', err));
 
         assigned++;
       }

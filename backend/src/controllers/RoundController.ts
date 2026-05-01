@@ -186,7 +186,7 @@ export class RoundController {
       if (!user) return res.status(401).json({ message: 'Authentication required' });
 
       const id = req.params.id as string;
-      const { targetVenue, targetVenueUrl, submissionDeadline } = req.body;
+      const { targetVenue, targetVenueUrl, venueCategory, submissionDeadline } = req.body;
 
       if (targetVenue !== undefined && (typeof targetVenue !== 'string' || !targetVenue.trim())) {
         return res.status(400).json({ message: 'targetVenue must be a non-empty string' });
@@ -205,6 +205,10 @@ export class RoundController {
 
       if (targetVenueUrl !== undefined && !RoundController.parseRequiredUrl(targetVenueUrl)) {
         return res.status(400).json({ message: 'targetVenueUrl is required and must start with http:// or https://' });
+      }
+
+      if (venueCategory !== undefined && !Object.values(VenueCategory).includes(venueCategory)) {
+        return res.status(400).json({ message: `venueCategory must be one of: ${Object.values(VenueCategory).join(', ')}` });
       }
 
       const roundRepo = AppDataSource.getRepository(Round);
@@ -226,6 +230,7 @@ export class RoundController {
 
       if (targetVenue !== undefined) round.targetVenue = targetVenue.trim();
       if (targetVenueUrl !== undefined) round.targetVenueUrl = RoundController.parseRequiredUrl(targetVenueUrl);
+      if (venueCategory !== undefined) round.venueCategory = venueCategory as VenueCategory;
       if (submissionDeadline !== undefined) {
         if (newSubDeadline && round.deadline && round.deadline.getTime() > newSubDeadline.getTime()) {
           return res.status(400).json({ message: 'Submission deadline cannot be before the round deadline' });
@@ -744,6 +749,9 @@ export class RoundController {
       });
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
+      if (round.status === RoundStatus.Draft) {
+        return res.status(400).json({ message: 'AI review can only be run after the round has started.' });
+      }
 
       // Authorization: Only Authors or Coordinators can trigger
       const isAuthor = round.paper.authors?.some(a => a.id === user.id);
@@ -813,6 +821,9 @@ export class RoundController {
       });
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
+      if (round.status === RoundStatus.Draft) {
+        return res.status(400).json({ message: 'Compliance check can only be run after the round has started.' });
+      }
 
       // Authorization: Only Authors or Coordinators can trigger
       const isAuthor = round.paper.authors?.some(a => a.id === user.id);
