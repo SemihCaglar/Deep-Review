@@ -393,6 +393,7 @@ export type AuthorRound = {
   roundNumber: number;
   status: 'Draft' | 'Open' | 'Completed';
   targetVenue: string;
+  targetVenueUrl: string | null;
   venueCategory: 'Conference' | 'Journal';
   submissionDeadline: string | null;
   deadline: string | null;
@@ -456,6 +457,7 @@ export type RoundWithAssignments = {
   deadline: string | null;
   status: 'Draft' | 'Open' | 'Completed';
   targetVenue: string;
+  targetVenueUrl: string | null;
   venueCategory: 'Conference' | 'Journal';
   submissionDeadline: string | null;
   startedAt: string | null;
@@ -593,7 +595,7 @@ export function updateAssignmentDeadlineRequest(assignmentId: string, deadline: 
 export function createRoundRequest(paperId: string, targetVenue: string, venueCategory: string, submissionDeadline?: string, deadline?: string, targetVenueUrl?: string) {
   return apiRequest<{ id: string; status: string }>('/rounds', {
     method: 'POST',
-    body: { paperId, targetVenue, venueCategory, ...(submissionDeadline ? { submissionDeadline } : {}), ...(deadline ? { deadline } : {}), ...(targetVenueUrl ? { targetVenueUrl } : {}) },
+    body: { paperId, targetVenue, venueCategory, targetVenueUrl, ...(submissionDeadline ? { submissionDeadline } : {}), ...(deadline ? { deadline } : {}) },
   });
 }
 
@@ -616,6 +618,10 @@ export function updateRoundDetailsRequest(roundId: string, details: { targetVenu
     method: 'PUT',
     body: details,
   });
+}
+
+export function editSubmissionDeadlineRequest(roundId: string, submissionDeadline: string) {
+  return updateRoundDetailsRequest(roundId, { submissionDeadline });
 }
 
 export function getAuthorRoundsRequest(paperId: string) {

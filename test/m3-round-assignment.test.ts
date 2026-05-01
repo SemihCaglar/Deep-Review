@@ -148,6 +148,7 @@ describe('2 · Author round creation', () => {
         const res = await api(reviewer1Token).post('/api/rounds', {
             paperId,
             targetVenue: 'ICSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/icse-2026',
             venueCategory: 'Conference',
             submissionDeadline: futureDate(30),
         });
@@ -158,6 +159,7 @@ describe('2 · Author round creation', () => {
         const res = await api(authorToken).post('/api/rounds', {
             paperId,
             targetVenue: 'ICSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/icse-2026',
             venueCategory: 'Conference',
             submissionDeadline: futureDate(30),
             deadline: futureDate(14),
@@ -173,6 +175,7 @@ describe('2 · Author round creation', () => {
         const res = await api(coordinatorToken).post('/api/rounds', {
             paperId,
             targetVenue: 'FSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/fse-2026',
             venueCategory: 'Conference',
             submissionDeadline: futureDate(30),
         });
@@ -287,7 +290,7 @@ describe('4 · Approve round — error cases', () => {
         const noLinkPaper = paperRepo.create({
             title: 'No Overleaf Paper',
             abstractText: 'No link.',
-            overleafLink: null as any,
+            overleafLink: '   ' as any,
             creationTime: new Date(),
             status: PaperStatus.Draft,
         });
@@ -339,6 +342,7 @@ describe('4 · Approve round — error cases', () => {
             roundNumber: 1,
             status: RoundStatus.Draft,
             targetVenue: 'Test Venue',
+            targetVenueUrl: 'https://example.com/test-venue',
             venueCategory: VenueCategory.Journal,
             submissionDeadline: null,
             deadline: new Date(futureDate(14)),

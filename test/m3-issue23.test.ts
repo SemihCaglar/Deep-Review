@@ -168,6 +168,7 @@ describe('2 · Round creation — error cases', () => {
             paperId,
             coordinatorId,
             targetVenue: 'ICSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/icse-2026',
             venueCategory: 'Workshop',
         });
         expect(res.status).toBe(400);
@@ -178,9 +179,36 @@ describe('2 · Round creation — error cases', () => {
             paperId,
             coordinatorId,
             targetVenue: 'ICSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/icse-2026',
             venueCategory: 'Conference',
         });
         expect(res.status).toBe(400);
+    });
+
+    test('missing targetVenueUrl → 400', async () => {
+        const res = await api(coordinatorToken).post('/api/rounds', {
+            paperId,
+            coordinatorId,
+            targetVenue: 'ICSE 2026',
+            venueCategory: 'Conference',
+            submissionDeadline: futureDate(30),
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/targetVenueUrl/i);
+    });
+
+    test('past UTC date deadlines → 400', async () => {
+        const res = await api(coordinatorToken).post('/api/rounds', {
+            paperId,
+            coordinatorId,
+            targetVenue: 'ICSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/icse-2026',
+            venueCategory: 'Conference',
+            submissionDeadline: pastDate(1),
+            deadline: futureDate(14),
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/before today/i);
     });
 
     test('non-coordinator cannot create round → 403', async () => {
@@ -188,6 +216,7 @@ describe('2 · Round creation — error cases', () => {
             paperId,
             coordinatorId: reviewer1Id,
             targetVenue: 'ICSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/icse-2026',
             venueCategory: 'Conference',
             submissionDeadline: futureDate(30),
         });
@@ -213,6 +242,7 @@ describe('2 · Round creation — error cases', () => {
             paperId,
             coordinatorId: otherCoord.id,
             targetVenue: 'ICSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/icse-2026',
             venueCategory: 'Conference',
             submissionDeadline: futureDate(30),
         });
@@ -230,6 +260,7 @@ describe('3 · Round creation — happy paths', () => {
             paperId,
             coordinatorId,
             targetVenue: 'Journal of SE',
+            targetVenueUrl: 'https://www.journals.elsevier.com/journal-of-systems-and-software',
             venueCategory: 'Journal',
         });
         expect(res.status).toBe(201);
@@ -247,6 +278,7 @@ describe('3 · Round creation — happy paths', () => {
             paperId,
             coordinatorId,
             targetVenue: 'ICSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/icse-2026',
             venueCategory: 'Conference',
             submissionDeadline: futureDate(30),
         });
@@ -265,6 +297,7 @@ describe('3 · Round creation — happy paths', () => {
             paperId,
             coordinatorId,
             targetVenue: 'FSE 2026',
+            targetVenueUrl: 'https://conf.researchr.org/home/fse-2026',
             venueCategory: 'Conference',
             submissionDeadline: futureDate(30),
         });
@@ -291,6 +324,31 @@ describe('4 · Round deadline edit', () => {
             deadline: futureDate(60), // submissionDeadline is +30 days
         });
         expect(res.status).toBe(400);
+    });
+
+    test('past round deadline → 400', async () => {
+        const res = await api(coordinatorToken).put(`/api/rounds/${conferenceRoundId}/deadline`, {
+            coordinatorId,
+            deadline: pastDate(1),
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/before today/i);
+    });
+
+    test('submission deadline before round deadline → 400', async () => {
+        const res = await api(coordinatorToken).put(`/api/rounds/${conferenceRoundId}/details`, {
+            submissionDeadline: futureDate(7),
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/round deadline/i);
+    });
+
+    test('can edit submission deadline while in Draft → 200', async () => {
+        const res = await api(coordinatorToken).put(`/api/rounds/${conferenceRoundId}/details`, {
+            submissionDeadline: futureDate(45),
+        });
+        expect(res.status).toBe(200);
+        expect(res.body.submissionDeadline).not.toBeNull();
     });
 
     test('invalid date → 400', async () => {
@@ -668,6 +726,7 @@ describe('12a · Cross-request interactions — decline while PendingExtension a
             paperId,
             coordinatorId,
             targetVenue: 'CrossReq Conf 2027',
+            targetVenueUrl: 'https://conf.researchr.org/home/crossreq-2027',
             venueCategory: 'Conference',
             submissionDeadline: futureDate(60),
             deadline: futureDate(30),
@@ -764,6 +823,7 @@ describe('13 · Overdue detection & round auto-completion', () => {
         const paper2 = paperRepo.create({
             title: 'Overdue Test Paper',
             abstractText: 'Used to test overdue logic.',
+            overleafLink: 'https://overleaf.com/read/overdue-test',
             creationTime: new Date(),
             status: PaperStatus.HumanReview,
         });
@@ -781,6 +841,7 @@ describe('13 · Overdue detection & round auto-completion', () => {
             roundNumber: 1,
             status: RoundStatus.Open,
             targetVenue: 'Overdue Conf',
+            targetVenueUrl: 'https://conf.researchr.org/home/overdue-conf',
             venueCategory: VenueCategory.Conference,
             submissionDeadline,
             deadline: new Date(futureDate(14)),
@@ -864,6 +925,7 @@ describe('14 · Create next round (POST /rounds/next)', () => {
             paperId,
             coordinatorId,
             targetVenue: 'FSE 2027',
+            targetVenueUrl: 'https://conf.researchr.org/home/fse-2027',
             venueCategory: 'Conference',
             submissionDeadline: futureDate(60),
         });
@@ -878,6 +940,7 @@ describe('14 · Create next round (POST /rounds/next)', () => {
             paperId,
             coordinatorId,
             targetVenue: 'PLDI 2027',
+            targetVenueUrl: 'https://conf.researchr.org/home/pldi-2027',
             venueCategory: 'Conference',
             submissionDeadline: futureDate(90),
         });
