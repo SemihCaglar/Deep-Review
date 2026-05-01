@@ -335,7 +335,9 @@ export default function RegisterPaper() {
                             </div>
                             <h3 className="text-xl font-bold text-white">Ready to Register</h3>
                             <p className="text-slate-400 max-w-md mx-auto">
-                                The paper will be created in the <strong>Draft</strong> state. Once it is registered, first review round can be initialized via the paper details page.
+                                The paper will be created in the <strong>Draft</strong> state. {user.isCoordinator
+                                    ? 'Once it is registered, you can initialize the first review round from the paper details page.'
+                                    : 'Once it is registered, the first review round can be initialized by a Coordinator from the paper details page.'}
                                 <br /><br />
                                 {selectedAuthors.length > 0 && <span className="text-blue-400">{selectedAuthors.length} author(s) will be notified by the Email Service.</span>}
                             </p>

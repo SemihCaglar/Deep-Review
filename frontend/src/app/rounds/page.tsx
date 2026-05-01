@@ -23,6 +23,7 @@ import {
   processExtensionRequestApi,
   createRoundRequest,
   editRoundDeadlineRequest,
+  updateRoundDetailsRequest,
   reassignReviewerRequest,
   updateOverleafLinkRequest,
   sendRemindersRequest,
@@ -32,6 +33,7 @@ import {
   approveRoundRequest,
   getRoundStatusRequest,
 } from '@/lib/api';
+import { confirmCancel } from '@/lib/confirmAction';
 import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft } from 'lucide-react';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
@@ -110,7 +112,10 @@ function AssignmentRow({
     }
   };
 
-  const handleCancel = () => act(() => cancelAssignmentRequest(assignment.id));
+  const handleCancel = async () => {
+    if (!(await confirmCancel())) return;
+    act(() => cancelAssignmentRequest(assignment.id));
+  };
 
   const handleUpdateDeadline = () =>
     act(async () => {
@@ -150,8 +155,9 @@ function AssignmentRow({
   };
 
   const isCancelable = ['Invited', 'Accepted'].includes(assignment.status);
-  const isRemindable = ['Invited', 'Accepted', 'PendingExtension', 'PendingDecline'].includes(assignment.status);
-  const isReassignable = roundStatus !== 'Completed' && ['Declined', 'Cancelled'].includes(assignment.status);
+  const isRemindable = ['Accepted', 'PendingExtension', 'PendingDecline', 'Overdue'].includes(assignment.status);
+  const showReassign = ['Declined', 'Cancelled'].includes(assignment.status);
+  const isReassignable = roundStatus !== 'Completed' && assignment.status === 'Declined';
   const isCompleted = assignment.status === 'Completed';
 
   return (
@@ -194,11 +200,12 @@ function AssignmentRow({
               <Ban className="w-3.5 h-3.5" /> Cancel
             </button>
           )}
-          {isReassignable && (
+          {showReassign && (
             <button
               onClick={() => onReassign(assignment.id)}
-              disabled={busy}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors disabled:opacity-50"
+              disabled={busy || !isReassignable}
+              title={!isReassignable ? 'Cancelled assignments cannot be reassigned' : undefined}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-orange-500/10"
             >
               <UserPlus className="w-3.5 h-3.5" /> Reassign
             </button>
@@ -256,7 +263,7 @@ function AssignmentRow({
           >
             Save
           </button>
-          <button onClick={() => setShowDeadlineInput(false)} className="text-xs text-slate-500 hover:text-slate-300">
+          <button onClick={async () => { if (await confirmCancel()) setShowDeadlineInput(false); }} className="text-xs text-slate-500 hover:text-slate-300">
             Cancel
           </button>
         </div>
@@ -310,7 +317,11 @@ function AssignmentRow({
             <div className="flex flex-wrap gap-2 shrink-0">
               {!showExtApprove ? (
                 <button
-                  onClick={() => setShowExtApprove(true)}
+                  onClick={() => {
+                    const requested = assignment.pendingExtensionRequest!.requestedDeadline;
+                    setApprovedDeadline(requested ? new Date(requested).toISOString().split('T')[0] : '');
+                    setShowExtApprove(true);
+                  }}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
                 >
                   <CheckCircle className="w-3.5 h-3.5" /> Approve
@@ -534,6 +545,47 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
   const [savingDeadline, setSavingDeadline] = useState(false);
   const [deadlineError, setDeadlineError] = useState('');
 
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [draftVenueName, setDraftVenueName] = useState(round.targetVenue || '');
+  const [draftVenueUrl, setDraftVenueUrl] = useState((round as any).targetVenueUrl || '');
+  const [draftSubDeadline, setDraftSubDeadline] = useState(round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : '');
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailsError, setDetailsError] = useState('');
+
+  const handleSaveDetails = async () => {
+    setDetailsError('');
+    if (!draftVenueName.trim()) {
+      setDetailsError('Venue name is required.');
+      return;
+    }
+    if (draftVenueUrl.trim() && !/^https?:\/\/.+/i.test(draftVenueUrl.trim())) {
+      setDetailsError('Venue URL must start with http:// or https://.');
+      return;
+    }
+    if (round.venueCategory === 'Conference' && !draftSubDeadline) {
+      setDetailsError('Submission deadline is required for Conference rounds.');
+      return;
+    }
+    if (draftSubDeadline && draftDeadline && new Date(draftSubDeadline) < new Date(draftDeadline)) {
+      setDetailsError(`Submission deadline must be on or after the round deadline (${draftDeadline}).`);
+      return;
+    }
+    setSavingDetails(true);
+    try {
+      await updateRoundDetailsRequest(round.id, {
+        targetVenue: draftVenueName.trim(),
+        targetVenueUrl: draftVenueUrl.trim() || null,
+        ...(round.venueCategory === 'Conference' ? { submissionDeadline: draftSubDeadline ? new Date(draftSubDeadline).toISOString() : null } : {}),
+      });
+      setEditingDetails(false);
+      onRefresh();
+    } catch (e) {
+      setDetailsError(e instanceof Error ? e.message : 'Failed to update details.');
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+
   const handleEditDeadline = async () => {
     if (!draftDeadline) return;
     setSavingDeadline(true);
@@ -611,11 +663,16 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                       <AlertCircle className="w-3.5 h-3.5" /> Set the Overleaf link before approving
                     </p>
                   )}
+                  {!(round as any).targetVenueUrl?.trim() && (
+                    <p className="text-xs text-red-400 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" /> Set the venue URL before approving
+                    </p>
+                  )}
                   {approveMsg && <p className="text-xs text-emerald-400">{approveMsg}</p>}
                   {approveError && <p className="text-xs text-red-400 max-w-xs text-right">{approveError}</p>}
                   <button
                     onClick={handleApproveRound}
-                    disabled={approving || !paperHasOverleafLink || proposedReviewers.length === 0}
+                    disabled={approving || !paperHasOverleafLink || !(round as any).targetVenueUrl?.trim() || proposedReviewers.length === 0}
                     title={proposedReviewers.length === 0 ? 'Add at least one proposed reviewer before approving' : undefined}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
@@ -629,7 +686,35 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Target Venue</p>
-                  <p className="text-white font-medium">{round.targetVenue || '—'}</p>
+                  {!editingDetails ? (
+                    <div className="flex items-center gap-2">
+                      <p className="text-white font-medium">{round.targetVenue || '—'}</p>
+                      <button onClick={() => { setDraftVenueName(round.targetVenue || ''); setDraftVenueUrl((round as any).targetVenueUrl || ''); setDraftSubDeadline(round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : ''); setDetailsError(''); setEditingDetails(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 sm:col-span-2">
+                      <div className="flex flex-col gap-2">
+                        <input type="text" value={draftVenueName} onChange={(e) => setDraftVenueName(e.target.value)} placeholder="Venue name" className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white w-full" />
+                        <input type="url" value={draftVenueUrl} onChange={(e) => setDraftVenueUrl(e.target.value)} placeholder="Venue URL (optional)" className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white w-full" />
+                        {round.venueCategory === 'Conference' && (
+                          <input type="date" value={draftSubDeadline} onChange={(e) => setDraftSubDeadline(e.target.value)} min={todayInputValue()} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
+                        )}
+                        {detailsError && <p className="text-xs text-red-400">{detailsError}</p>}
+                        <div className="flex gap-2">
+                          <button onClick={handleSaveDetails} disabled={savingDetails || !draftVenueName} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50">{savingDetails ? 'Saving…' : 'Save'}</button>
+                          <button onClick={() => setEditingDetails(false)} className="px-3 py-1 text-xs text-slate-400 hover:text-white">Cancel</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Venue URL</p>
+                  {(round as any).targetVenueUrl ? (
+                    <a href={(round as any).targetVenueUrl} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 text-sm truncate block">{(round as any).targetVenueUrl}</a>
+                  ) : (
+                    <p className="text-slate-500 text-sm">—</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Venue Category</p>
@@ -653,7 +738,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                       <div className="flex items-center gap-2">
                         <input type="date" value={draftDeadline} onChange={(e) => { setDraftDeadline(e.target.value); setDeadlineError(''); }} min={todayInputValue()} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
                         <button onClick={handleEditDeadline} disabled={savingDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white">Save</button>
-                        <button onClick={() => { setEditingDeadline(false); setDeadlineError(''); }} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
+                        <button onClick={async () => { if (await confirmCancel()) { setEditingDeadline(false); setDeadlineError(''); } }} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
                       </div>
                       {deadlineError && <p className="text-xs text-red-400">{deadlineError}</p>}
                     </div>
@@ -918,7 +1003,7 @@ function RoundCard({ round, onRefresh, coordinatorId, paperHasOverleafLink }: { 
                   {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
                   {reassigningForId ? 'Reassign' : `Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ''}`}
                 </button>
-                <button onClick={() => setShowAddPanel(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                <button onClick={async () => { if (await confirmCancel()) setShowAddPanel(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                   Cancel
                 </button>
                 {assignError && <p className="text-xs text-red-400">{assignError}</p>}
@@ -974,6 +1059,7 @@ export default function RoundsPage() {
   const [showCreateRound, setShowCreateRound] = useState(false);
   const [newRoundVenueCat, setNewRoundVenueCat] = useState('Conference');
   const [newRoundTargetVenue, setNewRoundTargetVenue] = useState('');
+  const [newRoundTargetVenueUrl, setNewRoundTargetVenueUrl] = useState('');
   const [newRoundSubDeadline, setNewRoundSubDeadline] = useState('');
   const [newRoundDeadline, setNewRoundDeadline] = useState('');
   const [creatingRound, setCreatingRound] = useState(false);
@@ -1071,10 +1157,12 @@ export default function RoundsPage() {
         newRoundTargetVenue,
         newRoundVenueCat,
         newRoundVenueCat === 'Conference' ? newRoundSubDeadline : undefined,
-        newRoundDeadline || undefined
+        newRoundDeadline || undefined,
+        newRoundTargetVenueUrl || undefined,
       );
       setShowCreateRound(false);
       setNewRoundTargetVenue('');
+      setNewRoundTargetVenueUrl('');
       setNewRoundSubDeadline('');
       setNewRoundDeadline('');
       handleRefresh();
@@ -1217,6 +1305,16 @@ export default function RoundsPage() {
                      className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
                    />
                  </div>
+                 <div className="space-y-1 sm:col-span-2">
+                   <label className="text-xs text-slate-400 uppercase tracking-wider">Venue URL <span className="normal-case text-slate-500">(optional)</span></label>
+                   <input
+                     type="url"
+                     value={newRoundTargetVenueUrl}
+                     onChange={(e) => setNewRoundTargetVenueUrl(e.target.value)}
+                     placeholder="https://neurips.cc/Conferences/2026"
+                     className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                   />
+                 </div>
                  {newRoundVenueCat === 'Conference' && (
                     <div className="space-y-1">
                       <label className="text-xs text-slate-400 uppercase tracking-wider">Submission Deadline</label>
@@ -1251,7 +1349,7 @@ export default function RoundsPage() {
                    {creatingRound ? 'Saving...' : 'Create Draft'}
                  </button>
                  <button
-                   onClick={() => setShowCreateRound(false)}
+                   onClick={async () => { if (await confirmCancel()) setShowCreateRound(false); }}
                    className="px-4 py-2 text-sm font-medium rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 transition-colors"
                  >
                    Cancel
