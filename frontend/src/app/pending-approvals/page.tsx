@@ -13,6 +13,11 @@ import {
 } from '@/lib/api';
 import { useUser } from '@/components/context/UserContext';
 
+type PendingConfirmation = {
+  action: 'approve' | 'reject';
+  signup: PendingSignup;
+};
+
 export default function PendingApprovalsPage() {
   const router = useRouter();
   const { user } = useUser();
@@ -24,6 +29,7 @@ export default function PendingApprovalsPage() {
   const [historyError, setHistoryError] = React.useState('');
   const [actionMessage, setActionMessage] = React.useState('');
   const [activeSignupId, setActiveSignupId] = React.useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = React.useState<PendingConfirmation | null>(null);
 
   const loadPendingSignups = React.useCallback(async () => {
     if (!user.isCoordinator) {
@@ -98,6 +104,30 @@ export default function PendingApprovalsPage() {
     }
   };
 
+  const openConfirmation = (signup: PendingSignup, action: 'approve' | 'reject') => {
+    setActionMessage('');
+    setError('');
+    setPendingConfirmation({ signup, action });
+  };
+
+  const closeConfirmation = () => {
+    if (activeSignupId) {
+      return;
+    }
+
+    setPendingConfirmation(null);
+  };
+
+  const confirmPendingAction = async () => {
+    if (!pendingConfirmation) {
+      return;
+    }
+
+    const { action, signup } = pendingConfirmation;
+    await handlePendingAction(signup.id, action);
+    setPendingConfirmation(null);
+  };
+
   if (!user.isCoordinator) {
     return null;
   }
@@ -152,7 +182,7 @@ export default function PendingApprovalsPage() {
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => handlePendingAction(signup.id, 'approve')}
+                    onClick={() => openConfirmation(signup, 'approve')}
                     disabled={activeSignupId === signup.id}
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/60 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
                   >
@@ -161,7 +191,7 @@ export default function PendingApprovalsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handlePendingAction(signup.id, 'reject')}
+                    onClick={() => openConfirmation(signup, 'reject')}
                     disabled={activeSignupId === signup.id}
                     className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-red-200 transition-colors"
                   >
@@ -232,6 +262,60 @@ export default function PendingApprovalsPage() {
           <p className="text-sm text-slate-400">No reviewed signup requests yet.</p>
         )}
       </section>
+
+      {pendingConfirmation ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm"
+          onClick={event => {
+            if (event.target === event.currentTarget) {
+              closeConfirmation();
+            }
+          }}
+        >
+          <div className="glass w-full max-w-md rounded-2xl border border-white/10 p-6 shadow-2xl">
+            <div className="mb-5 space-y-2">
+              <h2 className="text-xl font-semibold text-white">
+                {pendingConfirmation.action === 'approve' ? 'Approve Account' : 'Reject Account'}
+              </h2>
+              <p className="text-sm text-slate-300">
+                {pendingConfirmation.action === 'approve'
+                  ? 'You are approving this account. Are you sure?'
+                  : 'You are rejecting this account. Are you sure?'}
+              </p>
+              <p className="break-words text-sm text-slate-500">
+                {pendingConfirmation.signup.name} · {pendingConfirmation.signup.email}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeConfirmation}
+                disabled={activeSignupId === pendingConfirmation.signup.id}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmPendingAction}
+                disabled={activeSignupId === pendingConfirmation.signup.id}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  pendingConfirmation.action === 'approve'
+                    ? 'bg-emerald-600 hover:bg-emerald-500'
+                    : 'bg-red-600 hover:bg-red-500'
+                }`}
+              >
+                {activeSignupId === pendingConfirmation.signup.id
+                  ? 'Working...'
+                  : pendingConfirmation.action === 'approve'
+                    ? 'Confirm Approve'
+                    : 'Confirm Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
