@@ -428,6 +428,65 @@ export class AssignmentController {
     }
   }
 
+  static async sendPaperReminders(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const paperId = req.params.id as string;
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const paper = await paperRepo.findOne({
+        where: { id: paperId },
+        relations: ['authors', 'coordinators'],
+      });
+      if (!paper) return res.status(404).json({ message: 'Paper not found' });
+
+      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
+      const isAuthor = paper.authors?.some(a => a.id === user.id);
+      if (!isCoordinator && !isAuthor) {
+        return res.status(403).json({ message: 'Forbidden: Only coordinators or authors of this paper can send reminders' });
+      }
+
+      const activeStatuses = new Set([
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.PendingDecline,
+        AssignmentStatus.Overdue,
+      ]);
+
+      const assignRepo = AppDataSource.getRepository(Assignment);
+      const assignments = await assignRepo.find({
+        where: { round: { paper: { id: paperId } }, status: In([...activeStatuses]) },
+        relations: ['reviewer', 'round', 'round.paper'],
+      });
+
+      let sent = 0;
+      let skipped = 0;
+
+      for (const assignment of assignments) {
+        const paperTitle = assignment.round.paper.title;
+        const deadline = assignment.deadline?.toISOString().split('T')[0] ?? 'N/A';
+        try {
+          await sendEmail(
+            assignment.reviewer,
+            `Reminder: Review pending for "${paperTitle}"`,
+            `Hello ${assignment.reviewer.name},\n\nThis is a reminder that your review for paper "${paperTitle}" (Round ${assignment.round.roundNumber}) is pending.\n\nDeadline: ${deadline}\n\nPlease log in and submit your review.`,
+          );
+          assignment.reminderSentAt = new Date();
+          await assignRepo.save(assignment);
+          sent++;
+        } catch {
+          skipped++;
+        }
+      }
+
+      return res.status(200).json({ message: `Reminders sent`, sent, skipped });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  }
+
   static async cancelAssignment(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;

@@ -452,7 +452,7 @@ export type CoordinatedPaper = {
   status: string;
   abstractText: string;
   overleafLink: string | null;
-
+  authors: { id: string; name: string }[];
 };
 
 export type PendingDeclineRequest = {
@@ -507,6 +507,7 @@ export type RoundWithAssignments = {
   submissionDeadline: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  createdByCoordinator: boolean;
   assignments: RoundAssignment[];
   aiReviewReport?: AIReviewReport | null;
   aiReviewReports?: AIReviewReportHistory[];
@@ -628,6 +629,12 @@ export function sendRemindersRequest(assignmentIds: string[]) {
   return apiRequest<{ message: string; sent: number; skipped: number }>('/assignments/remind', {
     method: 'POST',
     body: { assignmentIds },
+  });
+}
+
+export function sendPaperRemindersRequest(paperId: string) {
+  return apiRequest<{ message: string; sent: number; skipped: number }>(`/papers/${paperId}/remind`, {
+    method: 'POST',
   });
 }
 

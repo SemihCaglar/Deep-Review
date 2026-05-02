@@ -126,6 +126,7 @@ router.get('/collaboration-invitations/pending', authenticateRequest, LabCollabo
 router.patch('/collaboration-invitations/:id/accept', authenticateRequest, LabCollaborationController.acceptInvitation);
 router.patch('/collaboration-invitations/:id/reject', authenticateRequest, LabCollaborationController.rejectInvitation);
 router.patch('/collaboration-invitations/:id/cancel', authenticateRequest, LabCollaborationController.cancelInvitation);
+router.post('/papers/:id/remind', authenticateRequest, requireActiveAccount, AssignmentController.sendPaperReminders);
 router.post('/papers/:id/collaboration-invitations', authenticateRequest, LabCollaborationController.sendInvitations);
 router.get('/papers/:id/collaboration-invitations', authenticateRequest, LabCollaborationController.getInvitationsForPaper);
 

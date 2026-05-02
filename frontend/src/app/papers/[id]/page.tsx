@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { notFound, useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
+import { MOCK_ROUNDS, MOCK_ASSIGNMENTS } from '@/lib/mockData';
 import { confirmCancel } from '@/lib/confirmAction';
 import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, Download } from 'lucide-react';
 import {
@@ -20,6 +20,7 @@ import {
   getPaperInvitationsRequest, sendCollaborationInvitationsRequest, cancelCollaborationInvitationRequest,
   LabCollaborationInvitation,
   startAIReviewRequest,
+  sendPaperRemindersRequest,
 } from '@/lib/api';
 
 
@@ -73,10 +74,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [isSubmittingReview, setIsSubmittingReview] = useState(false);
     const [isEditingAbstract, setIsEditingAbstract] = useState(false);
     const [isEditingTopics, setIsEditingTopics] = useState(false);
-    const [isEditingDeadline, setIsEditingDeadline] = useState(false);
     const [isEditingLinks, setIsEditingLinks] = useState(false);
     const [isSendingReminder, setIsSendingReminder] = useState(false);
     const [reminderSent, setReminderSent] = useState(false);
+    const [reminderError, setReminderError] = useState('');
     const [isEditingAuthors, setIsEditingAuthors] = useState(false);
     const [localAuthors, setLocalAuthors] = useState<string[]>([]);
     const [availableUsers, setAvailableUsers] = useState<LabMember[]>([]);
@@ -86,7 +87,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [topicsError, setTopicsError] = useState('');
     const [authorsError, setAuthorsError] = useState('');
     const [localTopics, setLocalTopics] = useState<string[]>([]); // These will be IDs
-    const [localDeadline, setLocalDeadline] = useState('');
     const [localOverleafLink, setLocalOverleafLink] = useState('');
 
     const [authorSearch, setAuthorSearch] = useState('');
@@ -172,12 +172,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 setLocalOverleafLink(paperData.overleafLink || '');
                 setAvailableTopics(topicsData);
 
-                // Set initial deadline from mock data if it matches
-                const activeRound = MOCK_ROUNDS.find(r => r.paperId === paperData.id && r.status === 'Open');
-                if (activeRound) {
-                    setLocalDeadline(activeRound.deadline || '');
-                }
-                
                 // Fetch lab members for author editing
                 const membersRes = await getLabMembersRequest();
                 if (!isActive) return;
@@ -285,9 +279,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
             backHref = '/papers?filter=authored';
         }
     }
-
-    // AI Check
-    const allReviewsComplete = assignments.length > 0 && assignments.every(a => a.status === 'Submitted');
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -426,13 +417,18 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         setLocalAuthors(newAuthors);
     };
 
-    const handleSendReminder = () => {
+    const handleSendReminder = async () => {
         setIsSendingReminder(true);
-        setTimeout(() => {
-            setIsSendingReminder(false);
+        setReminderError('');
+        try {
+            await sendPaperRemindersRequest(paper.id);
             setReminderSent(true);
             setTimeout(() => setReminderSent(false), 3000);
-        }, 800);
+        } catch (err) {
+            setReminderError(err instanceof ApiError ? err.message : 'Failed to send reminders. Please try again.');
+        } finally {
+            setIsSendingReminder(false);
+        }
     };
 
     const handleSaveAbstract = async () => {
@@ -882,25 +878,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                 </div>
                                             )}
 
-                                            {assignment.status === 'Completed' && isAuthor && !assignment.hasRating && (
-                                                <div className="mt-4 flex justify-end">
-                                                    <button
-                                                        onClick={() => handleOpenRatingModal(assignment.assignmentId)}
-                                                        className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors"
-                                                    >
-                                                        <Star className="w-4 h-4" />
-                                                        Rate Reviewer
-                                                    </button>
-                                                </div>
-                                            )}
-                                            {assignment.status === 'Completed' && isAuthor && assignment.hasRating && (
-                                                <div className="mt-4 flex justify-end">
-                                                    <span className="flex items-center gap-2 px-3 py-1.5 text-slate-400 bg-white/5 border border-white/10 text-xs font-medium rounded-lg">
-                                                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                                                        Review Rated
-                                                    </span>
-                                                </div>
-                                            )}
                                             </>
                                             )}
                                         </div>
@@ -998,39 +975,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         )}
                     </div>
 
-                    {activeRound && (
-                        <div className="flex items-center gap-2 mb-6 text-sm group/deadline relative w-fit">
-                            <Clock className="w-4 h-4 text-slate-400" />
-                            <span className="text-slate-300">
-                                Review Deadline: <span className="text-white font-medium">{new Date(localDeadline).toLocaleDateString()}</span>
-                            </span>
-                            {user.isCoordinator && !isEditingDeadline && (
-                                <button
-                                    onClick={() => setIsEditingDeadline(true)}
-                                    className="opacity-0 group-hover/deadline:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 ml-2"
-                                >
-                                    <Edit className="w-3 h-3" /> Edit
-                                </button>
-                            )}
-                            {isEditingDeadline && (
-                                <div className="absolute left-0 top-10 mt-2 bg-slate-900 border border-white/10 rounded-lg p-3 shadow-xl z-20 flex items-center gap-2">
-                                    <input
-                                        type="date"
-                                        value={localDeadline}
-                                        onChange={(e) => setLocalDeadline(e.target.value)}
-                                        min={todayInputValue()}
-                                        className="bg-background border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                                    />
-                                    <button
-                                        onClick={() => setIsEditingDeadline(false)}
-                                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors"
-                                    >
-                                        Save
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    )}
 
                     <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
@@ -1113,22 +1057,27 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
                     {/* Coordinator Active Actions */}
                     {user.isCoordinator && effectivePaperStatus === 'In Review' && (
-                        <>
-                            <Link
-                                href={`/rounds?paper=${paper.id}`}
-                                className="w-full px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
-                            >
-                                <UserPlus className="w-4 h-4" />
-                                Assign Reviewers
-                            </Link>
+                        <Link
+                            href={`/rounds?paper=${paper.id}`}
+                            className="w-full px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
+                        >
+                            <UserPlus className="w-4 h-4" />
+                            Assign Reviewers
+                        </Link>
+                    )}
 
+                    {/* Send Reminder + Run AI Review — coordinator and authors */}
+                    {(user.isCoordinator || isAuthor) && effectivePaperStatus === 'In Review' && (() => {
+                        const openRound = authorRounds.find(r => r.status === 'Open');
+                        return (
+                            <>
                             <button
                                 onClick={handleSendReminder}
-                                disabled={isSendingReminder || reminderSent || assignments.length === 0}
-                                className={`w-full px-5 py-2.5 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 border 
+                                disabled={isSendingReminder || reminderSent || !openRound}
+                                className={`w-full px-5 py-2.5 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 border
                                         ${reminderSent
                                         ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                        : assignments.length === 0 ? 'bg-slate-800/50 text-slate-500 border-slate-700 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20'
+                                        : !openRound ? 'bg-slate-800/50 text-slate-500 border-slate-700 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20'
                                     } disabled:opacity-50`}
                             >
                                 {isSendingReminder ? (
@@ -1139,8 +1088,21 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     <><Clock className="w-4 h-4" /> Send Reminder</>
                                 )}
                             </button>
-                        </>
-                    )}
+                            {reminderError && <p className="text-xs text-red-400">{reminderError}</p>}
+                            {openRound && isAuthor && (
+                                <button
+                                    onClick={() => openAiUpload(openRound.id)}
+                                    disabled={runningAiRoundId === openRound.id}
+                                    className="w-full px-5 py-2.5 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {runningAiRoundId === openRound.id
+                                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Running…</>
+                                        : <><Cpu className="w-4 h-4" /> Run AI Review</>}
+                                </button>
+                            )}
+                            </>
+                        );
+                    })()}
 
                     {canChangeArchiveState && (
                         <>
@@ -1169,19 +1131,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         </>
                     )}
 
-                    {/* Coordinator General Actions */}
-                    {user.isCoordinator && effectivePaperStatus !== 'Archived' && (
-                        <>
-                            <button
-                                disabled={!allReviewsComplete}
-                                className={`w-full px-5 py-2.5 border text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 
-                                ${allReviewsComplete ? 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20' : 'bg-slate-800/50 text-slate-500 border-slate-700 cursor-not-allowed'}`}
-                            >
-                                <Play className="w-4 h-4" />
-                                Run AI Analysis
-                            </button>
-                        </>
-                    )}
 
                     {/* Reviewer Actions */}
                     {!user.isCoordinator && effectivePaperStatus === 'In Review' && myAssignment?.status === 'Pending' && !showDeclineForm && (
@@ -1395,22 +1344,95 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         )}
                     </div>
 
-                    {/* Author / coordinator round proposal section */}
-                    {(isAuthor || user.isCoordinator) && (
+                    {/* Coordinator: compact round status card */}
+                    {user.isCoordinator && (() => {
+                        const latestRound = authorRounds.length > 0
+                            ? authorRounds.reduce((a, b) => a.roundNumber > b.roundNumber ? a : b)
+                            : null;
+                        const pendingProposals = latestRound?.status === 'Draft'
+                            ? (proposedMap[latestRound.id] ?? latestRound.proposedReviewers ?? []).length
+                            : 0;
+                        const roundStatusColor = latestRound?.status === 'Draft'
+                            ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
+                            : latestRound?.status === 'Open'
+                                ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                                : 'text-slate-400 border-slate-500/30 bg-slate-500/10';
+                        return (
+                            <div className="glass p-6 rounded-2xl border border-white/5 space-y-4">
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <h2 className="text-xl font-semibold text-white">Round Overview</h2>
+                                    <Link
+                                        href={`/rounds?paper=${paper.id}`}
+                                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                                    >
+                                        <ExternalLink className="w-4 h-4" />
+                                        Manage in Round Overview
+                                    </Link>
+                                </div>
+                                {loadingRounds && <p className="text-sm text-slate-400">Loading…</p>}
+                                {!loadingRounds && !latestRound && (
+                                    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-5 text-center space-y-2">
+                                        <p className="text-sm text-slate-400">No round created yet.</p>
+                                        <Link href={`/rounds?paper=${paper.id}`} className="text-xs text-blue-400 hover:text-blue-300 block">
+                                            → Create a round in Round Overview
+                                        </Link>
+                                    </div>
+                                )}
+                                {!loadingRounds && latestRound && (
+                                    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4 space-y-3">
+                                        <div className="flex items-center gap-3 flex-wrap">
+                                            <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-xs font-bold shrink-0">
+                                                {latestRound.roundNumber}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-white">{latestRound.targetVenue || `Round ${latestRound.roundNumber}`}</p>
+                                                <p className="text-xs text-slate-500">{latestRound.venueCategory}</p>
+                                            </div>
+                                            <span className={`px-2 py-0.5 rounded-full text-xs border ${roundStatusColor}`}>{latestRound.status}</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                            {latestRound.venueCategory === 'Conference' && latestRound.submissionDeadline && (
+                                                <div>
+                                                    <p className="text-xs text-slate-500">Submission Deadline</p>
+                                                    <p className="text-white">{new Date(latestRound.submissionDeadline).toLocaleDateString()}</p>
+                                                </div>
+                                            )}
+                                            <div>
+                                                <p className="text-xs text-slate-500">Round Deadline</p>
+                                                <p className="text-white">{latestRound.deadline ? new Date(latestRound.deadline).toLocaleDateString() : '—'}</p>
+                                            </div>
+                                        </div>
+                                        {pendingProposals > 0 && (
+                                            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
+                                                <Clock className="w-3.5 h-3.5 shrink-0" />
+                                                <span>{pendingProposals} reviewer proposal{pendingProposals > 1 ? 's' : ''} pending your approval</span>
+                                                <Link href={`/rounds?paper=${paper.id}`} className="ml-auto text-amber-300 hover:text-amber-200 font-medium">Review →</Link>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+
+                    {/* Author (non-coordinator): full round management */}
+                    {isAuthor && !user.isCoordinator && (
                         <div className="glass p-6 rounded-2xl border border-white/5 space-y-4">
                             <input ref={aiFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
                             <div className="flex items-center justify-between flex-wrap gap-2">
-                                <h2 className="text-xl font-semibold text-white">Active Round</h2>
+                                <div>
+                                    <h2 className="text-xl font-semibold text-white">Round</h2>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        {authorRounds.length === 0
+                                            ? 'No round created yet'
+                                            : authorRounds.some(r => r.status === 'Draft')
+                                                ? 'Draft — propose reviewers for coordinator approval'
+                                                : authorRounds.some(r => r.status === 'Open')
+                                                    ? 'Open — review in progress'
+                                                    : 'Completed'}
+                                    </p>
+                                </div>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    {user.isCoordinator && (
-                                        <Link
-                                            href={`/rounds?paper=${paper.id}`}
-                                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
-                                        >
-                                            <ExternalLink className="w-4 h-4" />
-                                            Open Round Overview
-                                        </Link>
-                                    )}
                                     {(() => {
                                         const hasActive = authorRounds.some(r => r.status === 'Draft' || r.status === 'Open');
                                         return !hasActive && !showCreateRound ? (
@@ -1719,9 +1741,43 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                 {round.status === 'Open' && (
                                                     <p className="text-xs text-emerald-400">Round is open — reviewers have been assigned and invited by the coordinator.</p>
                                                 )}
-                                                {round.status === 'Completed' && (
-                                                    <p className="text-xs text-slate-400">This round has been completed.</p>
-                                                )}
+                                                {round.status === 'Completed' && (() => {
+                                                    const histRound = paperHistory?.rounds.find(r => r.id === round.id);
+                                                    const completedAssignments = histRound?.assignments.filter(a => a.status === 'Completed' && a.reviewerName) ?? [];
+                                                    return (
+                                                        <div className="pt-3 border-t border-white/5 space-y-2">
+                                                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Reviewers</p>
+                                                            {completedAssignments.length === 0 ? (
+                                                                <p className="text-xs text-slate-500 italic">No completed reviews for this round.</p>
+                                                            ) : (
+                                                                <div className="space-y-2">
+                                                                    {completedAssignments.map(a => (
+                                                                        <div key={a.assignmentId} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs font-bold shrink-0">
+                                                                                    {a.reviewerName!.charAt(0)}
+                                                                                </div>
+                                                                                <span className="text-sm text-white">{a.reviewerName}</span>
+                                                                            </div>
+                                                                            {a.hasRating ? (
+                                                                                <span className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                                                                                    <CheckCircle2 className="w-3.5 h-3.5" /> Rated
+                                                                                </span>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => handleOpenRatingModal(a.assignmentId)}
+                                                                                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+                                                                                >
+                                                                                    <Star className="w-3.5 h-3.5" /> Rate Reviewer
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
 
                                                 {roundErrors[round.id] && (
                                                     <p className="text-xs text-red-400">{roundErrors[round.id]}</p>
@@ -1855,75 +1911,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         </div>
                     </div>
 
-                    {user.isCoordinator && currentStatus === 'In Review' && (
-                        <div className="glass p-6 rounded-2xl border border-white/5">
-                            <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4">Round 1 Reviewers</h3>
-                            <div className="space-y-4">
-                                {assignments.map(a => {
-                                    const reviewerInfo = Object.values(MOCK_USERS).find(u => u.id === a.reviewerId);
-                                    if (!reviewerInfo) return null;
-
-                                    const isMe = a.reviewerId === user.id;
-                                    const displayedStatus = isMe && localAssignmentStatus ? localAssignmentStatus : a.status;
-
-                                    return (
-                                        <div key={a.id} className="flex items-center justify-between group">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center font-semibold text-xs shrink-0">
-                                                    {reviewerInfo.name.charAt(0)}
-                                                </div>
-                                                <p className="text-white text-sm font-medium">{reviewerInfo.name}</p>
-                                            </div>
-                                            <div className="flex flex-col items-end gap-2">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`text-xs px-2 py-1 flex items-center rounded ${displayedStatus === 'Accepted' ? 'bg-blue-500/10 text-blue-400' :
-                                                        displayedStatus === 'Submitted' ? 'bg-emerald-500/10 text-emerald-400' :
-                                                            displayedStatus === 'Declined' ? 'bg-red-500/10 text-red-400' :
-                                                                'bg-amber-500/10 text-amber-400'
-                                                        }`}>
-                                                        {displayedStatus}
-                                                    </span>
-                                                </div>
-
-                                                {/* Coordinator Extension Approval Actions */}
-                                                {hasRequestedExtension[a.id] && !extensionStatus[a.id] && (
-                                                    <div className="flex items-center gap-1 mt-1 bg-amber-500/10 border border-amber-500/20 px-2 py-1.5 rounded-lg">
-                                                        <Clock className="w-3 h-3 text-amber-400 mr-1" />
-                                                        <span className="text-xs text-amber-400 font-medium mr-2">Extension Requested</span>
-                                                        <button
-                                                            onClick={() => setExtensionStatus(prev => ({ ...prev, [a.id]: 'Approved' }))}
-                                                            className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold uppercase rounded transition-colors"
-                                                        >
-                                                            Approve
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setExtensionStatus(prev => ({ ...prev, [a.id]: 'Rejected' }))}
-                                                            className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold uppercase rounded transition-colors"
-                                                        >
-                                                            Reject
-                                                        </button>
-                                                    </div>
-                                                )}
-
-                                                {extensionStatus[a.id] === 'Approved' && (
-                                                    <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1 mt-1">
-                                                        <CheckCircle2 className="w-3 h-3" /> Extension Approved
-                                                    </span>
-                                                )}
-
-                                                {extensionStatus[a.id] === 'Rejected' && (
-                                                    <span className="text-[10px] text-red-400 font-medium flex items-center gap-1 mt-1">
-                                                        <XCircle className="w-3 h-3" /> Extension Rejected
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                                {assignments.length === 0 && <p className="text-slate-500 text-sm">No reviewers assigned yet.</p>}
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
 

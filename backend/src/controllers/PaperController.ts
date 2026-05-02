@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { Paper, PaperStatus } from '../entities/Paper';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
-import { RoundStatus } from '../entities/Round';
+import { RoundStatus, VenueCategory } from '../entities/Round';
 import { UserRole } from '../entities/User';
 import { In } from 'typeorm';
 import { PaperService } from '../services/PaperService';
@@ -544,10 +544,12 @@ export class PaperController {
       }
 
       const paperRepo = AppDataSource.getRepository(Paper);
-      const papers = await paperRepo.find({
-        where: { coordinators: { id: user.id } },
-        relations: ['coordinators', 'labs'],
-      });
+      const papers = await paperRepo
+        .createQueryBuilder('paper')
+        .leftJoinAndSelect('paper.coordinators', 'coordinator')
+        .leftJoinAndSelect('paper.authors', 'author')
+        .where('coordinator.id = :userId', { userId: user.id })
+        .getMany();
 
       return res.status(200).json(papers.map(p => ({
         id: p.id,
@@ -555,6 +557,7 @@ export class PaperController {
         status: p.status,
         abstractText: p.abstractText,
         overleafLink: p.overleafLink ?? null,
+        authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name })),
       })));
     } catch (err) {
       console.error(err);
@@ -713,16 +716,14 @@ export class PaperController {
 
       if (status === PaperStatus.Archived) {
         const now = new Date();
-        const roundsWithSubmissionDeadline = (paper.rounds ?? []).filter(round => !!round.submissionDeadline);
-        if (roundsWithSubmissionDeadline.length === 0) {
-          return res.status(400).json({ message: 'Paper cannot be archived because no submission deadline is set' });
-        }
 
-        const futureSubmission = roundsWithSubmissionDeadline.find(round =>
-          round.submissionDeadline && round.submissionDeadline.getTime() > now.getTime()
+        const futureConferenceSubmission = (paper.rounds ?? []).find(round =>
+          round.venueCategory === VenueCategory.Conference &&
+          round.submissionDeadline &&
+          round.submissionDeadline.getTime() > now.getTime()
         );
-        if (futureSubmission) {
-          return res.status(400).json({ message: 'Paper cannot be archived before the submission deadline has passed' });
+        if (futureConferenceSubmission) {
+          return res.status(400).json({ message: 'Paper cannot be archived before the conference submission deadline has passed' });
         }
 
         const activeRound = (paper.rounds ?? []).find(round => round.status === RoundStatus.Draft || round.status === RoundStatus.Open);

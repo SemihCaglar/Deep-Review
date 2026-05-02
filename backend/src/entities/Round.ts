@@ -102,6 +102,9 @@ export class Round {
   @Column({ nullable: true, type: 'text' })
   checklistUrl: string | null;
 
+  @Column({ default: false })
+  createdByCoordinator: boolean;
+
   @Column({ type: 'simple-json', nullable: true })
   confirmedChecklistJson: any;
 }

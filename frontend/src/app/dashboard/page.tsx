@@ -244,7 +244,7 @@ export default function DashboardPage() {
 
       const roundRequests = roundsByPaper.flatMap(({ paper, rounds }) =>
         rounds
-          .filter(round => round.status === 'Draft')
+          .filter(round => round.status === 'Draft' && !round.createdByCoordinator)
           .map(round => ({
             id: round.id,
             paperId: paper.id,
@@ -447,11 +447,9 @@ export default function DashboardPage() {
     : user.isFrozen
     ? [
         { label: 'Account Status', value: 'Alumni', icon: Snowflake, color: 'text-sky-400', bg: 'bg-sky-500/10' },
-        { label: 'Profile Access', value: 'Active', icon: FileText, color: 'text-blue-400', bg: 'bg-blue-500/10' },
       ]
     : [
         { label: 'Account Status', value: 'Active', icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-        { label: 'Profile Access', value: 'Ready', icon: FileText, color: 'text-blue-400', bg: 'bg-blue-500/10' },
         { label: 'Assigned Reviews', value: isLoadingMyReviews ? '...' : myReviewAssignments.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '/my-reviews' },
       ];
 

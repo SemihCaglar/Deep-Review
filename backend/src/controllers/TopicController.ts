@@ -8,9 +8,14 @@ import type { AuthenticatedRequest } from '../types/auth';
 
 export class TopicController {
   static async getLabTopics(req: AuthenticatedRequest, res: Response) {
+    const user = req.user;
+    if (user?.frozenAt) {
+      return res.status(403).json({ message: 'Frozen accounts cannot access lab topics.' });
+    }
+
     const labId = req.params.labId as string;
     const labRepo = AppDataSource.getRepository(Lab);
-    
+
     const lab = await labRepo.findOne({
       where: { id: labId },
       relations: { topics: true },

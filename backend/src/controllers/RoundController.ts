@@ -126,6 +126,7 @@ export class RoundController {
       round.deadline = parsedDeadline;
       round.startedAt = null;
       round.completedAt = null;
+      round.createdByCoordinator = isCoordinator;
 
       await roundRepo.save(round);
 
@@ -716,6 +717,7 @@ export class RoundController {
         submissionDeadline: round.submissionDeadline,
         startedAt: round.startedAt,
         completedAt: round.completedAt,
+        createdByCoordinator: round.createdByCoordinator ?? false,
         aiReviewReport: round.aiReviewReport ?? null,
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
         complianceReport: round.complianceReportsByUser?.[coordinator.id]?.report ?? (round.complianceReportsByUser ? null : round.complianceReport ?? null),

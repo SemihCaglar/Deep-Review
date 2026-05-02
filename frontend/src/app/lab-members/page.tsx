@@ -221,7 +221,7 @@ export default function LabMembersPage() {
       )}
 
       {/* Lab Topics */}
-      {user.labs && user.labs.length > 0 && (
+      {!user.isFrozen && user.labs && user.labs.length > 0 && (
         <section className="space-y-4">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-blue-400" />

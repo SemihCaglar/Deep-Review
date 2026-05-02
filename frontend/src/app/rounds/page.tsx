@@ -39,7 +39,7 @@ import {
   confirmChecklistSelectionRequest,
 } from '@/lib/api';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download } from 'lucide-react';
+import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download, Search } from 'lucide-react';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
@@ -871,9 +871,16 @@ function RoundCard({
       {expanded && (
         <div className="border-t border-white/5 px-6 py-4 space-y-4">
           {round.status === 'Draft' && (
-            <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 mb-4 space-y-4">
+            <div className={`p-4 rounded-xl mb-4 space-y-4 ${round.createdByCoordinator ? 'border border-blue-500/20 bg-blue-500/5' : 'border border-amber-500/20 bg-amber-500/5'}`}>
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <h3 className="text-sm font-semibold text-amber-400">Draft Round Configuration</h3>
+                <div>
+                  <h3 className={`text-sm font-semibold ${round.createdByCoordinator ? 'text-blue-400' : 'text-amber-400'}`}>
+                    {round.createdByCoordinator ? 'Configure & Start Round' : 'Draft Round — Pending Your Approval'}
+                  </h3>
+                  {!round.createdByCoordinator && (
+                    <p className="text-xs text-slate-400 mt-0.5">An author proposed this round. Review the configuration below, then approve to start.</p>
+                  )}
+                </div>
                 <div className="flex flex-col items-end gap-1">
                   {!paperHasOverleafLink && (
                     <p className="text-xs text-red-400 flex items-center gap-1">
@@ -890,11 +897,11 @@ function RoundCard({
                   <button
                     onClick={handleApproveRound}
                     disabled={approving || !paperHasOverleafLink || !round.targetVenueUrl?.trim() || draftReviewerCount === 0}
-                    title={draftReviewerCount === 0 ? 'Add at least one reviewer before approving' : undefined}
+                    title={draftReviewerCount === 0 ? 'Add at least one reviewer before starting' : undefined}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                    Approve & Start Round
+                    {round.createdByCoordinator ? 'Assign Reviewers & Start' : 'Approve & Start Round'}
                   </button>
                 </div>
               </div>
@@ -953,11 +960,11 @@ function RoundCard({
                 </div>
                 )}
               </div>
-              {/* Proposed reviewers */}
+              {/* Reviewers section */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Proposed Reviewers {loadingProposed ? '…' : `(${proposedReviewers.length})`}
+                    {round.createdByCoordinator ? 'Reviewers' : 'Proposed Reviewers'} {loadingProposed ? '…' : `(${proposedReviewers.length})`}
                   </p>
                   <button
                     onClick={() => showProposePanel ? setShowProposePanel(false) : openProposePanel()}
@@ -968,7 +975,11 @@ function RoundCard({
                 </div>
 
                 {proposedReviewers.length === 0 && !loadingProposed && (
-                  <p className="text-xs text-slate-500 italic">No reviewers proposed yet. Authors or you can add from suggestions.</p>
+                  <p className="text-xs text-slate-500 italic">
+                    {round.createdByCoordinator
+                      ? 'No reviewers added yet. Select from the suggestions below.'
+                      : 'No reviewers proposed yet. Authors or you can add from suggestions.'}
+                  </p>
                 )}
                 {proposedReviewers.map(r => (
                   <div key={r.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
@@ -979,18 +990,20 @@ function RoundCard({
                       <span className="text-sm text-white">{r.name}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handleApproveProposed(r.id)}
-                        disabled={approvingProposedId === r.id}
-                        className="text-slate-500 hover:text-emerald-400 transition-colors disabled:opacity-50"
-                        title="Assign reviewer to this round"
-                      >
-                        {approvingProposedId === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                      </button>
+                      {!round.createdByCoordinator && (
+                        <button
+                          onClick={() => handleApproveProposed(r.id)}
+                          disabled={approvingProposedId === r.id}
+                          className="text-slate-500 hover:text-emerald-400 transition-colors disabled:opacity-50"
+                          title="Assign reviewer to this round"
+                        >
+                          {approvingProposedId === r.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                        </button>
+                      )}
                       <button
                         onClick={() => handleRemoveProposed(r.id)}
                         className="text-slate-500 hover:text-red-400 transition-colors"
-                        title="Remove from proposed list"
+                        title="Remove reviewer"
                       >
                         <XCircle className="w-4 h-4" />
                       </button>
@@ -1619,6 +1632,7 @@ export default function RoundsPage() {
   const { user } = useUser();
   const searchParams = useSearchParams();
   const [papers, setPapers] = useState<CoordinatedPaper[]>([]);
+  const [paperSearch, setPaperSearch] = useState('');
   const [selectedPaperId, setSelectedPaperId] = useState<string | null>(null);
   const [rounds, setRounds] = useState<RoundWithAssignments[]>([]);
   const [loadingPapers, setLoadingPapers] = useState(true);
@@ -1825,8 +1839,30 @@ export default function RoundsPage() {
         ) : papers.length === 0 ? (
           <p className="text-sm text-slate-500">No papers assigned to you as coordinator.</p>
         ) : (
+          <>
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search by paper title or author name…"
+              value={paperSearch}
+              onChange={e => setPaperSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-sm bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/40 focus:bg-white/5 transition-colors"
+            />
+          </div>
+          {(() => {
+            const q = paperSearch.trim().toLowerCase();
+            const filtered = q
+              ? papers.filter(p =>
+                  p.title.toLowerCase().includes(q) ||
+                  (p.authors ?? []).some(a => a.name.toLowerCase().includes(q))
+                )
+              : papers;
+            return filtered.length === 0 ? (
+              <p className="text-sm text-slate-500">No papers match your search.</p>
+            ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {papers.map(paper => (
+            {filtered.map(paper => (
               <button
                 key={paper.id}
                 onClick={() => handleSelectPaper(paper.id)}
@@ -1839,7 +1875,9 @@ export default function RoundsPage() {
                 <p className="text-sm font-semibold text-white line-clamp-2 mb-2">{paper.title}</p>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-slate-500 truncate">
-                    {paper.overleafLink ? 'Overleaf linked' : 'No Overleaf link'}
+                    {paper.authors?.length
+                      ? paper.authors.map(a => a.name).join(', ')
+                      : (paper.overleafLink ? 'Overleaf linked' : 'No Overleaf link')}
                   </span>
                   <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs border ${statusColor(paper.status)}`}>
                     {paper.status}
@@ -1848,6 +1886,9 @@ export default function RoundsPage() {
               </button>
             ))}
           </div>
+            );
+          })()}
+          </>
         )}
       </section>
 
