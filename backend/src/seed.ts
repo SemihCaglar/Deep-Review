@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { AppDataSource } from './data-source';
+import { AppDataSource, normalizeLegacyPaperStatuses } from './data-source';
 import { IsNull } from 'typeorm';
 import { Coordinator } from './entities/Coordinator';
 import { Admin } from './entities/GlobalAdmin';
@@ -30,6 +30,10 @@ const DEFAULT_TOPIC_NAMES = [
 
 export async function runSeed(options: { reset?: boolean } = {}) {
   const { reset = false } = options;
+
+  if (!reset) {
+    await normalizeLegacyPaperStatuses();
+  }
 
   await AppDataSource.initialize();
 
@@ -127,7 +131,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       title: 'Test Paper for Review',
       abstractText: 'This is a test paper for development purposes.',
       creationTime: new Date(),
-      status: PaperStatus.HumanReview,
+      status: PaperStatus.InReview,
       coordinators: [{ id: coordinator.id } as Coordinator],
       labs: [{ id: lab.id } as Lab],
       authors: [{ id: reviewer.id } as LabMember],

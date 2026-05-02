@@ -110,7 +110,7 @@ async function seedTestDb() {
         title: 'Integration Test Paper',
         abstractText: 'A paper for integration testing.',
         creationTime: new Date(),
-        status: PaperStatus.HumanReview,
+        status: PaperStatus.InReview,
     });
     paper.coordinators = [coordinator];
     paper.labs = [lab];

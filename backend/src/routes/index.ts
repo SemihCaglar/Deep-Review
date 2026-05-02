@@ -172,7 +172,7 @@ router.get('/search/papers/venue', SearchController.searchPapersByVenue);
 router.get('/search/papers/author/:id', SearchController.searchPapersByAuthor);
 router.get('/search/papers/topic/:id', SearchController.searchPapersByTopic);
 router.get('/search/papers/date', SearchController.searchPapersByDateRange);
-router.get('/search/papers/closed', SearchController.searchPapersByClosed);
+router.get('/search/papers/completed', SearchController.searchPapersByCompleted);
 router.get('/search/papers/archived', SearchController.searchPapersByArchived);
 router.get('/search/reviews/paper/:id', SearchController.searchReviewsByPaper);
 router.get('/search/reviews/author/:id', SearchController.searchReviewsByAuthor);

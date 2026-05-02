@@ -442,6 +442,8 @@ function RoundCard({
   const [assigning, setAssigning] = useState(false);
   const [assignMsg, setAssignMsg] = useState('');
   const [assignError, setAssignError] = useState('');
+  const roundDeadlineHasNotPassed = round.deadline ? new Date(round.deadline).getTime() >= Date.now() : false;
+  const canAddReviewer = round.status === 'Open' || (round.status === 'Completed' && roundDeadlineHasNotPassed);
 
   const openAddPanel = async (reassignId?: string) => {
     setShowAddPanel(true);
@@ -1176,7 +1178,7 @@ function RoundCard({
 
           {/* Action bar */}
           <div className="flex flex-wrap items-center gap-3">
-            {round.status !== 'Completed' && round.status !== 'Draft' && (
+            {canAddReviewer && (
               <button
                 onClick={() => showAddPanel ? setShowAddPanel(false) : openAddPanel()}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors"
