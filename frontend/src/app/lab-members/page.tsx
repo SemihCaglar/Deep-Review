@@ -3,10 +3,12 @@
 import React from 'react';
 import { Snowflake, RotateCcw } from 'lucide-react';
 import { ApiError, getLabMembersRequest, freezeMemberRequest, unfreezeMemberRequest, type LabMember } from '@/lib/api';
+import { useLabContext } from '@/components/context/LabContext';
 import { useUser } from '@/components/context/UserContext';
 
 export default function LabMembersPage() {
   const { user } = useUser();
+  const { selectedLab } = useLabContext();
   const [activeMembers, setActiveMembers] = React.useState<LabMember[]>([]);
   const [frozenMembers, setFrozenMembers] = React.useState<LabMember[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -17,7 +19,7 @@ export default function LabMembersPage() {
   const loadMembers = React.useCallback(() => {
     if (!user.id) return;
     setIsLoading(true);
-    getLabMembersRequest()
+    getLabMembersRequest(selectedLab?.id)
       .then(response => {
         setActiveMembers(response.users);
         setFrozenMembers(response.frozenUsers ?? []);
@@ -27,7 +29,7 @@ export default function LabMembersPage() {
         setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load lab members.');
         setIsLoading(false);
       });
-  }, [user.id]);
+  }, [selectedLab?.id, user.id]);
 
   React.useEffect(() => {
     loadMembers();
@@ -64,9 +66,6 @@ export default function LabMembersPage() {
     if (role === 'Admin') return 'Admin';
     return 'Lab Member';
   };
-
-  const sortByCoordinator = (a: LabMember, b: LabMember) =>
-    a.role === 'Coordinator' ? -1 : b.role === 'Coordinator' ? 1 : 0;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">

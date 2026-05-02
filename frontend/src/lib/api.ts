@@ -224,8 +224,9 @@ export function getCurrentProfileRequest() {
   return apiRequest<{ user: StoredAuthUser }>('/account/profile');
 }
 
-export function getLabMembersRequest() {
-  return apiRequest<LabMembersResponse>('/account/lab-members');
+export function getLabMembersRequest(labId?: string) {
+  const query = labId ? `?labId=${encodeURIComponent(labId)}` : '';
+  return apiRequest<LabMembersResponse>(`/account/lab-members${query}`);
 }
 
 export function getMyLabsRequest() {

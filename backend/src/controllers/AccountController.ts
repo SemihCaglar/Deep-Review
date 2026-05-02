@@ -394,7 +394,12 @@ export class AccountController {
     }
 
     const visibleLabIds = await AccountController.getVisibleLabIds(authenticatedUser);
-    if (visibleLabIds.length === 0) {
+    const requestedLabId = AccountController.parseRouteId(req.query?.labId);
+    const scopedLabIds = requestedLabId && visibleLabIds.includes(requestedLabId)
+      ? [requestedLabId]
+      : visibleLabIds;
+
+    if (scopedLabIds.length === 0 || (requestedLabId && !visibleLabIds.includes(requestedLabId))) {
       return res.status(200).json({ users: [], frozenUsers: [] });
     }
 
@@ -408,7 +413,7 @@ export class AccountController {
       .andWhere('membership.status IN (:...membershipStatuses)', {
         membershipStatuses: [LabMembershipStatus.Active, LabMembershipStatus.Alumni],
       })
-      .andWhere('lab.id IN (:...labIds)', { labIds: visibleLabIds })
+      .andWhere('lab.id IN (:...labIds)', { labIds: scopedLabIds })
       .orderBy('user.name', 'ASC')
       .getMany();
 
