@@ -312,6 +312,9 @@ export class RoundController {
         // Admins and Coordinators cannot be reviewers
         if (user.role === UserRole.Admin || user.role === UserRole.Coordinator) continue;
 
+        // Frozen (alumni) members cannot be reviewers
+        if (user.frozenAt) continue;
+
         // Enforce Intra-Lab boundaries
         const userLabIds = user.labs?.map(l => l.id) || [];
         const sharesLab = userLabIds.some(lid => paperLabIds.includes(lid));
@@ -402,6 +405,11 @@ export class RoundController {
       const userRepo = AppDataSource.getRepository<User>('User');
       const reviewer = await userRepo.findOne({ where: { id: reviewerId }, relations: ['labs'] });
       if (!reviewer) return res.status(404).json({ message: 'Reviewer not found' });
+      
+      if (reviewer.frozenAt) {
+        return res.status(400).json({ message: 'Frozen members (Alumni) cannot be proposed as reviewers' });
+      }
+
       if (reviewer.role === UserRole.Admin || reviewer.role === UserRole.Coordinator) {
         return res.status(400).json({ message: 'Coordinators and admins cannot be proposed as reviewers' });
       }
