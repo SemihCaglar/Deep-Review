@@ -697,6 +697,7 @@ function RoundCard({
   const [aiError, setAiError] = useState('');
   const [aiStatus, setAiStatus] = useState('');
   const [localAiResult, setLocalAiResult] = useState<any>(null);
+  const [confirmedStandards, setConfirmedStandards] = useState<Set<string>>(new Set());
 
   const AI_PHASES = [
     { at: 0,  msg: 'Uploading PDF to agent…' },
@@ -725,6 +726,10 @@ function RoundCard({
     try {
       const res = await startAIReviewRequest(round.id, file);
       setLocalAiResult(res.data);
+      if (res.data?.checklistJson?.selectedStandards) {
+        const standards = new Set<string>(res.data.checklistJson.selectedStandards.map((s: any) => s.label));
+        setConfirmedStandards(standards);
+      }
       setAiStatus('');
       onRefresh();
     } catch (err: any) {
@@ -735,6 +740,17 @@ function RoundCard({
       setRunningAI(false);
     }
   };
+
+  // Initialize confirmed standards when round data loads
+  useEffect(() => {
+    if ((localAiResult?.checklistJson || round.checklistJson) && confirmedStandards.size === 0) {
+      const checklist = localAiResult?.checklistJson || round.checklistJson;
+      if (checklist?.selectedStandards) {
+        const standards = new Set<string>(checklist.selectedStandards.map((s: any) => s.label));
+        setConfirmedStandards(standards);
+      }
+    }
+  }, [round.checklistJson, localAiResult]);
 
   // Compliance Check
   const complianceFileRef = useRef<HTMLInputElement>(null);
@@ -1282,6 +1298,71 @@ function RoundCard({
                             <div>
                               <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
                               <p className="text-[10px] text-slate-300">{val.details}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Empirical Standards result */}
+                {(() => {
+                  const checklist = localAiResult?.checklistJson || round.checklistJson;
+                  if (!checklist?.selectedStandards?.length) return null;
+
+                  const buildChecklistUrl = (standards: Set<string>) => {
+                    const base = "https://www2.sigsoft.org/EmpiricalStandards/form_generator/result.html";
+                    const params = new URLSearchParams();
+                    Array.from(standards).forEach(standard => params.append("standard", standard));
+                    params.append("role", "author");
+                    return `${base}?${params.toString()}`;
+                  };
+
+                  return (
+                    <div className="p-3 rounded-xl border border-violet-500/20 bg-violet-500/5 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Empirical Standards</p>
+                        <a
+                          href={buildChecklistUrl(confirmedStandards)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                        >
+                          <ExternalLink className="w-3 h-3" /> Open Form
+                        </a>
+                      </div>
+                      <div className="space-y-1.5">
+                        {checklist.selectedStandards.map((standard: any) => (
+                          <div key={standard.label} className="flex items-start gap-2 p-2 rounded bg-slate-800/50 hover:bg-slate-800/75 transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={confirmedStandards.has(standard.label)}
+                              onChange={(e) => {
+                                const newConfirmed = new Set<string>(confirmedStandards);
+                                if (e.target.checked) {
+                                  newConfirmed.add(standard.label);
+                                } else {
+                                  newConfirmed.delete(standard.label);
+                                }
+                                setConfirmedStandards(newConfirmed);
+                              }}
+                              className="mt-0.5 cursor-pointer"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-xs text-slate-200 font-medium">{standard.label}</p>
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${
+                                  standard.confidence === 'high'
+                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                    : standard.confidence === 'medium'
+                                    ? 'bg-amber-500/20 text-amber-300'
+                                    : 'bg-orange-500/20 text-orange-300'
+                                }`}>
+                                  {standard.confidence}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{standard.evidence}</p>
                             </div>
                           </div>
                         ))}

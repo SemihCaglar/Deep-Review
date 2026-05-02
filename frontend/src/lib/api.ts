@@ -271,17 +271,19 @@ export type PaperHistoryAssignment = {
   extensions: PaperHistoryExtension[];
 };
 
+export interface EmpiricalStandardsChecklist {
+  selectedStandards: Array<{
+    label: string;
+    confidence: 'high' | 'medium' | 'low';
+    evidence: string;
+  }>;
+}
+
 export interface AIReviewReport {
   summaryReport: string;
   annotatedPdfUrl?: string;
   annotations?: any[];
   suggestedCitations?: any[];
-  checklist?: Array<{
-    id: string;
-    description: string;
-    isChecked: boolean;
-  }>;
-  paperType?: string;
 }
 
 export interface ComplianceReport {
@@ -466,6 +468,8 @@ export type RoundWithAssignments = {
   aiReviewReport?: AIReviewReport | null;
   complianceReport?: ComplianceReport | null;
   annotatedPdfUrl?: string | null;
+  checklistJson?: EmpiricalStandardsChecklist | null;
+  checklistUrl?: string | null;
 };
 
 export type MyAssignment = {

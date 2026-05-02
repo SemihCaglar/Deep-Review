@@ -609,6 +609,8 @@ export class RoundController {
         aiReviewReport: round.aiReviewReport ?? null,
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
         complianceReport: round.complianceReport ?? null,
+        checklistJson: round.checklistJson ?? null,
+        checklistUrl: round.checklistUrl ?? null,
         assignments: (round.assignments ?? []).map(a => ({
           id: a.id,
           status: a.status,
@@ -774,6 +776,8 @@ export class RoundController {
       // Persist results
       round.aiReviewReport = result;
       round.annotatedPdfUrl = result.annotatedPdfUrl;
+      round.checklistJson = result.checklistJson ?? null;
+      round.checklistUrl = result.checklistUrl ?? null;
       await roundRepo.save(round);
 
       return res.status(200).json({
