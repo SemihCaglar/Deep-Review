@@ -100,16 +100,47 @@ export class PdfAgentService {
 
     const reviewPrompt = `You are a critical academic peer reviewer for ${venueName}.
 
-Review the attached PDF paper. Start with the paper title, then provide a structured peer review with:
-1. Overall decision (Strong Accept / Accept / Weak Accept / Weak Reject / Reject)
-2. Summary of contribution (2-3 sentences)
-3. Critical review with attack points (Methodology & Validity, Industrial Relevance, Clarity & Presentation)
-4. Prioritized improvements (High/Medium/Low priority)
-5. Scope analysis (Underemphasized and Overemphasized areas)
+IMPORTANT: Output ONLY the review content. No preamble, no explanation, no metadata. Just the review itself.
 
-Be tough but fair.
+Review the attached PDF paper and provide a structured peer review in Markdown format:
 
-After writing the review, create an annotated version of the PDF highlighting the key issues and save it as output.`;
+## Paper Title
+[Extract from PDF]
+
+### 1. Overall Decision
+(Strong Accept / Accept / Weak Accept / Weak Reject / Reject)
+
+### 2. Summary of Contribution
+(2-3 sentences)
+
+### 3. Critical Review & Attack Points
+#### Methodology & Validity
+(Critique the study design, data collection, threats to validity, and bias.)
+
+#### Industrial Relevance
+(Is this truly useful for industry practitioners? Is the problem real? Is the solution scalable?)
+
+#### Clarity & Presentation
+(Critique the structure, figures, and writing quality.)
+
+### 4. Prioritized Improvements
+**High Priority - Must Address:**
+(Fatal flaws or major missing pieces that will likely lead to rejection.)
+
+**Medium Priority - Should Improve:**
+(Weak points or underemphasized areas that should be strengthened.)
+
+**Low Priority - Nice to Have:**
+(Minor nitpicks, formatting issues, or overemphasized sections.)
+
+### 5. Scope & Balance Analysis
+**Underemphasized Areas:**
+(Crucial details, related work, or context currently missing.)
+
+**Overemphasized Areas:**
+(Fluff, basic definitions, or common knowledge that takes up too much space.)
+
+Be tough but fair. Output ONLY the review in Markdown. After the review, create an annotated PDF highlighting key issues.`;
 
     await this.client.messages.create(thread.id, "user", reviewPrompt, {
       attachments: [{ fileId, tools: [{ type: "code_interpreter" }] }],
@@ -156,7 +187,24 @@ After writing the review, create an annotated version of the PDF highlighting th
       }
     }
 
-    return { summaryText: summaryText.trim(), annotatedPdfBuffer };
+    // Clean preamble and postamble from review text
+    let cleanedText = summaryText.trim();
+
+    // Remove preamble (everything before the first markdown header or "Paper Title")
+    const headerMatch = cleanedText.match(/^[\s\S]*?(## Paper Title|### Paper Title|#+ Paper Title|#+ 1\. Overall Decision)/i);
+    if (headerMatch && headerMatch.index !== undefined && headerMatch.index > 0) {
+      cleanedText = cleanedText.substring(headerMatch.index);
+    }
+
+    // Remove postamble (everything after "Scope & Balance Analysis" section ends)
+    const postambleMatch = cleanedText.match(/(^|\n)(The review is complete|Next, I will|If you need|You can download|\[Download)/i);
+    if (postambleMatch && postambleMatch.index !== undefined) {
+      cleanedText = cleanedText.substring(0, postambleMatch.index);
+    }
+
+    cleanedText = cleanedText.trim();
+
+    return { summaryText: cleanedText, annotatedPdfBuffer };
   }
 
   async runChecklistAnalysis(fileId: string): Promise<ChecklistAnalysisResult> {
