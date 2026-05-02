@@ -18,6 +18,7 @@ async function testSubmissionRuleExtraction() {
     console.log('========================================\n');
 
     console.log(`Testing URL: ${testUrl}\n`);
+    console.log('🔄 Force refreshing rules (ignoring cache)\n');
 
     // Step 1: Fetch website
     console.log('STEP 1: Fetching website HTML...');
@@ -55,7 +56,7 @@ async function testSubmissionRuleExtraction() {
     // Step 4: Extract rules
     console.log('STEP 4: Calling AI to extract rules...');
     console.log('----------------------------------------');
-    const rules = await SubmissionRuleExtractionService.extractSubmissionRules(testUrl);
+    const rules = await SubmissionRuleExtractionService.extractSubmissionRules(testUrl, true);
 
     console.log('✓ Rules extracted successfully!\n');
 

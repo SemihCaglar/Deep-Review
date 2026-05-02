@@ -1006,24 +1006,31 @@ export class RoundController {
 
       console.log(`[RoundController] Running checklist analysis...`);
       const raw = await agentService.runChecklistAnalysis(fileId);
-      console.log(`[RoundController] Raw checklist result: ${raw.selectedStandards.length} standards found (before filtering)`);
+      console.log(`[RoundController] Raw checklist result: ${raw.selectedStandards.length} standards found (before filtering)`, raw);
       const filtered = ChecklistService.filterValidStandards(raw.selectedStandards);
-      console.log(`[RoundController] Filtered checklist result: ${filtered.length} standards after validation`);
+      console.log(`[RoundController] Filtered checklist result: ${filtered.length} standards after validation`, filtered);
       const checklistJson = { selectedStandards: filtered };
       const checklistUrl = ChecklistService.buildEmpiricalStandardsUrl(filtered.map((s: any) => s.label));
 
       // Persist results
       round.checklistJson = checklistJson;
       round.checklistUrl = checklistUrl;
-      await roundRepo.save(round);
+      const saved = await roundRepo.save(round);
+      console.log(`[RoundController] Checklist saved to database:`, {
+        roundId: saved.id,
+        checklistJson: saved.checklistJson,
+        checklistUrl: saved.checklistUrl,
+      });
 
-      return res.status(200).json({
+      const response = {
         message: 'Checklist analysis completed',
         data: {
           checklistJson,
           checklistUrl,
         }
-      });
+      };
+      console.log(`[RoundController] Returning response:`, response);
+      return res.status(200).json(response);
 
     } catch (err: any) {
       console.error('[RoundController] Error in startAIChecklist:', err);
@@ -1179,6 +1186,138 @@ export class RoundController {
   }
   static async updateChecklistItem(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
+  }
+
+  static async runAIReviewWithCompliance(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const { id } = req.params;
+      const file = req.file;
+
+      if (!id) return res.status(400).json({ message: 'Missing round id' });
+      if (!file) return res.status(400).json({ message: 'PDF file is required' });
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.coordinators', 'paper.authors']
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      if (!isCoordinator && !isAuthor) {
+        return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
+      }
+
+      console.log(`[RoundController] Starting combined AI Review + Compliance check for round ${id}`);
+
+      // STEP 1: Compliance Check (if rules are linked)
+      let complianceReport = null;
+      let complianceSourceUrl = null;
+
+      console.log(`[RoundController] ========== STEP 1: COMPLIANCE CHECK ==========`);
+      console.log(`[RoundController] Round: ${id}`);
+      console.log(`[RoundController] Submission Rule Set ID: ${round.submissionRuleSetId || 'None'}`);
+      console.log(`[RoundController] PDF size: ${file.buffer.length} bytes`);
+
+      if (round.submissionRuleSetId) {
+        try {
+          console.log(`[RoundController] Fetching submission rules...`);
+          const ruleSetRepo = AppDataSource.getRepository(SubmissionRuleSet);
+          const ruleSet = await ruleSetRepo.findOne({ where: { id: round.submissionRuleSetId } });
+
+          if (ruleSet) {
+            console.log(`[RoundController] ✓ Rules found for: ${ruleSet.sourceUrl}`);
+            console.log(`[RoundController] Uploading PDF for compliance check...`);
+            const complianceService = new ComplianceCheckAgentService();
+            const fileId = await complianceService.uploadPdf(file.buffer, `round_${id}_compliance.pdf`);
+            console.log(`[RoundController] ✓ PDF uploaded, file ID: ${fileId}`);
+
+            console.log(`[RoundController] Running compliance check agent...`);
+            const { complianceReport: report } = await complianceService.runComplianceCheck(fileId, {
+              sourceUrl: ruleSet.sourceUrl,
+              rules: ruleSet.rules
+            });
+            complianceReport = report;
+            complianceSourceUrl = ruleSet.sourceUrl;
+
+            // Log results summary
+            const passCount = Object.values(report).filter(r => r.status === 'pass').length;
+            const failCount = Object.values(report).filter(r => r.status === 'fail').length;
+            const skipCount = Object.values(report).filter(r => r.status === 'skipped').length;
+            console.log(`[RoundController] ✓ Compliance check completed: ${passCount} pass, ${failCount} fail, ${skipCount} skipped`);
+          } else {
+            console.warn(`[RoundController] Rule set ID ${round.submissionRuleSetId} not found in database`);
+          }
+        } catch (error) {
+          console.error(`[RoundController] ❌ Compliance check failed (continuing with AI review):`, error);
+          console.warn(`[RoundController] Compliance report will be null, proceeding with AI review only`);
+        }
+      } else {
+        console.log(`[RoundController] ⚪ No submission rules linked, skipping compliance check`);
+      }
+      console.log(`[RoundController] ================================================\n`);
+
+      // STEP 2: AI Review
+      console.log(`[RoundController] ========== STEP 2: AI REVIEW ==========`);
+      console.log(`[RoundController] Running AI review agent...`);
+      const { AIReviewService } = require('../ai_content/services/AIReviewService');
+      const aiReviewResult = await AIReviewService.generateAIReview(
+        round.paper.id,
+        id,
+        file.buffer
+      );
+      console.log(`[RoundController] ✓ AI review completed`);
+      console.log(`[RoundController] Review length: ${aiReviewResult.summaryReport?.length || 0} chars`);
+      console.log(`[RoundController] Annotated PDF: ${aiReviewResult.annotatedPdfUrl ? '✓ generated' : '✗ not generated'}`);
+      console.log(`[RoundController] Checklist: ${aiReviewResult.checklistJson?.selectedStandards?.length || 0} standards selected`);
+      console.log(`[RoundController] =========================================\n`);
+
+      // STEP 3: Save results to round
+      console.log(`[RoundController] Saving results to database...`);
+      round.complianceReport = complianceReport;
+      round.aiReviewReport = aiReviewResult.summaryReport;
+      if (aiReviewResult.annotatedPdfUrl) {
+        round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+      }
+      round.checklistJson = aiReviewResult.checklistJson;
+      round.checklistUrl = aiReviewResult.checklistUrl;
+
+      await roundRepo.save(round);
+      console.log(`[RoundController] ✓ Results saved to round`);
+
+      // STEP 4: Return combined results
+      return res.status(200).json({
+        success: true,
+        message: 'AI Review and Compliance check completed successfully',
+        data: {
+          compliance: complianceReport ? {
+            report: complianceReport,
+            sourceUrl: complianceSourceUrl
+          } : {
+            report: null,
+            message: 'No submission rules linked to this round'
+          },
+          aiReview: {
+            summaryReport: aiReviewResult.summaryReport,
+            annotatedPdfUrl: aiReviewResult.annotatedPdfUrl,
+            suggestedCitations: aiReviewResult.suggestedCitations,
+            checklist: aiReviewResult.checklistJson,
+            checklistUrl: aiReviewResult.checklistUrl
+          }
+        }
+      });
+    } catch (err: any) {
+      console.error('[RoundController] Error in runAIReviewWithCompliance:', err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || 'Internal server error'
+      });
+    }
   }
 
   static async runComplianceCheckWithRules(req: AuthenticatedRequest, res: Response) {

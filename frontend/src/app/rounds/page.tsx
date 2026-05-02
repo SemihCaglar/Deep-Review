@@ -13,7 +13,6 @@ import {
   SuggestedReviewer,
   ApiError,
   startAIReviewRequest,
-  runComplianceCheckRequest,
   getMyCoordinatedPapersRequest,
   getPaperByIdRequest,
   getPaperRoundsRequest,
@@ -797,29 +796,6 @@ function RoundCard({
       }
     }
   }, [round.checklistJson, round.confirmedChecklistJson, localAiResult]);
-
-  // Compliance Check
-  const complianceFileRef = useRef<HTMLInputElement>(null);
-  const [runningCompliance, setRunningCompliance] = useState(false);
-  const [complianceError, setComplianceError] = useState('');
-  const [localComplianceResult, setLocalComplianceResult] = useState<any>(null);
-
-  const handleComplianceFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    setRunningCompliance(true);
-    setComplianceError('');
-    try {
-      const res = await runComplianceCheckRequest(round.id, file);
-      setLocalComplianceResult(res.data);
-      onRefresh();
-    } catch (err: any) {
-      setComplianceError(err.message || 'Compliance check failed');
-    } finally {
-      setRunningCompliance(false);
-    }
-  };
 
   const pendingCount = round.assignments.filter(
     a => a.pendingDeclineRequest || a.pendingExtensionRequest,

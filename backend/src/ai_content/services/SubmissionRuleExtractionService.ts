@@ -7,15 +7,17 @@ import { cleanWebsiteHtml } from '../utils/cleanWebsiteHtml';
 import { validateRulesJson } from '../utils/validateRulesJson';
 
 export class SubmissionRuleExtractionService {
-  static async extractSubmissionRules(submissionUrl: string): Promise<SubmissionRulesJSON> {
+  static async extractSubmissionRules(submissionUrl: string, forceRefresh: boolean = false): Promise<SubmissionRulesJSON> {
     console.log(`[SubmissionRuleExtractionService] Starting extraction for: ${submissionUrl}`);
 
     try {
-      // 1. Check if rules already exist for this URL
-      const existingRules = await this.getRulesFromDatabase(submissionUrl);
-      if (existingRules) {
-        console.log('[SubmissionRuleExtractionService] Rules already exist in database, returning cached result');
-        return existingRules;
+      // 1. Check if rules already exist for this URL (unless force refresh)
+      if (!forceRefresh) {
+        const existingRules = await this.getRulesFromDatabase(submissionUrl);
+        if (existingRules) {
+          console.log('[SubmissionRuleExtractionService] Rules already exist in database, returning cached result');
+          return existingRules;
+        }
       }
 
       // 2. Fetch website HTML

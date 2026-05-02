@@ -53,6 +53,10 @@ function validateRuleProperty(rule: any, key: string): void {
     if (rule.sourceText !== null) {
       throw new Error(`Rule ${key}: sourceText must be null when exists is false`);
     }
+    // For skipped rules, unit can be anything - set to empty string if missing
+    if (!rule.unit || typeof rule.unit !== 'string') {
+      rule.unit = '';
+    }
   } else {
     // If exists is true, validate value based on unit
     if (rule.value === null) {
@@ -63,10 +67,10 @@ function validateRuleProperty(rule: any, key: string): void {
     if (rule.sourceText !== null && typeof rule.sourceText !== 'string') {
       throw new Error(`Rule ${key}: sourceText must be a string or null`);
     }
-  }
 
-  // Validate unit is a string
-  if (typeof rule.unit !== 'string') {
-    throw new Error(`Rule ${key}: unit must be a string`);
+    // Validate unit is a string
+    if (typeof rule.unit !== 'string') {
+      throw new Error(`Rule ${key}: unit must be a string`);
+    }
   }
 }

@@ -9,10 +9,10 @@ Do not include markdown.
 Do not include explanations outside JSON.
 
 Extract only these rule categories:
-1. Page limit
+1. Page limit (IMPORTANT: if the rule specifies different limits for main text vs references, include both details. E.g., "10 pages main + 2 pages references" should be in the details or formatted as "10+2")
 2. Abstract word count
 3. Required sections
-4. Reference format
+4. Reference format (citation style, formatting requirements, page counts for references, etc.)
 5. Whether anonymity is required
 6. Whether PDF metadata anonymization is required
 7. Whether tool, dataset, artifact, or supplementary link anonymization is required
@@ -24,9 +24,9 @@ Use this JSON schema:
   "rules": {
     "pageLimit": {
       "exists": true,
-      "value": 10,
+      "value": "10 (main) + 2 (references)",
       "unit": "pages",
-      "sourceText": "short source text or null",
+      "sourceText": "Submissions must not exceed 10 pages for the main text. Up to two additional pages containing ONLY references are permitted.",
       "confidence": "high | medium | low"
     },
     "abstractWordCount": {
