@@ -298,8 +298,10 @@ export class PaperController {
             })),
             aiReviewReports: (round.aiReviewReports ?? []).map(report => ({
               id: report.id,
-              generatedReportUrl: report.generatedReportUrl,
+              reviewText: report.reviewText,
               annotatedPdfUrl: report.annotatedPdfUrl,
+              venue: report.venue,
+              createdAt: report.createdAt,
             })),
           },
         }));

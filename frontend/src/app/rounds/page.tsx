@@ -701,6 +701,7 @@ function RoundCard({
   const [confirmedStandards, setConfirmedStandards] = useState<Set<string>>(new Set());
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['General', 'Qualitative', 'Quantitative', 'Literature Review', 'Other']));
   const [finalizedChecklist, setFinalizedChecklist] = useState<any>(null);
+  const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null);
 
   const STANDARDS_BY_CATEGORY = {
     General: [
@@ -1299,27 +1300,53 @@ function RoundCard({
                   {complianceError && <p className="text-xs text-red-400">{complianceError}</p>}
                 </div>
 
-                {/* AI Review result */}
+                {/* AI Review History */}
                 {(() => {
-                  const report = localAiResult || round.aiReviewReport;
-                  const pdfUrl = localAiResult?.annotatedPdfUrl || round.annotatedPdfUrl;
-                  if (!report) return null;
+                  const reviews = round.aiReviewReports || [];
+                  const recentReport = localAiResult || round.aiReviewReport;
+
+                  if (reviews.length === 0 && !recentReport) return null;
+
                   return (
                     <div className="p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">AI Review</p>
-                          {report.paperType && (
-                            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{report.paperType}</span>
-                          )}
+                      <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">AI Review History</p>
+
+                      {reviews.length > 0 ? (
+                        <div className="space-y-2">
+                          {reviews.map((review, idx) => (
+                            <div key={review.id} className="rounded-lg bg-slate-800/30 overflow-hidden">
+                              <button
+                                onClick={() => setExpandedReviewId(expandedReviewId === review.id ? null : review.id)}
+                                className="w-full flex items-center justify-between px-2 py-1.5 hover:bg-slate-800/50 transition-colors"
+                              >
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <span className="text-xs text-slate-400">Review #{reviews.length - idx}</span>
+                                  <span className="text-[10px] text-slate-500">{new Date(review.createdAt).toLocaleString()}</span>
+                                  {review.venue && (
+                                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{review.venue}</span>
+                                  )}
+                                </div>
+                                <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${expandedReviewId === review.id ? 'rotate-180' : ''}`} />
+                              </button>
+
+                              {expandedReviewId === review.id && (
+                                <div className="px-2 py-2 border-t border-slate-700/50 bg-slate-800/20 space-y-2">
+                                  <p className="text-xs text-slate-300 leading-relaxed">{review.reviewText}</p>
+                                  {review.annotatedPdfUrl && (
+                                    <a href={review.annotatedPdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
+                                      <Download className="w-3 h-3" /> Download Annotated PDF
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                        {pdfUrl && (
-                          <a href={pdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
-                            <Download className="w-3 h-3" /> Annotated PDF
-                          </a>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-300 leading-relaxed line-clamp-5">{report.summaryReport}</p>
+                      ) : recentReport ? (
+                        <div className="p-2 rounded-lg bg-slate-800/30 space-y-2">
+                          <p className="text-xs text-slate-300 leading-relaxed line-clamp-5">{recentReport.summaryReport}</p>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })()}

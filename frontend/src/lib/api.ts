@@ -453,6 +453,14 @@ export type RoundAssignment = {
   reviewSummary: { text: string | null; submittedAt: string } | null;
 };
 
+export type AIReviewReportHistory = {
+  id: string;
+  reviewText: string;
+  annotatedPdfUrl: string | null;
+  venue: string | null;
+  createdAt: string;
+};
+
 export type RoundWithAssignments = {
   id: string;
   roundNumber: number;
@@ -466,6 +474,7 @@ export type RoundWithAssignments = {
   completedAt: string | null;
   assignments: RoundAssignment[];
   aiReviewReport?: AIReviewReport | null;
+  aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
   annotatedPdfUrl?: string | null;
   checklistJson?: EmpiricalStandardsChecklist | null;
