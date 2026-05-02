@@ -28,8 +28,8 @@ export class AIReviewService {
     }
   }
 
-  static async generateAIReview(paperId: string, roundId: string, pdfBuffer: Buffer): Promise<any> {
-    console.log(`[AIReviewService] Starting AI Review pipeline for Paper ${paperId}, Round ${roundId}`);
+  static async generateAIReview(paperId: string, roundId: string, pdfBuffer: Buffer, skipChecklist: boolean = false): Promise<any> {
+    console.log(`[AIReviewService] Starting AI Review pipeline for Paper ${paperId}, Round ${roundId}${skipChecklist ? ' (checklist skipped)' : ''}`);
 
     // 1. Upload PDF once
     const agentService = new PdfAgentService();
@@ -59,18 +59,22 @@ export class AIReviewService {
 
     const annotatedPdfUrl = annotatedPdfBuffer ? `/downloads/${outputFilename}` : null;
 
-    // 4. Checklist call — separate thread, same fileId
+    // 4. Checklist call — separate thread, same fileId (skip if already exists)
     let checklistJson: EmpiricalStandardsChecklist | null = null;
     let checklistUrl: string | null = null;
-    try {
-      console.log(`[AIReviewService] Calling AI agent for checklist analysis...`);
-      const raw = await agentService.runChecklistAnalysis(fileId);
-      const filtered = ChecklistService.filterValidStandards(raw.selectedStandards);
-      checklistJson = { selectedStandards: filtered as EmpiricalStandardsChecklist['selectedStandards'] };
-      checklistUrl = ChecklistService.buildEmpiricalStandardsUrl(filtered.map(s => s.label));
-      console.log(`[AIReviewService] Checklist analysis complete: ${filtered.length} standards selected`);
-    } catch (e) {
-      console.warn('[AIReviewService] Checklist analysis failed:', e);
+    if (!skipChecklist) {
+      try {
+        console.log(`[AIReviewService] Calling AI agent for checklist analysis...`);
+        const raw = await agentService.runChecklistAnalysis(fileId);
+        const filtered = ChecklistService.filterValidStandards(raw.selectedStandards);
+        checklistJson = { selectedStandards: filtered as EmpiricalStandardsChecklist['selectedStandards'] };
+        checklistUrl = ChecklistService.buildEmpiricalStandardsUrl(filtered.map(s => s.label));
+        console.log(`[AIReviewService] Checklist analysis complete: ${filtered.length} standards selected`);
+      } catch (e) {
+        console.warn('[AIReviewService] Checklist analysis failed:', e);
+      }
+    } else {
+      console.log(`[AIReviewService] ⚪ Checklist skipped (already exists)`);
     }
 
     // 5. Citation guardrails (stub)
