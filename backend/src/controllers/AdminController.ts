@@ -5,6 +5,7 @@ import { LabMember } from '../entities/LabMember';
 import { Coordinator } from '../entities/Coordinator';
 import { Admin } from '../entities/GlobalAdmin';
 import { Lab } from '../entities/Lab';
+import { LabMembership, LabMembershipStatus } from '../entities/LabMembership';
 import { AuditLog, AuditAction } from '../entities/AuditLog';
 import { SystemPolicy } from '../entities/SystemPolicy';
 import { Template } from '../entities/Template';
@@ -148,9 +149,18 @@ export class AdminController {
       name, 
       description,
       coordinator,
-      members: [coordinator]
     });
     await labRepo.save(lab);
+
+    const membershipRepo = AppDataSource.getRepository(LabMembership);
+    await membershipRepo.save(membershipRepo.create({
+      user: coordinator,
+      userId: coordinator.id,
+      lab,
+      labId: lab.id,
+      status: LabMembershipStatus.Active,
+      statusChangedAt: new Date(),
+    }));
 
     await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Lab', lab.id, `Created lab: ${name} with coordinator ${coordinator.email}`);
 

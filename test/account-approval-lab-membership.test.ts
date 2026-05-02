@@ -186,6 +186,76 @@ test('profile update tolerates legacy null currentPosition without clearing exis
   expect(legacyUpdate.body.user.currentPosition).toBe('Postdoctoral Researcher');
 });
 
+test('lab member can request another lab and that lab coordinator can review it', async () => {
+  const otherCoordinatorLogin = await request(app)
+    .post('/api/account/login')
+    .send({ email: 'other-approval-coordinator@test.com', password: 'pass' });
+
+  expect(otherCoordinatorLogin.status).toBe(200);
+
+  const requestJoin = await request(app)
+    .post('/api/account/lab-join-requests')
+    .set('Authorization', `Bearer ${approvedMemberToken}`)
+    .send({ labId: otherLabId });
+
+  expect(requestJoin.status).toBe(201);
+  expect(requestJoin.body.membership.status).toBe('Pending');
+  expect(requestJoin.body.membership.lab.id).toBe(otherLabId);
+
+  const duplicateRequest = await request(app)
+    .post('/api/account/lab-join-requests')
+    .set('Authorization', `Bearer ${approvedMemberToken}`)
+    .send({ labId: otherLabId });
+
+  expect(duplicateRequest.status).toBe(409);
+
+  const hiddenFromOriginalCoordinator = await request(app)
+    .get('/api/account/pending-lab-join-requests')
+    .set('Authorization', `Bearer ${coordinatorToken}`);
+
+  expect(hiddenFromOriginalCoordinator.status).toBe(200);
+  expect(hiddenFromOriginalCoordinator.body.requests).not.toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: requestJoin.body.membership.id }),
+    ]),
+  );
+
+  const pendingForOtherCoordinator = await request(app)
+    .get('/api/account/pending-lab-join-requests')
+    .set('Authorization', `Bearer ${otherCoordinatorLogin.body.token}`);
+
+  expect(pendingForOtherCoordinator.status).toBe(200);
+  expect(pendingForOtherCoordinator.body.requests).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: requestJoin.body.membership.id,
+        status: 'Pending',
+        lab: expect.objectContaining({ id: otherLabId }),
+        user: expect.objectContaining({ id: approvedMemberId }),
+      }),
+    ]),
+  );
+
+  const approval = await request(app)
+    .post(`/api/account/lab-join-requests/${requestJoin.body.membership.id}/approve`)
+    .set('Authorization', `Bearer ${otherCoordinatorLogin.body.token}`)
+    .send({});
+
+  expect(approval.status).toBe(200);
+  expect(approval.body.membership.status).toBe('Active');
+
+  const myLabs = await request(app)
+    .get('/api/account/my-labs')
+    .set('Authorization', `Bearer ${approvedMemberToken}`);
+
+  expect(myLabs.status).toBe(200);
+  expect(myLabs.body.memberships).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ status: 'Active', lab: expect.objectContaining({ id: otherLabId }) }),
+    ]),
+  );
+});
+
 test('approved lab member appears in reviewer suggestions for that lab', async () => {
   const suggestions = await request(app)
     .get(`/api/rounds/${roundId}/suggest`)

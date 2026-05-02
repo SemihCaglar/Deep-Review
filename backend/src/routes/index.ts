@@ -51,6 +51,11 @@ router.post('/account/reset-password/request', AccountController.sendPasswordRes
 router.post('/account/reset-password', AccountController.resetPassword);
 router.get('/account/profile', authenticateRequest, AccountController.getProfile);
 router.get('/account/lab-members', authenticateRequest, AccountController.getLabMembers);
+router.get('/account/my-labs', authenticateRequest, AccountController.getMyLabs);
+router.post('/account/lab-join-requests', authenticateRequest, AccountController.submitLabJoinRequest);
+router.get('/account/pending-lab-join-requests', authenticateRequest, AccountController.getPendingLabJoinRequests);
+router.post('/account/lab-join-requests/:id/approve', authenticateRequest, AccountController.approveLabJoinRequest);
+router.post('/account/lab-join-requests/:id/reject', authenticateRequest, AccountController.rejectLabJoinRequest);
 router.get('/account/pending-signups', authenticateRequest, AccountController.getPendingSignUps);
 router.get('/account/reviewed-signups', authenticateRequest, AccountController.getReviewedSignUps);
 router.put('/account/profile', authenticateRequest, AccountController.updateProfile);

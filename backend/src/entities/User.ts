@@ -19,6 +19,7 @@ import type { Paper } from './Paper';
 import type { ReviewerResponse } from './ReviewerResponse';
 import type { Topic } from './Topic';
 import type { Lab } from './Lab';
+import { LabMembershipStatus, type LabMembership } from './LabMembership';
 
 export enum UserRole {
   LabMember = 'LabMember',
@@ -113,8 +114,25 @@ export abstract class User {
   @OneToMany('EmailNotification', 'recipient')
   notifications: EmailNotification[];
 
-  @ManyToMany('Lab', 'members')
-  labs: Lab[];
+  @OneToMany('LabMembership', 'user')
+  memberships: LabMembership[];
+
+  get labs(): Lab[] {
+    return (this.memberships ?? [])
+      .filter(membership => membership.lab)
+      .map(membership => membership.lab);
+  }
+
+  set labs(labs: Lab[]) {
+    this.memberships = (labs ?? []).map(lab => ({
+      user: this,
+      userId: this.id,
+      lab,
+      labId: lab.id,
+      status: LabMembershipStatus.Active,
+      statusChangedAt: new Date(),
+    }) as unknown as LabMembership);
+  }
 
   @ManyToOne('Lab')
   @JoinColumn()

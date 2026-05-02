@@ -7,6 +7,7 @@ import type { AuditLog } from './AuditLog';
 import type { SystemPolicy } from './SystemPolicy';
 import type { Template } from './Template';
 import type { Topic } from './Topic';
+import { LabMembershipStatus, type LabMembership } from './LabMembership';
 
 @Entity()
 export class Lab {
@@ -30,9 +31,25 @@ export class Lab {
   @JoinTable()
   papers: Paper[];
 
-  @ManyToMany('User', 'labs')
-  @JoinTable()
-  members: User[];
+  @OneToMany('LabMembership', 'lab')
+  memberships: LabMembership[];
+
+  get members(): User[] {
+    return (this.memberships ?? [])
+      .filter(membership => membership.user)
+      .map(membership => membership.user);
+  }
+
+  set members(members: User[]) {
+    this.memberships = (members ?? []).map(user => ({
+      user,
+      userId: user.id,
+      lab: this,
+      labId: this.id,
+      status: LabMembershipStatus.Active,
+      statusChangedAt: new Date(),
+    }) as unknown as LabMembership);
+  }
 
   @ManyToMany('Topic', 'labs')
   @JoinTable()

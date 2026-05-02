@@ -5,6 +5,7 @@ import { Coordinator } from './entities/Coordinator';
 import { Admin } from './entities/GlobalAdmin';
 import { Lab } from './entities/Lab';
 import { LabMember } from './entities/LabMember';
+import { LabMembership, LabMembershipStatus } from './entities/LabMembership';
 import { Paper, PaperStatus } from './entities/Paper';
 import { Round, RoundStatus, VenueCategory } from './entities/Round';
 import { Assignment, AssignmentStatus } from './entities/Assignment';
@@ -47,6 +48,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   const userRepo = AppDataSource.getRepository<User>('User');
   const topicRepo = AppDataSource.getRepository(Topic);
   const labRepo = AppDataSource.getRepository(Lab);
+  const membershipRepo = AppDataSource.getRepository(LabMembership);
   const policyRepo = AppDataSource.getRepository(SystemPolicy);
   const templateRepo = AppDataSource.getRepository(Template);
   const paperRepo = AppDataSource.getRepository(Paper);
@@ -79,9 +81,9 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     name: 'Bilkent AI Research Lab',
     description: 'Focuses on machine learning, deep learning, and NLP research.',
     coordinator: coordA,
-    members: [coordA],
     topics: allTopics.slice(0, 5),
   });
+  await ensureLabMembership(membershipRepo, labA, coordA);
 
   // 5a. Member of Lab A
   const memberA = await ensureUser(userRepo, {
@@ -92,7 +94,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     password: '123',
   }) as LabMember;
 
-  await addMemberToLab(labRepo, labA.id, memberA);
+  await ensureLabMembership(membershipRepo, labA, memberA);
 
   // 3b. Coordinator of Lab B
   const coordB = await ensureUser(userRepo, {
@@ -108,9 +110,9 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     name: 'Bilkent Systems Lab',
     description: 'Focuses on distributed systems, databases, and software engineering.',
     coordinator: coordB,
-    members: [coordB],
     topics: allTopics.slice(5, 10),
   });
+  await ensureLabMembership(membershipRepo, labB, coordB);
 
   // 5b. Member of Lab B
   const memberB = await ensureUser(userRepo, {
@@ -121,7 +123,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     password: '123',
   }) as LabMember;
 
-  await addMemberToLab(labRepo, labB.id, memberB);
+  await ensureLabMembership(membershipRepo, labB, memberB);
 
   // 6. System Policies & Templates
   await ensureDefaultPolicies(policyRepo);
@@ -190,13 +192,23 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   await AppDataSource.destroy();
 }
 
-async function addMemberToLab(labRepo: ReturnType<typeof AppDataSource.getRepository<Lab>>, labId: string, member: User) {
-  const lab = await labRepo.findOne({ where: { id: labId }, relations: ['members'] });
-  if (lab && !lab.members.find(m => m.id === member.id)) {
-    lab.members.push(member);
-    await labRepo.save(lab);
-    console.log(`✅ ${member.name} added to lab`);
-  }
+async function ensureLabMembership(
+  membershipRepo: ReturnType<typeof AppDataSource.getRepository<LabMembership>>,
+  lab: Lab,
+  member: User,
+) {
+  const existing = await membershipRepo.findOne({ where: { labId: lab.id, userId: member.id } });
+  if (existing) return;
+
+  await membershipRepo.save(membershipRepo.create({
+    lab,
+    labId: lab.id,
+    user: member,
+    userId: member.id,
+    status: LabMembershipStatus.Active,
+    statusChangedAt: new Date(),
+  }));
+  console.log(`✅ ${member.name} added to lab`);
 }
 
 async function ensureDefaultTopics(topicRepo: ReturnType<typeof AppDataSource.getRepository<Topic>>) {
@@ -238,17 +250,15 @@ async function ensureLab(
     name: string;
     description: string;
     coordinator: Coordinator;
-    members: User[];
     topics: Topic[];
   },
 ): Promise<Lab> {
-  let lab = await labRepo.findOne({ where: { name: options.name }, relations: ['coordinator', 'topics', 'members'] });
+  let lab = await labRepo.findOne({ where: { name: options.name }, relations: ['coordinator', 'topics'] });
   if (!lab) {
     lab = labRepo.create({
       name: options.name,
       description: options.description,
       coordinator: options.coordinator,
-      members: options.members,
       topics: options.topics,
     });
     await labRepo.save(lab);

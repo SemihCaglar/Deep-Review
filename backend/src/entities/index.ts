@@ -4,6 +4,7 @@ export { LabMember } from './LabMember';
 export { Coordinator } from './Coordinator';
 export { Admin } from './GlobalAdmin';
 export { Lab } from './Lab';
+export { LabMembership, LabMembershipStatus } from './LabMembership';
 
 // Paper and academic content
 export { Paper } from './Paper';

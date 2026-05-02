@@ -7,6 +7,7 @@ import { Topic } from '../entities/Topic';
 import { ApprovalStatus, User, UserRole } from '../entities/User';
 import { Lab } from '../entities/Lab';
 import { Coordinator } from '../entities/Coordinator';
+import { LabMembership, LabMembershipStatus } from '../entities/LabMembership';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import {
   accountSecurityPolicy,
@@ -104,7 +105,7 @@ export class AccountController {
     const normalizedEmail = email.trim().toLowerCase();
     const user = await userRepo.findOne({ 
       where: { email: normalizedEmail },
-      relations: ['labs', 'lab'] as any
+      relations: ['memberships', 'memberships.lab', 'lab'] as any
     });
 
     if (!user) {
@@ -133,7 +134,11 @@ export class AccountController {
     }
 
     registerSuccessfulLogin(user);
-    const savedUser = await userRepo.save(user);
+    await userRepo.save(user);
+    const savedUser = await userRepo.findOne({
+      where: { id: user.id },
+      relations: ['memberships', 'memberships.lab', 'lab'] as any,
+    }) ?? user;
 
     return res.status(200).json({
       message: 'Login successful',
@@ -293,7 +298,7 @@ export class AccountController {
     const userRepo = AppDataSource.getRepository<User>('User');
     const user = await userRepo.findOne({
       where: { id: authenticatedUser.id },
-      relations: ['interests', 'labs', 'lab'] as any,
+      relations: ['interests', 'memberships', 'memberships.lab', 'lab'] as any,
     });
 
     if (!user) {
@@ -396,9 +401,13 @@ export class AccountController {
     const userRepo = AppDataSource.getRepository<User>('User');
     const approvedUsers = await userRepo
       .createQueryBuilder('user')
-      .innerJoin('user.labs', 'lab')
+      .innerJoin('user.memberships', 'membership')
+      .innerJoin('membership.lab', 'lab')
       .where('user.approvalStatus = :status', { status: ApprovalStatus.Approved })
       .andWhere('user.role != :adminRole', { adminRole: UserRole.Admin })
+      .andWhere('membership.status IN (:...membershipStatuses)', {
+        membershipStatuses: [LabMembershipStatus.Active, LabMembershipStatus.Alumni],
+      })
       .andWhere('lab.id IN (:...labIds)', { labIds: visibleLabIds })
       .orderBy('user.name', 'ASC')
       .getMany();
@@ -416,6 +425,187 @@ export class AccountController {
       users: approvedUsers.filter(u => !u.frozenAt).map(serializeUser),
       frozenUsers: approvedUsers.filter(u => !!u.frozenAt).map(serializeUser),
     });
+  }
+  static async getMyLabs(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const membershipRepo = AppDataSource.getRepository(LabMembership);
+    const memberships = await membershipRepo.find({
+      where: { userId: authenticatedUser.id },
+      relations: ['lab'],
+      order: { createdAt: 'ASC' },
+    });
+
+    return res.status(200).json({
+      memberships: memberships.map(AccountController.serializeLabMembership),
+    });
+  }
+  static async submitLabJoinRequest(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+    const labId = AccountController.parseRouteId(req.body?.labId);
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (authenticatedUser.role !== UserRole.LabMember) {
+      return res.status(403).json({ message: 'Only lab members can request to join labs' });
+    }
+
+    if (!labId) {
+      return res.status(400).json({ message: 'Valid labId is required' });
+    }
+
+    const labRepo = AppDataSource.getRepository(Lab);
+    const lab = await labRepo.findOne({ where: { id: labId } });
+
+    if (!lab) {
+      return res.status(404).json({ message: 'Lab not found' });
+    }
+
+    const membershipRepo = AppDataSource.getRepository(LabMembership);
+    const existingMembership = await membershipRepo.findOne({
+      where: { userId: authenticatedUser.id, labId },
+      relations: ['lab'],
+    });
+
+    if (existingMembership) {
+      return res.status(409).json({
+        message: `A ${existingMembership.status.toLowerCase()} membership already exists for this lab`,
+        membership: AccountController.serializeLabMembership(existingMembership),
+      });
+    }
+
+    try {
+      const membership = await membershipRepo.save(membershipRepo.create({
+        user: authenticatedUser,
+        userId: authenticatedUser.id,
+        lab,
+        labId: lab.id,
+        status: LabMembershipStatus.Pending,
+        statusChangedAt: null,
+      }));
+
+      return res.status(201).json({
+        message: 'Lab join request submitted',
+        membership: AccountController.serializeLabMembership({ ...membership, lab }),
+      });
+    } catch (error) {
+      if (AccountController.isUniqueConstraintError(error)) {
+        return res.status(409).json({ message: 'A membership already exists for this lab' });
+      }
+
+      throw error;
+    }
+  }
+  static async getPendingLabJoinRequests(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    const coordinatorLabId = await AccountController.getCoordinatorManagedLabId(authenticatedUser);
+
+    if (!coordinatorLabId) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
+    const membershipRepo = AppDataSource.getRepository(LabMembership);
+    const memberships = await membershipRepo.find({
+      where: {
+        labId: coordinatorLabId,
+        status: LabMembershipStatus.Pending,
+      },
+      relations: ['lab', 'user'],
+      order: { createdAt: 'ASC' },
+    });
+
+    return res.status(200).json({
+      requests: memberships.map(AccountController.serializeLabJoinRequest),
+    });
+  }
+  static async approveLabJoinRequest(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+    const id = AccountController.parseRouteId(req.params.id);
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!id) {
+      return res.status(400).json({ message: 'Valid lab join request id is required' });
+    }
+
+    const coordinatorLabId = await AccountController.getCoordinatorManagedLabId(authenticatedUser);
+
+    if (!coordinatorLabId) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
+    const membershipRepo = AppDataSource.getRepository(LabMembership);
+    const membership = await membershipRepo.findOne({
+      where: { id },
+      relations: ['lab', 'user'],
+    });
+
+    if (!membership || membership.labId !== coordinatorLabId) {
+      return res.status(404).json({ message: 'Lab join request not found' });
+    }
+
+    if (membership.status !== LabMembershipStatus.Pending) {
+      return res.status(409).json({ message: 'Only pending lab join requests can be approved' });
+    }
+
+    membership.status = LabMembershipStatus.Active;
+    membership.statusChangedAt = new Date();
+
+    const savedMembership = await membershipRepo.save(membership);
+
+    return res.status(200).json({
+      message: 'Lab join request approved',
+      membership: AccountController.serializeLabJoinRequest(savedMembership),
+    });
+  }
+  static async rejectLabJoinRequest(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+    const id = AccountController.parseRouteId(req.params.id);
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!id) {
+      return res.status(400).json({ message: 'Valid lab join request id is required' });
+    }
+
+    const coordinatorLabId = await AccountController.getCoordinatorManagedLabId(authenticatedUser);
+
+    if (!coordinatorLabId) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
+    const membershipRepo = AppDataSource.getRepository(LabMembership);
+    const membership = await membershipRepo.findOne({
+      where: { id },
+      relations: ['lab', 'user'],
+    });
+
+    if (!membership || membership.labId !== coordinatorLabId) {
+      return res.status(404).json({ message: 'Lab join request not found' });
+    }
+
+    if (membership.status !== LabMembershipStatus.Pending) {
+      return res.status(409).json({ message: 'Only pending lab join requests can be rejected' });
+    }
+
+    await membershipRepo.remove(membership);
+
+    return res.status(200).json({ message: 'Lab join request rejected' });
   }
   static async updateProfile(req: AuthenticatedRequest, res: Response) {
     const { name, email } = req.body ?? {};
@@ -469,7 +659,11 @@ export class AccountController {
     }
 
     try {
-      const savedUser = await userRepo.save(user);
+      const savedUserWithoutRelations = await userRepo.save(user);
+      const savedUser = await userRepo.findOne({
+        where: { id: savedUserWithoutRelations.id },
+        relations: ['memberships', 'memberships.lab'] as any,
+      }) ?? savedUserWithoutRelations;
 
       return res.status(200).json({
         message: 'Profile updated successfully',
@@ -548,7 +742,11 @@ export class AccountController {
     user.interests = topics;
     user.otherInterests = hasOtherTopic ? normalizedOtherInterests : [];
 
-    const savedUser = await userRepo.save(user);
+    const savedUserWithoutRelations = await userRepo.save(user);
+    const savedUser = await userRepo.findOne({
+      where: { id: savedUserWithoutRelations.id },
+      relations: ['interests', 'memberships', 'memberships.lab'] as any,
+    }) ?? savedUserWithoutRelations;
 
     return res.status(200).json({
       message: 'Interests updated successfully',
@@ -599,26 +797,30 @@ export class AccountController {
     await memberRepo.save(member);
 
     if (member.requestedLab) {
-      const labRepo = AppDataSource.getRepository(Lab);
-      const lab = await labRepo.findOne({
-        where: { id: member.requestedLab.id },
-        relations: ['members'],
+      const membershipRepo = AppDataSource.getRepository(LabMembership);
+      const existingMembership = await membershipRepo.findOne({
+        where: { userId: member.id, labId: member.requestedLab.id },
       });
 
-      if (!lab) {
-        return res.status(400).json({ message: 'Requested lab was not found' });
-      }
-
-      lab.members = lab.members ?? [];
-      if (!lab.members.some(existingMember => existingMember.id === member.id)) {
-        lab.members.push(member);
-        await labRepo.save(lab);
+      if (existingMembership) {
+        existingMembership.status = LabMembershipStatus.Active;
+        existingMembership.statusChangedAt = new Date();
+        await membershipRepo.save(existingMembership);
+      } else {
+        await membershipRepo.save(membershipRepo.create({
+          user: member,
+          userId: member.id,
+          lab: member.requestedLab,
+          labId: member.requestedLab.id,
+          status: LabMembershipStatus.Active,
+          statusChangedAt: new Date(),
+        }));
       }
     }
 
     const savedMember = await memberRepo.findOne({
       where: { id: member.id },
-      relations: ['labs', 'requestedLab'],
+      relations: ['memberships', 'memberships.lab', 'requestedLab'],
     }) ?? member;
 
     sendEmail(
@@ -701,7 +903,10 @@ export class AccountController {
     }
 
     const userRepo = AppDataSource.getRepository<User>('User');
-    const member = await userRepo.findOne({ where: { id }, relations: ['labs'] });
+    const member = await userRepo.findOne({
+      where: { id },
+      relations: ['memberships', 'memberships.lab'],
+    });
 
     if (!member) {
       return res.status(404).json({ message: 'User not found' });
@@ -763,7 +968,10 @@ export class AccountController {
     }
 
     const userRepo = AppDataSource.getRepository<User>('User');
-    const member = await userRepo.findOne({ where: { id }, relations: ['labs'] });
+    const member = await userRepo.findOne({
+      where: { id },
+      relations: ['memberships', 'memberships.lab'],
+    });
 
     if (!member) {
       return res.status(404).json({ message: 'User not found' });
@@ -805,15 +1013,30 @@ export class AccountController {
     return user.role === UserRole.Coordinator;
   }
 
+  private static async getCoordinatorManagedLabId(user: User): Promise<string | null> {
+    if (user.role !== UserRole.Coordinator) {
+      return null;
+    }
+
+    const coordinator = await AppDataSource.getRepository(Coordinator).findOne({
+      where: { id: user.id },
+      relations: ['lab'],
+    });
+
+    return coordinator?.lab?.id ?? null;
+  }
+
   private static async getVisibleLabIds(user: User): Promise<string[]> {
     if (user.role === UserRole.Coordinator) {
       const coordinator = await AppDataSource.getRepository(Coordinator).findOne({
         where: { id: user.id },
-        relations: ['lab', 'labs'],
+        relations: ['lab', 'memberships', 'memberships.lab'],
       });
       const ids = [
         coordinator?.lab?.id,
-        ...(coordinator?.labs ?? []).map(lab => lab.id),
+        ...(coordinator?.memberships ?? [])
+          .filter(membership => membership.status !== LabMembershipStatus.Pending)
+          .map(membership => membership.lab?.id),
       ].filter((id): id is string => Boolean(id));
 
       return [...new Set(ids)];
@@ -821,10 +1044,15 @@ export class AccountController {
 
     const fullUser = await AppDataSource.getRepository<User>('User').findOne({
       where: { id: user.id },
-      relations: ['labs'],
+      relations: ['memberships', 'memberships.lab'],
     });
 
-    return [...new Set((fullUser?.labs ?? []).map(lab => lab.id))];
+    return [...new Set(
+      (fullUser?.memberships ?? [])
+        .filter(membership => membership.status !== LabMembershipStatus.Pending)
+        .map(membership => membership.lab?.id)
+        .filter((id): id is string => Boolean(id)),
+    )];
   }
 
   private static async canReviewSignup(reviewer: User, member: User): Promise<boolean> {
@@ -836,7 +1064,10 @@ export class AccountController {
     }
 
     // Case 2: Check labs (for already approved members)
-    const memberLabIds = (member.labs || []).map(l => l.id);
+    const memberLabIds = (member.memberships ?? [])
+      .filter(membership => membership.status !== LabMembershipStatus.Pending)
+      .map(membership => membership.lab?.id)
+      .filter((id): id is string => Boolean(id));
     if (memberLabIds.some(id => visibleLabIds.includes(id))) {
       return true;
     }
@@ -845,7 +1076,9 @@ export class AccountController {
   }
 
   private static serializeAccount(member: User, options: { includeInterests?: boolean } = {}) {
-    const labs = [...(member.labs || [])];
+    const labs = (member.memberships ?? [])
+      .filter(membership => membership.status !== LabMembershipStatus.Pending && membership.lab)
+      .map(membership => membership.lab);
     
     // If it's a coordinator, we should also include their managed lab if not already there
     if (member.role === UserRole.Coordinator && (member as any).lab) {
@@ -881,6 +1114,36 @@ export class AccountController {
     }
 
     return account;
+  }
+
+  private static serializeLabMembership(membership: LabMembership) {
+    return {
+      id: membership.id,
+      status: membership.status,
+      createdAt: membership.createdAt,
+      statusChangedAt: membership.statusChangedAt,
+      lab: membership.lab
+        ? {
+            id: membership.lab.id,
+            name: membership.lab.name,
+            description: membership.lab.description,
+          }
+        : null,
+    };
+  }
+
+  private static serializeLabJoinRequest(membership: LabMembership) {
+    return {
+      ...AccountController.serializeLabMembership(membership),
+      user: membership.user
+        ? {
+            id: membership.user.id,
+            name: membership.user.name,
+            email: membership.user.email,
+            role: membership.user.role,
+          }
+        : null,
+    };
   }
 
   private static authenticationFailed(res: Response) {

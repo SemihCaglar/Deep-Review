@@ -3,6 +3,7 @@ import { AppDataSource } from '../data-source';
 import { Round, RoundStatus, VenueCategory } from '../entities/Round';
 import { Paper } from '../entities/Paper';
 import { User, UserRole } from '../entities/User';
+import { LabMembershipStatus } from '../entities/LabMembership';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { DeclineRequestStatus } from '../entities/DeclineRequest';
 import { ExtensionStatus } from '../entities/Extension';
@@ -379,7 +380,7 @@ export class RoundController {
 
       const userRepo = AppDataSource.getRepository<User>('User');
       const candidates = await userRepo.find({
-        relations: ['labs']
+        relations: ['memberships', 'memberships.lab']
       });
 
       let suggestions = [];
@@ -392,7 +393,7 @@ export class RoundController {
         if (user.frozenAt) continue;
 
         // Enforce Intra-Lab boundaries
-        const userLabIds = user.labs?.map(l => l.id) || [];
+        const userLabIds = RoundController.getActiveLabIds(user);
         const sharesLab = userLabIds.some(lid => paperLabIds.includes(lid));
         if (!sharesLab) continue;
 
@@ -479,7 +480,10 @@ export class RoundController {
       }
 
       const userRepo = AppDataSource.getRepository<User>('User');
-      const reviewer = await userRepo.findOne({ where: { id: reviewerId }, relations: ['labs'] });
+      const reviewer = await userRepo.findOne({
+        where: { id: reviewerId },
+        relations: ['memberships', 'memberships.lab'],
+      });
       if (!reviewer) return res.status(404).json({ message: 'Reviewer not found' });
       
       if (reviewer.frozenAt) {
@@ -491,7 +495,7 @@ export class RoundController {
       }
 
       const paperLabIds = round.paper.labs?.map(l => l.id) || [];
-      const reviewerLabIds = reviewer.labs?.map(l => l.id) || [];
+      const reviewerLabIds = RoundController.getActiveLabIds(reviewer);
       const sharesLab = reviewerLabIds.some(lid => paperLabIds.includes(lid));
       if (!sharesLab) {
         return res.status(400).json({ message: 'Reviewer must belong to a lab associated with this paper' });
@@ -508,6 +512,13 @@ export class RoundController {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
     }
+  }
+
+  private static getActiveLabIds(user: User): string[] {
+    return (user.memberships ?? [])
+      .filter(membership => membership.status !== LabMembershipStatus.Pending)
+      .map(membership => membership.lab?.id)
+      .filter((id): id is string => Boolean(id));
   }
 
   static async removeProposedReviewer(req: AuthenticatedRequest, res: Response) {
