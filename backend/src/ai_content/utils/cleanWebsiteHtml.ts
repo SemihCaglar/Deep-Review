@@ -1,12 +1,12 @@
 export function cleanWebsiteHtml(html: string): string {
   let text = html;
 
-  // Remove script and style tags
-  text = text.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-  text = text.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+  // Remove script and style tags (including their content)
+  text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
 
   // Remove HTML comments
-  text = text.replace(/<!--.*?-->/gs, '');
+  text = text.replace(/<!--[\s\S]*?-->/g, '');
 
   // Replace common HTML entities
   text = text.replace(/&nbsp;/g, ' ');

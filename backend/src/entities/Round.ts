@@ -41,7 +41,7 @@ export class Round {
   @Column({ nullable: true, type: 'text' })
   targetVenueUrl: string | null;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, type: 'text' })
   submissionRuleSetId: string | null;
 
   @Column({

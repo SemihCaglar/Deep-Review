@@ -6,7 +6,9 @@ import { User, UserRole } from '../entities/User';
 import { AssignmentStatus } from '../entities/Assignment';
 import { DeclineRequestStatus } from '../entities/DeclineRequest';
 import { ExtensionStatus } from '../entities/Extension';
+import { SubmissionRuleSet } from '../entities/SubmissionRuleSet';
 import { RoundService, RoundServiceError } from '../services/RoundService';
+import { ComplianceCheckAgentService } from '../ai_content/services/ComplianceCheckAgentService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class RoundController {
@@ -1163,5 +1165,73 @@ export class RoundController {
   }
   static async updateChecklistItem(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
+  }
+
+  static async runComplianceCheckWithRules(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const { id } = req.params;
+      const file = req.file;
+
+      if (!id) return res.status(400).json({ message: 'Missing round id' });
+      if (!file) return res.status(400).json({ message: 'PDF file is required' });
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.coordinators', 'paper.authors']
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      if (!isCoordinator && !isAuthor) {
+        return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
+      }
+
+      // Load submission rules from the linked rule set
+      if (!round.submissionRuleSetId) {
+        return res.status(400).json({ message: 'This round does not have submission rules linked. Please extract rules first.' });
+      }
+
+      const ruleSetRepo = AppDataSource.getRepository(SubmissionRuleSet);
+      const ruleSet = await ruleSetRepo.findOne({ where: { id: round.submissionRuleSetId } });
+
+      if (!ruleSet) {
+        return res.status(404).json({ message: 'Submission rules not found for this round' });
+      }
+
+      console.log(`[RoundController] Running compliance check for round ${id} with rules from ${ruleSet.sourceUrl}`);
+
+      // Run compliance check
+      const agentService = new ComplianceCheckAgentService();
+      const fileId = await agentService.uploadPdf(file.buffer, `compliance_round_${id}.pdf`);
+      const { complianceReport } = await agentService.runComplianceCheck(fileId, {
+        sourceUrl: ruleSet.sourceUrl,
+        rules: ruleSet.rules
+      });
+
+      // Update round with compliance results
+      round.complianceReport = complianceReport;
+      await roundRepo.save(round);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Compliance check completed successfully',
+        data: {
+          complianceReport,
+          sourceUrl: ruleSet.sourceUrl
+        }
+      });
+    } catch (err: any) {
+      console.error('[RoundController] Error in runComplianceCheckWithRules:', err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || 'Internal server error'
+      });
+    }
   }
 }

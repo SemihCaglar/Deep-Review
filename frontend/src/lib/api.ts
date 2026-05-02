@@ -830,7 +830,7 @@ export async function runComplianceCheckRequest(roundId: string, pdfFile: File, 
   formData.append('pdf', pdfFile);
   formData.append('venueRules', JSON.stringify(venueRules));
 
-  const response = await fetch(buildUrl(`/rounds/${roundId}/compliance`), {
+  const response = await fetch(buildUrl(`/rounds/${roundId}/ai-checklist`), {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,

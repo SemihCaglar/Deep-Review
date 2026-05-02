@@ -160,6 +160,7 @@ router.post('/rounds/:id/ai-review', authenticateRequest, handlePdfUpload, Round
 router.post('/rounds/:id/ai-checklist', authenticateRequest, handlePdfUpload, RoundController.startAIChecklist);
 router.get('/rounds/:id/venue-rules', authenticateRequest, RoundController.getVenueRules);
 router.post('/rounds/:id/compliance', authenticateRequest, handlePdfUpload, RoundController.runComplianceCheck);
+router.post('/rounds/:id/compliance-rules', authenticateRequest, handlePdfUpload, RoundController.runComplianceCheckWithRules);
 router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
 router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistItem);
 router.put('/rounds/:id/checklist/:itemId', RoundController.updateChecklistItem);
