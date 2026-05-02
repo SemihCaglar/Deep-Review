@@ -54,7 +54,7 @@ export default function EditProfilePage() {
     setError('');
 
     try {
-      const profileResponse = await updateProfileRequest(name, email, currentPosition || null);
+      const profileResponse = await updateProfileRequest(name, email, currentPosition);
       const nextStoredUser: StoredAuthUser = {
         ...storedUser,
         ...profileResponse.user,
