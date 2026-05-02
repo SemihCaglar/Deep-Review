@@ -6,8 +6,10 @@ import { User, UserRole } from '../entities/User';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { DeclineRequestStatus } from '../entities/DeclineRequest';
 import { ExtensionStatus } from '../entities/Extension';
+import { SubmissionRuleSet } from '../entities/SubmissionRuleSet';
 import { RoundService, RoundServiceError } from '../services/RoundService';
 import { sendEmail } from '../services/emailService';
+import { ComplianceCheckAgentService } from '../ai_content/services/ComplianceCheckAgentService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class RoundController {
@@ -125,6 +127,13 @@ export class RoundController {
       round.completedAt = null;
 
       await roundRepo.save(round);
+
+      // Extract submission rules asynchronously (non-blocking)
+      if (normalizedVenueUrl) {
+        RoundService.extractAndLinkRules(round.id, normalizedVenueUrl).catch(err => {
+          console.warn('[RoundController] Background rule extraction failed:', err);
+        });
+      }
 
       return res.status(201).json(round);
     } catch (err) {
@@ -264,8 +273,15 @@ export class RoundController {
         return res.status(400).json({ message: `Cannot update venue details while the round is Open. Only the submission deadline can be changed.` });
       }
 
+      let urlUpdated = false;
       if (targetVenue !== undefined) round.targetVenue = targetVenue.trim();
-      if (targetVenueUrl !== undefined) round.targetVenueUrl = RoundController.parseRequiredUrl(targetVenueUrl);
+      if (targetVenueUrl !== undefined) {
+        const newUrl = RoundController.parseRequiredUrl(targetVenueUrl);
+        if (newUrl !== round.targetVenueUrl) {
+          round.targetVenueUrl = newUrl;
+          urlUpdated = true;
+        }
+      }
       if (venueCategory !== undefined) round.venueCategory = venueCategory as VenueCategory;
       if (submissionDeadline !== undefined) {
         if (newSubDeadline && round.deadline && round.deadline.getTime() > newSubDeadline.getTime()) {
@@ -290,6 +306,13 @@ export class RoundController {
             `Hello ${recipient.name},\n\nThe conference submission deadline for the paper "${round.paper.title}" (${round.targetVenue}) has been updated.\n\nNew submission deadline: ${formattedDeadline}\n\nPlease log in to review the updated timeline.`,
           )
         ));
+      }
+
+      // Extract submission rules if URL was updated (async, non-blocking)
+      if (urlUpdated && round.targetVenueUrl) {
+        RoundService.extractAndLinkRules(round.id, round.targetVenueUrl).catch(err => {
+          console.warn('[RoundController] Background rule extraction failed:', err);
+        });
       }
 
       return res.status(200).json(round);
@@ -604,7 +627,7 @@ export class RoundController {
 
       const rounds = await roundRepo.find({
         where: { paper: { id: paperId } },
-        relations: ['proposedReviewers'],
+        relations: ['proposedReviewers', 'checklistItems', 'aiReviewReports', 'aiReviewReports.requestedBy'],
         order: { roundNumber: 'DESC' },
       });
 
@@ -621,11 +644,16 @@ export class RoundController {
         completedAt: r.completedAt,
         proposedReviewers: (r.proposedReviewers ?? []).map(u => ({ id: u.id, name: u.name, email: u.email })),
         aiReviewReport: r.aiReviewReport,
-        complianceReport: r.complianceReport,
+        complianceReport: r.complianceReportsByUser?.[user.id]?.report ?? (r.complianceReportsByUser ? null : r.complianceReport),
         annotatedPdfUrl: r.annotatedPdfUrl,
+        aiReviewReports: (r.aiReviewReports ?? [])
+          .filter(ar => !ar.requestedBy || ar.requestedBy.id === user.id)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt })),
         artifacts: {
           checklistItems: (r.checklistItems ?? []).map(ci => ({ id: ci.id, description: ci.description, isChecked: ci.isChecked })),
           aiReviewReports: (r.aiReviewReports ?? [])
+            .filter(ar => !ar.requestedBy || ar.requestedBy.id === user.id)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
         }
@@ -666,6 +694,7 @@ export class RoundController {
         where: { paper: { id: paperId } },
         relations: [
           'aiReviewReports',
+          'aiReviewReports.requestedBy',
           'assignments',
           'assignments.reviewer',
           'assignments.declineRequests',
@@ -688,11 +717,12 @@ export class RoundController {
         completedAt: round.completedAt,
         aiReviewReport: round.aiReviewReport ?? null,
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
-        complianceReport: round.complianceReport ?? null,
+        complianceReport: round.complianceReportsByUser?.[coordinator.id]?.report ?? (round.complianceReportsByUser ? null : round.complianceReport ?? null),
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
         aiReviewReports: (round.aiReviewReports ?? [])
+          .filter(ar => !ar.requestedBy || ar.requestedBy.id === coordinator.id)
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .map(ar => ({
             id: ar.id,
@@ -957,6 +987,7 @@ export class RoundController {
       aiReviewReport.annotatedPdfUrl = annotatedPdfUrl;
       aiReviewReport.venue = venueName;
       aiReviewReport.round = round;
+      aiReviewReport.requestedBy = user as any;
 
       const aiReviewReportRepo = AppDataSource.getRepository(AIReviewReport);
       await aiReviewReportRepo.save(aiReviewReport);
@@ -1027,24 +1058,31 @@ export class RoundController {
 
       console.log(`[RoundController] Running checklist analysis...`);
       const raw = await agentService.runChecklistAnalysis(fileId);
-      console.log(`[RoundController] Raw checklist result: ${raw.selectedStandards.length} standards found (before filtering)`);
+      console.log(`[RoundController] Raw checklist result: ${raw.selectedStandards.length} standards found (before filtering)`, raw);
       const filtered = ChecklistService.filterValidStandards(raw.selectedStandards);
-      console.log(`[RoundController] Filtered checklist result: ${filtered.length} standards after validation`);
+      console.log(`[RoundController] Filtered checklist result: ${filtered.length} standards after validation`, filtered);
       const checklistJson = { selectedStandards: filtered };
       const checklistUrl = ChecklistService.buildEmpiricalStandardsUrl(filtered.map((s: any) => s.label));
 
       // Persist results
       round.checklistJson = checklistJson;
       round.checklistUrl = checklistUrl;
-      await roundRepo.save(round);
+      const saved = await roundRepo.save(round);
+      console.log(`[RoundController] Checklist saved to database:`, {
+        roundId: saved.id,
+        checklistJson: saved.checklistJson,
+        checklistUrl: saved.checklistUrl,
+      });
 
-      return res.status(200).json({
+      const response = {
         message: 'Checklist analysis completed',
         data: {
           checklistJson,
           checklistUrl,
         }
-      });
+      };
+      console.log(`[RoundController] Returning response:`, response);
+      return res.status(200).json(response);
 
     } catch (err: any) {
       console.error('[RoundController] Error in startAIChecklist:', err);
@@ -1172,8 +1210,14 @@ export class RoundController {
         venueRules
       );
 
-      // Persist results
-      round.complianceReport = complianceReport;
+      // Persist results per requesting user so authors/coordinators do not overwrite each other's reports.
+      round.complianceReportsByUser = {
+        ...(round.complianceReportsByUser ?? {}),
+        [user.id]: {
+          report: complianceReport,
+          createdAt: new Date().toISOString(),
+        },
+      };
       await roundRepo.save(round);
 
       return res.status(200).json({
@@ -1194,5 +1238,205 @@ export class RoundController {
   }
   static async updateChecklistItem(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
+  }
+
+  static async runAIReviewWithCompliance(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const { id } = req.params;
+      const file = req.file;
+
+      if (!id) return res.status(400).json({ message: 'Missing round id' });
+      if (!file) return res.status(400).json({ message: 'PDF file is required' });
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.coordinators', 'paper.authors']
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      if (!isCoordinator && !isAuthor) {
+        return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
+      }
+
+      console.log(`[RoundController] Starting combined AI Review + Compliance check for round ${id}`);
+
+      // STEP 1: Compliance Check (if rules are linked)
+      let complianceReport = null;
+      let complianceSourceUrl = null;
+
+      console.log(`[RoundController] ========== STEP 1: COMPLIANCE CHECK ==========`);
+      console.log(`[RoundController] Round: ${id}`);
+      console.log(`[RoundController] Submission Rule Set ID: ${round.submissionRuleSetId || 'None'}`);
+      console.log(`[RoundController] PDF size: ${file.buffer.length} bytes`);
+
+      if (round.submissionRuleSetId) {
+        try {
+          console.log(`[RoundController] Fetching submission rules...`);
+          const ruleSetRepo = AppDataSource.getRepository(SubmissionRuleSet);
+          const ruleSet = await ruleSetRepo.findOne({ where: { id: round.submissionRuleSetId } });
+
+          if (ruleSet) {
+            console.log(`[RoundController] ✓ Rules found for: ${ruleSet.sourceUrl}`);
+            console.log(`[RoundController] Uploading PDF for compliance check...`);
+            const complianceService = new ComplianceCheckAgentService();
+            const fileId = await complianceService.uploadPdf(file.buffer, `round_${id}_compliance.pdf`);
+            console.log(`[RoundController] ✓ PDF uploaded, file ID: ${fileId}`);
+
+            console.log(`[RoundController] Running compliance check agent...`);
+            const { complianceReport: report } = await complianceService.runComplianceCheck(fileId, {
+              sourceUrl: ruleSet.sourceUrl,
+              rules: ruleSet.rules
+            });
+            complianceReport = report;
+            complianceSourceUrl = ruleSet.sourceUrl;
+
+            // Log results summary
+            const passCount = Object.values(report).filter(r => r.status === 'pass').length;
+            const failCount = Object.values(report).filter(r => r.status === 'fail').length;
+            const skipCount = Object.values(report).filter(r => r.status === 'skipped').length;
+            console.log(`[RoundController] ✓ Compliance check completed: ${passCount} pass, ${failCount} fail, ${skipCount} skipped`);
+          } else {
+            console.warn(`[RoundController] Rule set ID ${round.submissionRuleSetId} not found in database`);
+          }
+        } catch (error) {
+          console.error(`[RoundController] ❌ Compliance check failed (continuing with AI review):`, error);
+          console.warn(`[RoundController] Compliance report will be null, proceeding with AI review only`);
+        }
+      } else {
+        console.log(`[RoundController] ⚪ No submission rules linked, skipping compliance check`);
+      }
+      console.log(`[RoundController] ================================================\n`);
+
+      // STEP 2: AI Review
+      console.log(`[RoundController] ========== STEP 2: AI REVIEW ==========`);
+      console.log(`[RoundController] Running AI review agent...`);
+      const { AIReviewService } = require('../ai_content/services/AIReviewService');
+      const aiReviewResult = await AIReviewService.generateAIReview(
+        round.paper.id,
+        id,
+        file.buffer
+      );
+      console.log(`[RoundController] ✓ AI review completed`);
+      console.log(`[RoundController] Review length: ${aiReviewResult.summaryReport?.length || 0} chars`);
+      console.log(`[RoundController] Annotated PDF: ${aiReviewResult.annotatedPdfUrl ? '✓ generated' : '✗ not generated'}`);
+      console.log(`[RoundController] Checklist: ${aiReviewResult.checklistJson?.selectedStandards?.length || 0} standards selected`);
+      console.log(`[RoundController] =========================================\n`);
+
+      // STEP 3: Save results to round
+      console.log(`[RoundController] Saving results to database...`);
+      round.complianceReport = complianceReport;
+      round.aiReviewReport = aiReviewResult.summaryReport;
+      if (aiReviewResult.annotatedPdfUrl) {
+        round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+      }
+      round.checklistJson = aiReviewResult.checklistJson;
+      round.checklistUrl = aiReviewResult.checklistUrl;
+
+      await roundRepo.save(round);
+      console.log(`[RoundController] ✓ Results saved to round`);
+
+      // STEP 4: Return combined results
+      return res.status(200).json({
+        success: true,
+        message: 'AI Review and Compliance check completed successfully',
+        data: {
+          compliance: complianceReport ? {
+            report: complianceReport,
+            sourceUrl: complianceSourceUrl
+          } : {
+            report: null,
+            message: 'No submission rules linked to this round'
+          },
+          aiReview: {
+            summaryReport: aiReviewResult.summaryReport,
+            annotatedPdfUrl: aiReviewResult.annotatedPdfUrl,
+            suggestedCitations: aiReviewResult.suggestedCitations,
+            checklist: aiReviewResult.checklistJson,
+            checklistUrl: aiReviewResult.checklistUrl
+          }
+        }
+      });
+    } catch (err: any) {
+      console.error('[RoundController] Error in runAIReviewWithCompliance:', err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || 'Internal server error'
+      });
+    }
+  }
+
+  static async runComplianceCheckWithRules(req: AuthenticatedRequest, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const { id } = req.params;
+      const file = req.file;
+
+      if (!id) return res.status(400).json({ message: 'Missing round id' });
+      if (!file) return res.status(400).json({ message: 'PDF file is required' });
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.coordinators', 'paper.authors']
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      if (!isCoordinator && !isAuthor) {
+        return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
+      }
+
+      // Load submission rules from the linked rule set
+      if (!round.submissionRuleSetId) {
+        return res.status(400).json({ message: 'This round does not have submission rules linked. Please extract rules first.' });
+      }
+
+      const ruleSetRepo = AppDataSource.getRepository(SubmissionRuleSet);
+      const ruleSet = await ruleSetRepo.findOne({ where: { id: round.submissionRuleSetId } });
+
+      if (!ruleSet) {
+        return res.status(404).json({ message: 'Submission rules not found for this round' });
+      }
+
+      console.log(`[RoundController] Running compliance check for round ${id} with rules from ${ruleSet.sourceUrl}`);
+
+      // Run compliance check
+      const agentService = new ComplianceCheckAgentService();
+      const fileId = await agentService.uploadPdf(file.buffer, `compliance_round_${id}.pdf`);
+      const { complianceReport } = await agentService.runComplianceCheck(fileId, {
+        sourceUrl: ruleSet.sourceUrl,
+        rules: ruleSet.rules
+      });
+
+      // Update round with compliance results
+      round.complianceReport = complianceReport;
+      await roundRepo.save(round);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Compliance check completed successfully',
+        data: {
+          complianceReport,
+          sourceUrl: ruleSet.sourceUrl
+        }
+      });
+    } catch (err: any) {
+      console.error('[RoundController] Error in runComplianceCheckWithRules:', err);
+      return res.status(500).json({
+        success: false,
+        message: err.message || 'Internal server error'
+      });
+    }
   }
 }

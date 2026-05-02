@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'typeorm';
 import { Round } from './Round';
+import type { User } from './User';
 
 @Entity()
 export class AIReviewReport {
@@ -20,6 +21,9 @@ export class AIReviewReport {
 
   @ManyToOne(() => Round, round => round.aiReviewReports)
   round: Round;
+
+  @ManyToOne('User', { nullable: true })
+  requestedBy: User | null;
 
   @OneToMany(() => CitationSuggestion, suggestion => suggestion.report)
   citationSuggestions: CitationSuggestion[];

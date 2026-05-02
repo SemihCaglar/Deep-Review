@@ -107,14 +107,12 @@ export default function PapersList() {
     const hasActiveFilters = searchQuery.trim() || authorFilter.trim() || statusFilter;
     const clearFilters = () => { setSearchQuery(''); setAuthorFilter(''); setStatusFilter(''); };
 
-    const STATUSES = ['Draft', 'In Review', 'HumanReview', 'AIReview', 'Completed', 'Accepted', 'Archived'];
+    const STATUSES = ['Draft', 'In Review', 'Completed', 'Accepted', 'Archived'];
 
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'Draft': return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
             case 'In Review': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-            case 'HumanReview': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-            case 'AIReview': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
             case 'Completed': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Accepted': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Archived': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';

@@ -13,7 +13,7 @@
  */
 
 import 'reflect-metadata';
-import { AppDataSource } from './data-source';
+import { AppDataSource, normalizeLegacyPaperStatuses } from './data-source';
 import { Coordinator } from './entities/Coordinator';
 import { Lab } from './entities/Lab';
 import { LabMember } from './entities/LabMember';
@@ -32,6 +32,7 @@ const REVIEWER_DATA = [
 ];
 
 async function run() {
+  await normalizeLegacyPaperStatuses();
   await AppDataSource.initialize();
 
   const userRepo  = AppDataSource.getRepository(User);
@@ -81,7 +82,7 @@ async function run() {
       title: 'Analytics Test Paper',
       abstractText: 'Paper used for testing the analytics leaderboard in issue #42.',
       creationTime: new Date(),
-      status: PaperStatus.HumanReview,
+      status: PaperStatus.Completed,
       coordinators: [coordRef],
       labs: [labRef],
       authors: [coordRef],
@@ -92,7 +93,7 @@ async function run() {
     console.log('ℹ️   Analytics paper already exists — skipping creation');
   }
 
-  // Closed round with a past deadline (realistic for completed assignments)
+  // Completed round with a past deadline (realistic for completed assignments)
   let round = await roundRepo.findOne({ where: { paper: { id: paper.id }, roundNumber: 1 } });
   if (!round) {
     const deadline = new Date();
@@ -107,7 +108,7 @@ async function run() {
       venueCategory: VenueCategory.Conference,
     });
     await roundRepo.save(round);
-    console.log('✅  Analytics round created (Closed, deadline 7 days ago)');
+    console.log('✅  Analytics round created (Completed, deadline 7 days ago)');
   } else {
     console.log('ℹ️   Analytics round already exists — skipping creation');
   }

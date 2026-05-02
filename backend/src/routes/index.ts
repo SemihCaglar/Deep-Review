@@ -11,6 +11,7 @@ import { ReviewerResponseController } from '../controllers/ReviewerResponseContr
 import { RoundController } from '../controllers/RoundController';
 import { SearchController } from '../controllers/SearchController';
 import { TopicController } from '../controllers/TopicController';
+import { SubmissionRuleController } from '../controllers/SubmissionRuleController';
 import { authenticateRequest, requireAdmin, requireCoordinator, requireActiveAccount } from '../middleware/auth';
 
 import multer, { FileFilterCallback } from 'multer';
@@ -168,6 +169,8 @@ router.post('/rounds/:id/ai-review', authenticateRequest, handlePdfUpload, Round
 router.post('/rounds/:id/ai-checklist', authenticateRequest, handlePdfUpload, RoundController.startAIChecklist);
 router.get('/rounds/:id/venue-rules', authenticateRequest, RoundController.getVenueRules);
 router.post('/rounds/:id/compliance', authenticateRequest, handlePdfUpload, RoundController.runComplianceCheck);
+// Compliance check is now part of ai-review-with-compliance endpoint
+router.post('/rounds/:id/ai-review-with-compliance', authenticateRequest, handlePdfUpload, RoundController.runAIReviewWithCompliance);
 router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
 router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistItem);
 router.put('/rounds/:id/checklist/:itemId', RoundController.updateChecklistItem);
@@ -181,7 +184,7 @@ router.get('/search/papers/venue', SearchController.searchPapersByVenue);
 router.get('/search/papers/author/:id', SearchController.searchPapersByAuthor);
 router.get('/search/papers/topic/:id', SearchController.searchPapersByTopic);
 router.get('/search/papers/date', SearchController.searchPapersByDateRange);
-router.get('/search/papers/closed', SearchController.searchPapersByClosed);
+router.get('/search/papers/completed', SearchController.searchPapersByCompleted);
 router.get('/search/papers/archived', SearchController.searchPapersByArchived);
 router.get('/search/reviews/paper/:id', SearchController.searchReviewsByPaper);
 router.get('/search/reviews/author/:id', SearchController.searchReviewsByAuthor);
@@ -191,5 +194,11 @@ router.get('/search/reviews/deadline', SearchController.searchReviewsByDeadline)
 router.get('/search/members/name', SearchController.searchLabMembersByName);
 router.get('/search/members/topic/:id', SearchController.searchLabMembersByTopic);
 router.get('/search/members/workload', SearchController.searchLabMembersByWorkload);
+
+// ==== SUBMISSION RULES ROUTES ====
+router.post('/submission-rules/extract', authenticateRequest, SubmissionRuleController.extractRules);
+router.get('/submission-rules', authenticateRequest, SubmissionRuleController.getRules);
+router.get('/submission-rules/all', authenticateRequest, SubmissionRuleController.getAllRules);
+router.delete('/submission-rules', authenticateRequest, SubmissionRuleController.deleteRules);
 
 export default router;

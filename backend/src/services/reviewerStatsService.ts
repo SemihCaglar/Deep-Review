@@ -54,7 +54,7 @@ export async function computeUserLabStats(user: User, labId: string): Promise<Us
   const totalAssigned = assignments.length;
   const totalCompleted = assignments.filter(a => a.status === AssignmentStatus.Completed).length;
   const totalDeclined = assignments.filter(a => a.status === AssignmentStatus.Declined).length;
-  // Incomplete = Overdue, or Accepted while the round is already Closed
+  // Incomplete = Overdue, or Accepted while the round is already Completed
   const totalIncomplete = assignments.filter(
     a =>
       a.status === AssignmentStatus.Overdue ||

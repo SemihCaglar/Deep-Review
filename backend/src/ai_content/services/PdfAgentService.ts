@@ -16,9 +16,13 @@ export interface ChecklistAnalysisResult {
 }
 
 const CHECKLIST_PROMPT = `STEP 1: READ THE ATTACHED PDF USING PYTHON CODE
-Use Python with PyPDF2 or similar to:
-- Load the attached PDF file
-- Extract the full text content
+Use Python to:
+- Load the attached PDF file using PyPDF2 or pdfplumber
+- Extract ALL text from the first 1-2 pages
+- Find the COMPLETE paper title:
+  → The title is at the very beginning and may span multiple lines
+  → Concatenate all title lines together and remove extra whitespace
+  → The title ends when author names/affiliations appear
 - Understand the research methodology and type
 
 STEP 2: ANALYZE AND RETURN JSON ONLY
@@ -109,10 +113,16 @@ export class PdfAgentService {
     const reviewPrompt = `You are a critical academic peer reviewer.
 
 STEP 1: READ THE ATTACHED PDF USING PYTHON CODE
-Use Python with PyPDF2 or similar to:
-- Load the attached PDF file
-- Extract the full text content
-- Find the paper title (usually at the beginning)
+Use Python to:
+- Load the attached PDF file using PyPDF2 or pdfplumber
+- Extract ALL text from the first 1-2 pages
+- Find the paper title:
+  → The title is at the very beginning of the document
+  → It may span 1, 2, or 3 lines before the author names appear
+  → IMPORTANT: Concatenate all title lines together and clean up extra whitespace
+  → Example: if you see "SERSEM: Selective Entropy-Weighted Scoring for Membership" on line 1
+             and "Inference in Code Language Models" on line 2,
+             the full title is "SERSEM: Selective Entropy-Weighted Scoring for Membership Inference in Code Language Models"
 - Identify all major sections and their content
 
 STEP 2: WRITE THE REVIEW in EXACTLY this format (with NO preamble or postamble):

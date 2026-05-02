@@ -11,6 +11,7 @@ import { ApprovalStatus } from '../backend/src/entities/User';
 import { hashPassword } from '../backend/src/services/accountSecurity';
 
 let coordinatorToken: string;
+let approvedMemberToken: string;
 let labId: string;
 let otherLabId: string;
 let roundId: string;
@@ -152,9 +153,37 @@ test('approving a signup links the new member to the requested lab', async () =>
     .send({ email: 'approved-reviewer@test.com', password: 'pass' });
 
   expect(login.status).toBe(200);
+  approvedMemberToken = login.body.token;
   expect(login.body.user.labs).toEqual(
     expect.arrayContaining([expect.objectContaining({ id: labId, name: 'Approval Lab' })]),
   );
+});
+
+test('profile update tolerates legacy null currentPosition without clearing existing value', async () => {
+  const initialUpdate = await request(app)
+    .put('/api/account/profile')
+    .set('Authorization', `Bearer ${approvedMemberToken}`)
+    .send({
+      name: 'Approved Reviewer',
+      email: 'approved-reviewer@test.com',
+      currentPosition: 'Postdoctoral Researcher',
+    });
+
+  expect(initialUpdate.status).toBe(200);
+  expect(initialUpdate.body.user.currentPosition).toBe('Postdoctoral Researcher');
+
+  const legacyUpdate = await request(app)
+    .put('/api/account/profile')
+    .set('Authorization', `Bearer ${approvedMemberToken}`)
+    .send({
+      name: 'Approved Reviewer Updated',
+      email: 'approved-reviewer@test.com',
+      currentPosition: null,
+    });
+
+  expect(legacyUpdate.status).toBe(200);
+  expect(legacyUpdate.body.user.name).toBe('Approved Reviewer Updated');
+  expect(legacyUpdate.body.user.currentPosition).toBe('Postdoctoral Researcher');
 });
 
 test('approved lab member appears in reviewer suggestions for that lab', async () => {

@@ -12,6 +12,7 @@ export { Round } from './Round';
 export { Summary } from './Summary';
 export { ChecklistItem } from './ChecklistItem';
 export { AIReviewReport } from './AIReviewReport';
+export { SubmissionRuleSet } from './SubmissionRuleSet';
 
 // Review workflow
 export { Assignment, AssignmentStatus } from './Assignment';
