@@ -541,6 +541,14 @@ export class RoundController {
       }
 
       const roundRepo = AppDataSource.getRepository(Round);
+      const openRounds = await roundRepo.find({
+        where: { paper: { id: paperId }, status: RoundStatus.Open },
+        select: ['id'],
+      });
+      for (const round of openRounds) {
+        await RoundService.completeRoundIfAllAssignmentsTerminal(round.id);
+      }
+
       const rounds = await roundRepo.find({
         where: { paper: { id: paperId } },
         relations: ['proposedReviewers'],
@@ -593,6 +601,14 @@ export class RoundController {
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
       const roundRepo = AppDataSource.getRepository(Round);
+      const openRounds = await roundRepo.find({
+        where: { paper: { id: paperId }, status: RoundStatus.Open },
+        select: ['id'],
+      });
+      for (const round of openRounds) {
+        await RoundService.completeRoundIfAllAssignmentsTerminal(round.id);
+      }
+
       const rounds = await roundRepo.find({
         where: { paper: { id: paperId } },
         relations: [
@@ -723,16 +739,17 @@ export class RoundController {
 
       const total = assignments.length;
       const completed = statusCounts[AssignmentStatus.Completed] ?? 0;
+      const completedByReconciliation = await RoundService.completeRoundIfAllAssignmentsTerminal(round.id);
 
       return res.status(200).json({
         id: round.id,
         roundNumber: round.roundNumber,
-        status: round.status,
+        status: completedByReconciliation ? RoundStatus.Completed : round.status,
         deadline: round.deadline,
         targetVenue: round.targetVenue,
         venueCategory: round.venueCategory,
         startedAt: round.startedAt,
-        completedAt: round.completedAt,
+        completedAt: completedByReconciliation ? new Date() : round.completedAt,
         summary: {
           total,
           completed,
