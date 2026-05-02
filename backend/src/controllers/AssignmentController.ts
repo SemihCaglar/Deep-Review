@@ -9,6 +9,7 @@ import { Paper, PaperStatus } from '../entities/Paper';
 import { UserRole } from '../entities/User';
 import { sendEmail } from '../services/emailService';
 import { CoordinatorService, CoordinatorServiceError } from '../services/CoordinatorService';
+import { RoundService } from '../services/RoundService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class AssignmentController {
@@ -454,6 +455,7 @@ export class AssignmentController {
       if (extensionsToSave.length > 0) {
         await AppDataSource.getRepository(Extension).save(extensionsToSave);
       }
+      await RoundService.completeRoundIfAllAssignmentsTerminal(assignment.round.id);
 
       sendEmail(
         assignment.reviewer,

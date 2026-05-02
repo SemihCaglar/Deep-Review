@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { In } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { AuthenticatedRequest } from '../types/auth';
 import { LabCollaborationInvitation, CollaborationInvitationStatus } from '../entities/LabCollaborationInvitation';
@@ -21,6 +22,9 @@ export class LabCollaborationController {
     const { labIds } = req.body;
     if (!Array.isArray(labIds) || labIds.length === 0) {
       return res.status(400).json({ message: 'labIds must be a non-empty array' });
+    }
+    if (!labIds.every((id: unknown) => typeof id === 'string')) {
+      return res.status(400).json({ message: 'Each labId must be a string' });
     }
 
     try {
@@ -47,8 +51,26 @@ export class LabCollaborationController {
       const labRepo = AppDataSource.getRepository(Lab);
       const invitationRepo = AppDataSource.getRepository(LabCollaborationInvitation);
 
+      // Pre-fetch all target labs and existing pending invitations in two queries
+      const targetLabs = await labRepo.find({
+        where: { id: In(labIds) },
+        relations: ['coordinator'],
+      });
+      const labMap = new Map(targetLabs.map(l => [l.id, l]));
+
+      const existingPending = await invitationRepo.find({
+        where: {
+          paper: { id: paperId },
+          invitedLab: { id: In(labIds) },
+          status: CollaborationInvitationStatus.Pending,
+        },
+        relations: ['invitedLab'],
+      });
+      const pendingLabIds = new Set(existingPending.map(inv => inv.invitedLab.id));
+
       const results: object[] = [];
       const errors: object[] = [];
+      const invitationsToSave: LabCollaborationInvitation[] = [];
 
       for (const labId of labIds) {
         if (labId === invitingLab.id) {
@@ -56,62 +78,54 @@ export class LabCollaborationController {
           continue;
         }
 
-        const invitedLab = await labRepo.findOne({
-          where: { id: labId },
-          relations: ['coordinator'],
-        });
+        const invitedLab = labMap.get(labId);
         if (!invitedLab) {
           errors.push({ labId, reason: 'Lab not found' });
           continue;
         }
 
-        const alreadyLinked = paper.labs?.some(l => l.id === labId);
-        if (alreadyLinked) {
+        if (paper.labs?.some(l => l.id === labId)) {
           errors.push({ labId, reason: 'Lab is already collaborating on this paper' });
           continue;
         }
 
-        const existing = await invitationRepo.findOne({
-          where: {
-            paper: { id: paperId },
-            invitedLab: { id: labId },
-            status: CollaborationInvitationStatus.Pending,
-          },
-        });
-        if (existing) {
+        if (pendingLabIds.has(labId)) {
           errors.push({ labId, reason: 'A pending invitation already exists for this lab' });
           continue;
         }
 
-        const invitation = invitationRepo.create({
+        invitationsToSave.push(invitationRepo.create({
           paper,
           invitingLab,
           invitedLab,
           status: CollaborationInvitationStatus.Pending,
           respondedAt: null,
-        });
-        const saved = await invitationRepo.save(invitation);
+        }));
+      }
 
-        if (invitedLab.coordinator) {
+      const saved = await invitationRepo.save(invitationsToSave);
+
+      for (const inv of saved) {
+        if (inv.invitedLab.coordinator) {
           sendEmail(
-            invitedLab.coordinator,
+            inv.invitedLab.coordinator,
             `Collaboration invitation: ${paper.title}`,
             `You have been invited by the coordinator of "${invitingLab.name}" to collaborate on the paper "${paper.title}".\n\nPlease log in to the system to accept or reject this invitation.`,
           ).catch(err => console.error('[LabCollaboration] Failed to send invitation email:', err));
         }
-
         results.push({
-          id: saved.id,
-          invitedLabId: invitedLab.id,
-          invitedLabName: invitedLab.name,
-          status: saved.status,
-          createdAt: saved.createdAt,
+          id: inv.id,
+          invitedLabId: inv.invitedLab.id,
+          invitedLabName: inv.invitedLab.name,
+          status: inv.status,
+          createdAt: inv.createdAt,
         });
       }
 
       return res.status(201).json({ invited: results, errors });
     } catch (e: any) {
-      return res.status(500).json({ error: e.message });
+      console.error('[LabCollaboration] sendInvitations error:', e);
+      return res.status(500).json({ message: 'Failed to send collaboration invitations' });
     }
   }
 
@@ -150,7 +164,8 @@ export class LabCollaborationController {
         invitedLab: { id: inv.invitedLab.id, name: inv.invitedLab.name },
       })));
     } catch (e: any) {
-      return res.status(500).json({ error: e.message });
+      console.error('[LabCollaboration] getInvitationsForPaper error:', e);
+      return res.status(500).json({ message: 'Failed to retrieve collaboration invitations' });
     }
   }
 
@@ -181,12 +196,14 @@ export class LabCollaborationController {
         id: inv.id,
         status: inv.status,
         createdAt: inv.createdAt,
+        respondedAt: inv.respondedAt,
         paper: { id: inv.paper.id, title: inv.paper.title, status: inv.paper.status },
         invitingLab: { id: inv.invitingLab.id, name: inv.invitingLab.name },
         invitedLab: { id: inv.invitedLab.id, name: inv.invitedLab.name },
       })));
     } catch (e: any) {
-      return res.status(500).json({ error: e.message });
+      console.error('[LabCollaboration] getPendingInvitations error:', e);
+      return res.status(500).json({ message: 'Failed to retrieve pending invitations' });
     }
   }
 
@@ -199,54 +216,74 @@ export class LabCollaborationController {
 
     const invitationId = String(req.params.id);
     try {
-      const invitationRepo = AppDataSource.getRepository(LabCollaborationInvitation);
-      const invitation = await invitationRepo.findOne({
-        where: { id: invitationId },
-        relations: ['paper', 'invitingLab', 'invitingLab.coordinator', 'invitedLab', 'invitedLab.coordinator'],
-      });
+      let emailTarget: { coordinator: Coordinator; paperTitle: string; invitedLabName: string } | null = null;
+      let resultId: string;
+      let resultStatus: CollaborationInvitationStatus;
 
-      if (!invitation) return res.status(404).json({ message: 'Invitation not found' });
-      if (invitation.invitedLab?.coordinator?.id !== user.id) {
-        return res.status(403).json({ message: 'You are not the coordinator of the invited lab' });
-      }
-      if (invitation.status !== CollaborationInvitationStatus.Pending) {
-        return res.status(400).json({ message: `Invitation is already ${invitation.status}` });
-      }
+      await AppDataSource.transaction(async (manager) => {
+        const invitationRepo = manager.getRepository(LabCollaborationInvitation);
+        const invitation = await invitationRepo.findOne({
+          where: { id: invitationId },
+          relations: ['paper', 'invitingLab', 'invitingLab.coordinator', 'invitedLab', 'invitedLab.coordinator'],
+        });
 
-      invitation.status = CollaborationInvitationStatus.Accepted;
-      invitation.respondedAt = new Date();
-      await invitationRepo.save(invitation);
-
-      // Link lab + coordinator to paper
-      const paperRepo = AppDataSource.getRepository(Paper);
-      const paper = await paperRepo.findOne({
-        where: { id: invitation.paper.id },
-        relations: ['labs', 'coordinators'],
-      });
-      if (paper) {
-        if (!paper.labs?.some(l => l.id === invitation.invitedLab.id)) {
-          paper.labs = [...(paper.labs ?? []), invitation.invitedLab];
+        if (!invitation) throw Object.assign(new Error('Invitation not found'), { statusCode: 404 });
+        if (invitation.invitedLab?.coordinator?.id !== user.id) {
+          throw Object.assign(new Error('You are not the coordinator of the invited lab'), { statusCode: 403 });
         }
-        if (!paper.coordinators?.some(c => c.id === user.id)) {
-          const invitedCoordinator = await AppDataSource.getRepository(Coordinator).findOne({ where: { id: user.id } });
-          if (invitedCoordinator) {
-            paper.coordinators = [...(paper.coordinators ?? []), invitedCoordinator];
+        if (invitation.status !== CollaborationInvitationStatus.Pending) {
+          throw Object.assign(new Error(`Invitation is already ${invitation.status}`), { statusCode: 400 });
+        }
+
+        invitation.status = CollaborationInvitationStatus.Accepted;
+        invitation.respondedAt = new Date();
+        await invitationRepo.save(invitation);
+
+        const paperRepo = manager.getRepository(Paper);
+        const paper = await paperRepo.findOne({
+          where: { id: invitation.paper.id },
+          relations: ['labs', 'coordinators'],
+        });
+        if (paper) {
+          if (!paper.labs?.some(l => l.id === invitation.invitedLab.id)) {
+            paper.labs = [...(paper.labs ?? []), invitation.invitedLab];
           }
+          if (!paper.coordinators?.some(c => c.id === user.id)) {
+            const invitedCoordinator = await manager.getRepository(Coordinator).findOne({ where: { id: user.id } });
+            if (invitedCoordinator) {
+              paper.coordinators = [...(paper.coordinators ?? []), invitedCoordinator];
+            }
+          }
+          await paperRepo.save(paper);
         }
-        await paperRepo.save(paper);
-      }
 
-      if (invitation.invitingLab?.coordinator) {
+        if (invitation.invitingLab?.coordinator) {
+          emailTarget = {
+            coordinator: invitation.invitingLab.coordinator,
+            paperTitle: invitation.paper.title,
+            invitedLabName: invitation.invitedLab.name,
+          };
+        }
+
+        resultId = invitation.id;
+        resultStatus = invitation.status;
+      });
+
+      if (emailTarget) {
+        const { coordinator, paperTitle, invitedLabName } = emailTarget;
         sendEmail(
-          invitation.invitingLab.coordinator,
-          `Collaboration accepted: ${invitation.paper.title}`,
-          `The coordinator of "${invitation.invitedLab.name}" has accepted your collaboration invitation for the paper "${invitation.paper.title}".`,
+          coordinator,
+          `Collaboration accepted: ${paperTitle}`,
+          `The coordinator of "${invitedLabName}" has accepted your collaboration invitation for the paper "${paperTitle}".`,
         ).catch(err => console.error('[LabCollaboration] Failed to send acceptance email:', err));
       }
 
-      return res.status(200).json({ message: 'Invitation accepted', id: invitation.id, status: invitation.status });
+      return res.status(200).json({ message: 'Invitation accepted', id: resultId!, status: resultStatus! });
     } catch (e: any) {
-      return res.status(500).json({ error: e.message });
+      const statusCode = e.statusCode ?? 500;
+      const message = statusCode === 500 ? 'Failed to accept the invitation' : e.message;
+      if (statusCode === 500) console.error('[LabCollaboration] acceptInvitation error:', e);
+      return res.status(statusCode).json({ message });
     }
   }
 
@@ -287,7 +324,8 @@ export class LabCollaborationController {
 
       return res.status(200).json({ message: 'Invitation rejected', id: invitation.id, status: invitation.status });
     } catch (e: any) {
-      return res.status(500).json({ error: e.message });
+      console.error('[LabCollaboration] rejectInvitation error:', e);
+      return res.status(500).json({ message: 'Failed to reject the invitation' });
     }
   }
 
@@ -328,7 +366,8 @@ export class LabCollaborationController {
 
       return res.status(200).json({ message: 'Invitation cancelled', id: invitation.id, status: invitation.status });
     } catch (e: any) {
-      return res.status(500).json({ error: e.message });
+      console.error('[LabCollaboration] cancelInvitation error:', e);
+      return res.status(500).json({ message: 'Failed to cancel the invitation' });
     }
   }
 }

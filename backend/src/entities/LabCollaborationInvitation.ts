@@ -9,6 +9,8 @@ export enum CollaborationInvitationStatus {
   Cancelled = 'Cancelled',
 }
 
+// SQLite does not support partial/filtered unique indexes, so the one-pending-invite-per-paper+lab
+// invariant is enforced in application code (sendInvitations) + the transaction lock in acceptInvitation.
 @Entity()
 export class LabCollaborationInvitation {
   @PrimaryGeneratedColumn('uuid')

@@ -116,6 +116,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [sendingInvites, setSendingInvites] = useState(false);
     const [inviteError, setInviteError] = useState('');
     const [cancellingInviteId, setCancellingInviteId] = useState<string | null>(null);
+    const [cancelError, setCancelError] = useState('');
 
     // Rating Modal state
     const [ratingModalOpen, setRatingModalOpen] = useState(false);
@@ -181,16 +182,20 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     // Load collaboration invitations and available labs (coordinator only)
     useEffect(() => {
         if (!paper || !user.isCoordinator) return;
-        getPaperInvitationsRequest(params.id)
-            .then(setCollabInvitations)
-            .catch(() => { /* silently ignore */ });
-        getLabsRequest()
-            .then(labs => {
-                const paperLabIds = new Set((paper.labs as any[] || []).map((l: any) => l.id));
-                const userLabIds = new Set((user.labs || []).map((l: any) => l.id));
-                setAllLabs(labs.filter(l => !paperLabIds.has(l.id) && !userLabIds.has(l.id)));
-            })
-            .catch(() => { /* silently ignore */ });
+        const paperLabIds = new Set((paper.labs ?? []).map(l => l.id));
+        const userLabIds = new Set((user.labs ?? []).map(l => l.id));
+        Promise.all([
+            getPaperInvitationsRequest(params.id).catch(() => [] as LabCollaborationInvitation[]),
+            getLabsRequest().catch(() => [] as Lab[]),
+        ]).then(([invitations, labs]) => {
+            setCollabInvitations(invitations);
+            const pendingLabIds = new Set(
+                invitations.filter(inv => inv.status === 'Pending').map(inv => inv.invitedLab.id)
+            );
+            setAllLabs(labs.filter(l =>
+                !paperLabIds.has(l.id) && !userLabIds.has(l.id) && !pendingLabIds.has(l.id)
+            ));
+        });
     }, [paper, user.isCoordinator, params.id, user.labs]);
 
     // Load author rounds when paper is available and user is author/coordinator
@@ -1799,11 +1804,11 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     </div>
 
                     {/* Current collaborating labs */}
-                    {(paper.labs as any[] || []).length === 0 ? (
+                    {(paper.labs ?? []).length === 0 ? (
                         <p className="text-sm text-slate-500">No collaborating labs yet.</p>
                     ) : (
                         <div className="flex flex-wrap gap-2">
-                            {(paper.labs as any[]).map((lab: any) => (
+                            {(paper.labs ?? []).map((lab) => (
                                 <span key={lab.id} className="px-3 py-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-sm font-medium">
                                     {lab.name}
                                 </span>
@@ -1815,6 +1820,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     {collabInvitations.length > 0 && (
                         <div className="space-y-2 pt-2 border-t border-white/5">
                             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Invitations</h3>
+                            {cancelError && <p className="text-xs text-red-400">{cancelError}</p>}
                             {collabInvitations.map(inv => (
                                 <div key={inv.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
                                     <div>
@@ -1835,11 +1841,16 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                 disabled={cancellingInviteId === inv.id}
                                                 onClick={async () => {
                                                     setCancellingInviteId(inv.id);
+                                                    setCancelError('');
                                                     try {
                                                         await cancelCollaborationInvitationRequest(inv.id);
                                                         setCollabInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'Cancelled' as const } : i));
-                                                    } catch { /* silently ignore */ }
-                                                    finally { setCancellingInviteId(null); }
+                                                        setAllLabs(prev => [...prev, { id: inv.invitedLab.id, name: inv.invitedLab.name }]);
+                                                    } catch (e: any) {
+                                                        setCancelError(e.message || 'Failed to cancel invitation.');
+                                                    } finally {
+                                                        setCancellingInviteId(null);
+                                                    }
                                                 }}
                                                 className="p-1 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                                                 title="Cancel invitation"
@@ -1899,13 +1910,17 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         setInviteError('');
                                         try {
                                             const result = await sendCollaborationInvitationsRequest(params.id, selectedInviteLabIds);
-                                            const fresh = await getPaperInvitationsRequest(params.id);
-                                            setCollabInvitations(fresh);
-                                            setAllLabs(prev => prev.filter(l => !selectedInviteLabIds.includes(l.id)));
+                                            // Refresh invitation list independently — failure here doesn't mean send failed
+                                            getPaperInvitationsRequest(params.id)
+                                                .then(setCollabInvitations)
+                                                .catch(() => {});
+                                            const successfulLabIds = new Set(result.invited.map(i => i.invitedLabId));
+                                            setAllLabs(prev => prev.filter(l => !successfulLabIds.has(l.id)));
                                             setSelectedInviteLabIds([]);
-                                            setShowInviteLabPanel(false);
                                             if (result.errors?.length) {
                                                 setInviteError(result.errors.map((e: any) => e.reason).join('; '));
+                                            } else {
+                                                setShowInviteLabPanel(false);
                                             }
                                         } catch (e: any) {
                                             setInviteError(e.message || 'Failed to send invitations.');

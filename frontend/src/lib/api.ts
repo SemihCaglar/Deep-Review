@@ -59,10 +59,13 @@ export type LabMember = {
   name: string;
   email: string;
   role: string;
+  frozenAt?: string | null;
+  currentPosition?: string | null;
 };
 
 export type LabMembersResponse = {
   users: LabMember[];
+  frozenUsers: LabMember[];
 };
 
 export type Lab = {
@@ -169,12 +172,13 @@ export function updateInterestsRequest(topicIds: string[], otherInterests: strin
   });
 }
 
-export function updateProfileRequest(name: string, email: string) {
+export function updateProfileRequest(name: string, email: string, currentPosition?: string | null) {
   return apiRequest<AccountUserResponse>('/account/profile', {
     method: 'PUT',
     body: {
       name,
       email,
+      ...(currentPosition !== undefined ? { currentPosition } : {}),
     },
   });
 }
@@ -203,6 +207,18 @@ export function approveSignupRequest(id: string) {
 
 export function rejectSignupRequest(id: string) {
   return apiRequest<AccountUserResponse>(`/account/reject/${id}`, {
+    method: 'POST',
+  });
+}
+
+export function freezeMemberRequest(id: string) {
+  return apiRequest<{ message: string; cancelledAssignments: number }>(`/account/freeze/${id}`, {
+    method: 'POST',
+  });
+}
+
+export function unfreezeMemberRequest(id: string) {
+  return apiRequest<{ message: string }>(`/account/unfreeze/${id}`, {
     method: 'POST',
   });
 }
@@ -272,17 +288,19 @@ export type PaperHistoryAssignment = {
   extensions: PaperHistoryExtension[];
 };
 
+export interface EmpiricalStandardsChecklist {
+  selectedStandards: Array<{
+    label: string;
+    confidence: 'high' | 'medium' | 'low';
+    evidence: string;
+  }>;
+}
+
 export interface AIReviewReport {
   summaryReport: string;
   annotatedPdfUrl?: string;
   annotations?: any[];
   suggestedCitations?: any[];
-  checklist?: Array<{
-    id: string;
-    description: string;
-    isChecked: boolean;
-  }>;
-  paperType?: string;
 }
 
 export interface ComplianceReport {
@@ -465,6 +483,14 @@ export type RoundAssignment = {
   reviewSummary: { text: string | null; submittedAt: string } | null;
 };
 
+export type AIReviewReportHistory = {
+  id: string;
+  reviewText: string;
+  annotatedPdfUrl: string | null;
+  venue: string | null;
+  createdAt: string;
+};
+
 export type RoundWithAssignments = {
   id: string;
   roundNumber: number;
@@ -478,8 +504,12 @@ export type RoundWithAssignments = {
   completedAt: string | null;
   assignments: RoundAssignment[];
   aiReviewReport?: AIReviewReport | null;
+  aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
   annotatedPdfUrl?: string | null;
+  checklistJson?: EmpiricalStandardsChecklist | null;
+  checklistUrl?: string | null;
+  confirmedChecklistJson?: { selectedStandards: string[]; confirmedAt: string; confirmedBy: string } | null;
 };
 
 export type MyAssignment = {
@@ -593,6 +623,13 @@ export function sendRemindersRequest(assignmentIds: string[]) {
   return apiRequest<{ message: string; sent: number; skipped: number }>('/assignments/remind', {
     method: 'POST',
     body: { assignmentIds },
+  });
+}
+
+export function confirmChecklistSelectionRequest(roundId: string, selectedStandards: string[]) {
+  return apiRequest<{ message: string; data: any }>(`/rounds/${roundId}/confirm-checklist`, {
+    method: 'POST',
+    body: { selectedStandards },
   });
 }
 
@@ -784,7 +821,7 @@ export async function startAIReviewRequest(roundId: string, pdfFile: File): Prom
   const formData = new FormData();
   formData.append('pdf', pdfFile);
 
-  const response = await fetch(buildUrl(`/rounds/${roundId}/ai`), {
+  const response = await fetch(buildUrl(`/rounds/${roundId}/ai-review`), {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,
@@ -862,8 +899,16 @@ export function createUserRequest(data: { name: string; email: string; role: str
 
 // ==== COLLABORATION INVITATION API FUNCTIONS ====
 
+export type SentInvitation = {
+  id: string;
+  invitedLabId: string;
+  invitedLabName: string;
+  status: 'Pending' | 'Accepted' | 'Rejected' | 'Cancelled';
+  createdAt: string;
+};
+
 export function sendCollaborationInvitationsRequest(paperId: string, labIds: string[]) {
-  return apiRequest<{ invited: LabCollaborationInvitation[]; errors: { labId: string; reason: string }[] }>(
+  return apiRequest<{ invited: SentInvitation[]; errors: { labId: string; reason: string }[] }>(
     `/papers/${paperId}/collaboration-invitations`,
     { method: 'POST', body: { labIds } },
   );

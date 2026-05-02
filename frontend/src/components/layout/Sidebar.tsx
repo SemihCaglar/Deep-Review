@@ -22,8 +22,14 @@ export default function Sidebar() {
     const getNavItems = () => {
             if (user.isAdmin) {
             return [
-                { name: 'My Dashboard', href: '/dashboard', icon: Home },
                 { name: 'Admin Dashboard', href: '/admin', icon: Shield },
+            ];
+        }
+
+        if (user.isFrozen) {
+            return [
+                { name: 'My Dashboard', href: '/dashboard', icon: Home },
+                { name: 'Lab Members', href: '/lab-members', icon: Users },
             ];
         }
 

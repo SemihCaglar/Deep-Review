@@ -89,4 +89,13 @@ export class Round {
 
   @Column({ nullable: true })
   annotatedPdfUrl: string;
+
+  @Column({ type: 'simple-json', nullable: true })
+  checklistJson: any;
+
+  @Column({ nullable: true, type: 'text' })
+  checklistUrl: string | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  confirmedChecklistJson: any;
 }

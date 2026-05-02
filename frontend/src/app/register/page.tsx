@@ -31,6 +31,13 @@ export default function RegisterPaper() {
     const [topicSearch, setTopicSearch] = useState('');
 
     useEffect(() => {
+        if (user.isFrozen) {
+            router.replace('/dashboard');
+            return;
+        }
+    }, [user.isFrozen, router]);
+
+    useEffect(() => {
         const fetchData = async () => {
             try {
                 const [membersRes, topicsRes, labsRes] = await Promise.all([
@@ -130,7 +137,7 @@ export default function RegisterPaper() {
                 topics: selectedTopics,
                 collaboratingLabIds: selectedCollabLabs,
             });
-            router.push('/papers?filter=authored');
+            router.push(user.isCoordinator ? '/papers' : '/papers?filter=authored');
         } catch (err) {
             console.error(err);
             alert('Failed to register paper. Please try again.');

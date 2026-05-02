@@ -143,23 +143,26 @@ export class PaperService {
     // Send collaboration invitations if requested
     if (dto.collaboratingLabIds && dto.collaboratingLabIds.length > 0 && coordinator && coordinatorLab) {
       const invitationRepo = AppDataSource.getRepository(LabCollaborationInvitation);
-      for (const labId of dto.collaboratingLabIds) {
-        if (labId === coordinatorLab.id) continue;
-        const invitedLab = await labRepo.findOne({ where: { id: labId }, relations: ['coordinator'] });
-        if (!invitedLab) continue;
-        const invitation = invitationRepo.create({
+      const targetLabIds = dto.collaboratingLabIds.filter(id => id !== coordinatorLab!.id);
+      const invitedLabs = await labRepo.find({ where: { id: In(targetLabIds) }, relations: ['coordinator'] });
+
+      const invitations = invitedLabs.map(invitedLab =>
+        invitationRepo.create({
           paper: savedPaper,
-          invitingLab: coordinatorLab,
+          invitingLab: coordinatorLab!,
           invitedLab,
           status: CollaborationInvitationStatus.Pending,
           respondedAt: null,
-        });
-        await invitationRepo.save(invitation);
+        })
+      );
+      await invitationRepo.save(invitations);
+
+      for (const invitedLab of invitedLabs) {
         if (invitedLab.coordinator) {
           sendEmail(
             invitedLab.coordinator,
             `Collaboration invitation: ${savedPaper.title}`,
-            `You have been invited by the coordinator of "${coordinatorLab.name}" to collaborate on the paper "${savedPaper.title}".\n\nPlease log in to the system to accept or reject this invitation.`,
+            `You have been invited by the coordinator of "${coordinatorLab!.name}" to collaborate on the paper "${savedPaper.title}".\n\nPlease log in to the system to accept or reject this invitation.`,
           ).catch(err => console.error('[PaperService] Failed to send invitation email:', err));
         }
       }

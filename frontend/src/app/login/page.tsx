@@ -17,8 +17,9 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   React.useEffect(() => {
-    if (getToken() && getStoredUser()) {
-      router.replace('/dashboard');
+    const storedUser = getStoredUser();
+    if (getToken() && storedUser) {
+      router.replace(storedUser.role === 'Admin' ? '/admin' : '/dashboard');
     }
   }, [router]);
 
@@ -32,7 +33,7 @@ export default function LoginPage() {
       setToken(response.token);
       setStoredUser(response.user);
       setUser(mapStoredUserToLegacyUser(response.user));
-      router.push('/dashboard');
+      router.push(response.user.role === 'Admin' ? '/admin' : '/dashboard');
     } catch (caughtError) {
       if (caughtError instanceof ApiError) {
         setError(caughtError.message);

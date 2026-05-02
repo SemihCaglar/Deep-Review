@@ -3,6 +3,7 @@ export interface User {
     name: string;
     isCoordinator: boolean;
     isAdmin?: boolean;
+    isFrozen?: boolean;
     email: string;
     topics?: string[];
     labs?: { id: string; name: string }[];

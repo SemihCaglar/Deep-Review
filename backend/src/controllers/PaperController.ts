@@ -17,6 +17,44 @@ function queryString(value: unknown): string | undefined {
   return undefined;
 }
 
+type PaperAuthorResponse = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+function getOrderedPaperAuthors(paper: Paper): PaperAuthorResponse[] {
+  const byId = new Map<string, PaperAuthorResponse>();
+
+  for (const author of paper.authors ?? []) {
+    byId.set(author.id, {
+      id: author.id,
+      name: author.name,
+      email: author.email,
+    });
+  }
+
+  for (const coordinator of paper.coordinators ?? []) {
+    if (!byId.has(coordinator.id)) {
+      byId.set(coordinator.id, {
+        id: coordinator.id,
+        name: coordinator.name,
+        email: coordinator.email,
+      });
+    }
+  }
+
+  const authors = Array.from(byId.values());
+  if (!paper.authorOrder?.length) return authors;
+
+  const orderMap = new Map(paper.authorOrder.map((id, index) => [id, index]));
+  return authors.sort((a, b) => {
+    const orderA = orderMap.has(a.id) ? orderMap.get(a.id)! : Number.MAX_SAFE_INTEGER;
+    const orderB = orderMap.has(b.id) ? orderMap.get(b.id)! : Number.MAX_SAFE_INTEGER;
+    return orderA - orderB;
+  });
+}
+
 export class PaperController {
   static async registerPaper(req: AuthenticatedRequest, res: Response) {
     try {
@@ -298,8 +336,10 @@ export class PaperController {
             })),
             aiReviewReports: (round.aiReviewReports ?? []).map(report => ({
               id: report.id,
-              generatedReportUrl: report.generatedReportUrl,
+              reviewText: report.reviewText,
               annotatedPdfUrl: report.annotatedPdfUrl,
+              venue: report.venue,
+              createdAt: report.createdAt,
             })),
           },
         }));
@@ -332,8 +372,17 @@ export class PaperController {
       const authReq = req as AuthenticatedRequest;
       if (!authReq.user) return res.status(401).json({ message: 'Unauthorized' });
 
-      const papers = await AppDataSource.getRepository(Paper).find({
-        where: { authors: { id: authReq.user.id } },
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const authoredPaperIds = await paperRepo
+        .createQueryBuilder('paper')
+        .innerJoin('paper.authors', 'author', 'author.id = :userId', { userId: authReq.user.id })
+        .select('paper.id', 'id')
+        .getRawMany<{ id: string }>();
+
+      if (authoredPaperIds.length === 0) return res.status(200).json([]);
+
+      const papers = await paperRepo.find({
+        where: { id: In(authoredPaperIds.map(p => p.id)) },
         relations: ['authors', 'topics', 'coordinators', 'rounds', 'rounds.assignments'],
       });
 
@@ -351,7 +400,8 @@ export class PaperController {
           overleafLink: p.overleafLink,
           creationTime: p.creationTime,
           topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
-          authors: (p.authors ?? []).map(a => ({ id: a.id, name: a.name, email: a.email })),
+          authors: getOrderedPaperAuthors(p),
+          coordinators: (p.coordinators ?? []).map(c => ({ id: c.id, name: c.name, email: c.email })),
           coordinatorId: p.coordinators?.[0]?.id ?? null,
           latestRoundNumber: latestRound?.roundNumber ?? null,
           latestRoundStatus: latestRound?.status ?? null,
@@ -558,7 +608,7 @@ export class PaperController {
 
       if (authReq.user.role === UserRole.Admin) {
         // Admins can see everything
-        papers = await repo.find({ relations: ['authors', 'topics'] });
+        papers = await repo.find({ relations: ['authors', 'coordinators', 'topics'] });
       } else if (authReq.user.role === UserRole.Coordinator) {
         // Coordinators can see papers in their own lab
         const coordinatorRepo = AppDataSource.getRepository(Coordinator);
@@ -570,25 +620,21 @@ export class PaperController {
         if (!coordinator?.lab) return res.status(200).json([]);
         
         papers = await repo.find({
-          where: { labs: { id: coordinator.lab.id } },
-          relations: ['authors', 'topics', 'labs']
+          where: [
+            { labs: { id: coordinator.lab.id } },
+            { coordinators: { id: authReq.user.id } },
+          ],
+          relations: ['authors', 'coordinators', 'topics', 'labs']
         });
       } else {
         return res.status(403).json({ message: 'Access denied' });
       }
 
       const sortedPapers = papers.map(paper => {
-        if (paper.authorOrder && paper.authors) {
-          const orderMap = new Map(paper.authorOrder.map((id, index) => [id, index]));
-          paper.authors.sort((a, b) => {
-            const orderA = orderMap.has(a.id) ? orderMap.get(a.id)! : 999;
-            const orderB = orderMap.has(b.id) ? orderMap.get(b.id)! : 999;
-            return orderA - orderB;
-          });
-        }
         return {
           ...paper,
-          authors: paper.authors?.map(a => ({ id: a.id, name: a.name, email: a.email })) || []
+          authors: getOrderedPaperAuthors(paper),
+          coordinators: paper.coordinators?.map(c => ({ id: c.id, name: c.name, email: c.email })) || []
         };
       });
 
