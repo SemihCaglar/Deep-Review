@@ -35,6 +35,7 @@ import {
   removeProposedReviewerRequest,
   approveRoundRequest,
   getRoundStatusRequest,
+  confirmChecklistSelectionRequest,
 } from '@/lib/api';
 import { confirmCancel } from '@/lib/confirmAction';
 import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download, ShieldCheck } from 'lucide-react';
@@ -698,6 +699,40 @@ function RoundCard({
   const [aiStatus, setAiStatus] = useState('');
   const [localAiResult, setLocalAiResult] = useState<any>(null);
   const [confirmedStandards, setConfirmedStandards] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['General', 'Qualitative', 'Quantitative', 'Literature Review', 'Other']));
+  const [finalizedChecklist, setFinalizedChecklist] = useState<any>(null);
+
+  const STANDARDS_BY_CATEGORY = {
+    General: [
+      'Engineering Research',
+      'Multimethodology or mixed methods',
+    ],
+    Qualitative: [
+      'Action Research',
+      'Case Study',
+      'Grounded Theory',
+      'Qualitative Survey',
+    ],
+    Quantitative: [
+      'Benchmarking',
+      'Data Science',
+      'Experiment with human participants',
+      'Optimization Study',
+      'Quantitative Longitudinal Study',
+      'Quantitative Simulation',
+      'Questionnaire Survey',
+      'Repository Mining',
+    ],
+    'Literature Review': [
+      'Case Survey',
+      'Systematic Literature Review',
+    ],
+    Other: [
+      'Meta Science',
+      'Replication',
+      'Empirical Method Not Listed Above',
+    ],
+  } as Record<string, string[]>;
 
   const AI_PHASES = [
     { at: 0,  msg: 'Uploading PDF to agent…' },
@@ -743,6 +778,13 @@ function RoundCard({
 
   // Initialize confirmed standards when round data loads
   useEffect(() => {
+    // If already confirmed, show that state
+    if (round.confirmedChecklistJson?.selectedStandards) {
+      setFinalizedChecklist(round.confirmedChecklistJson);
+      return;
+    }
+
+    // Otherwise, pre-select AI-selected standards
     if ((localAiResult?.checklistJson || round.checklistJson) && confirmedStandards.size === 0) {
       const checklist = localAiResult?.checklistJson || round.checklistJson;
       if (checklist?.selectedStandards) {
@@ -750,7 +792,7 @@ function RoundCard({
         setConfirmedStandards(standards);
       }
     }
-  }, [round.checklistJson, localAiResult]);
+  }, [round.checklistJson, round.confirmedChecklistJson, localAiResult]);
 
   // Compliance Check
   const complianceFileRef = useRef<HTMLInputElement>(null);
@@ -1311,6 +1353,10 @@ function RoundCard({
                   const checklist = localAiResult?.checklistJson || round.checklistJson;
                   if (!checklist?.selectedStandards?.length) return null;
 
+                  const aiSelectedMap = new Map<string, { label: string; confidence: string; evidence: string }>(
+                    checklist.selectedStandards.map((s: any) => [s.label, s])
+                  );
+
                   const buildChecklistUrl = (standards: Set<string>) => {
                     const base = "https://www2.sigsoft.org/EmpiricalStandards/form_generator/result.html";
                     const params = new URLSearchParams();
@@ -1319,54 +1365,124 @@ function RoundCard({
                     return `${base}?${params.toString()}`;
                   };
 
+                  const handleConfirm = async () => {
+                    try {
+                      const selectedStandardsArray = Array.from(confirmedStandards);
+                      await confirmChecklistSelectionRequest(round.id, selectedStandardsArray);
+                      setFinalizedChecklist({
+                        selectedStandards: selectedStandardsArray,
+                        confirmedAt: new Date().toISOString(),
+                      });
+                      onRefresh();
+                    } catch (err) {
+                      console.error('Failed to confirm checklist:', err);
+                      alert('Failed to confirm checklist. Please try again.');
+                    }
+                  };
+
                   return (
-                    <div className="p-3 rounded-xl border border-violet-500/20 bg-violet-500/5 space-y-2">
+                    <div className="p-3 rounded-xl border border-violet-500/20 bg-violet-500/5 space-y-3">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Empirical Standards</p>
-                        <a
-                          href={buildChecklistUrl(confirmedStandards)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                        >
-                          <ExternalLink className="w-3 h-3" /> Open Form
-                        </a>
-                      </div>
-                      <div className="space-y-1.5">
-                        {checklist.selectedStandards.map((standard: any) => (
-                          <div key={standard.label} className="flex items-start gap-2 p-2 rounded bg-slate-800/50 hover:bg-slate-800/75 transition-colors">
-                            <input
-                              type="checkbox"
-                              checked={confirmedStandards.has(standard.label)}
-                              onChange={(e) => {
-                                const newConfirmed = new Set<string>(confirmedStandards);
-                                if (e.target.checked) {
-                                  newConfirmed.add(standard.label);
-                                } else {
-                                  newConfirmed.delete(standard.label);
-                                }
-                                setConfirmedStandards(newConfirmed);
-                              }}
-                              className="mt-0.5 cursor-pointer"
-                            />
-                            <div className="flex-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <p className="text-xs text-slate-200 font-medium">{standard.label}</p>
-                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${
-                                  standard.confidence === 'high'
-                                    ? 'bg-emerald-500/20 text-emerald-300'
-                                    : standard.confidence === 'medium'
-                                    ? 'bg-amber-500/20 text-amber-300'
-                                    : 'bg-orange-500/20 text-orange-300'
-                                }`}>
-                                  {standard.confidence}
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{standard.evidence}</p>
-                            </div>
+                        {!finalizedChecklist && (
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={buildChecklistUrl(confirmedStandards)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" /> Open Form
+                            </a>
+                            <button
+                              onClick={handleConfirm}
+                              disabled={confirmedStandards.size === 0}
+                              className="px-2 py-1 text-xs font-medium rounded-lg bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Confirm Checklist
+                            </button>
                           </div>
-                        ))}
+                        )}
                       </div>
+
+                      {finalizedChecklist ? (
+                        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                          <p className="text-xs text-emerald-300 font-medium">✓ Checklist confirmed</p>
+                          <p className="text-[10px] text-emerald-300/70 mt-1">{finalizedChecklist.selectedStandards.length} standards selected</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {(Object.entries(STANDARDS_BY_CATEGORY) as Array<[string, string[]]>).map(([category, standards]) => (
+                            <div key={category} className="rounded-lg bg-slate-800/30 overflow-hidden">
+                              <button
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedCategories);
+                                  if (newExpanded.has(category)) {
+                                    newExpanded.delete(category);
+                                  } else {
+                                    newExpanded.add(category);
+                                  }
+                                  setExpandedCategories(newExpanded);
+                                }}
+                                className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-slate-800/50 transition-colors"
+                              >
+                                <ChevronDown
+                                  className={`w-3 h-3 text-slate-400 transition-transform ${expandedCategories.has(category) ? '' : '-rotate-90'}`}
+                                />
+                                <p className="text-xs font-semibold text-slate-300">{category}</p>
+                                <span className="text-[10px] text-slate-500 ml-auto">
+                                  {standards.filter(s => confirmedStandards.has(s)).length}/{standards.length}
+                                </span>
+                              </button>
+
+                              {expandedCategories.has(category) && (
+                                <div className="px-2 py-1.5 space-y-1 border-t border-slate-700/50">
+                                  {standards.map((standard) => {
+                                    const aiData = aiSelectedMap.get(standard);
+                                    return (
+                                      <div key={standard} className="flex items-start gap-2 p-1.5 rounded bg-slate-900/50 hover:bg-slate-900/75 transition-colors">
+                                        <input
+                                          type="checkbox"
+                                          checked={confirmedStandards.has(standard)}
+                                          onChange={(e) => {
+                                            const newConfirmed = new Set<string>(confirmedStandards);
+                                            if (e.target.checked) {
+                                              newConfirmed.add(standard);
+                                            } else {
+                                              newConfirmed.delete(standard);
+                                            }
+                                            setConfirmedStandards(newConfirmed);
+                                          }}
+                                          className="mt-0.5 cursor-pointer"
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <p className="text-xs text-slate-200 font-medium">{standard}</p>
+                                            {aiData && (
+                                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${
+                                                aiData.confidence === 'high'
+                                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                                  : aiData.confidence === 'medium'
+                                                  ? 'bg-amber-500/20 text-amber-300'
+                                                  : 'bg-orange-500/20 text-orange-300'
+                                              }`}>
+                                                {aiData.confidence}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {aiData && (
+                                            <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{aiData.evidence}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

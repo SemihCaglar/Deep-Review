@@ -611,6 +611,7 @@ export class RoundController {
         complianceReport: round.complianceReport ?? null,
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
+        confirmedChecklistJson: round.confirmedChecklistJson ?? null,
         assignments: (round.assignments ?? []).map(a => ({
           id: a.id,
           status: a.status,
@@ -790,6 +791,57 @@ export class RoundController {
       return res.status(500).json({ message: err.message || 'Internal server error' });
     }
   }
+
+  static async confirmChecklistSelection(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { selectedStandards } = req.body;
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+
+      if (!Array.isArray(selectedStandards)) {
+        return res.status(400).json({ message: 'selectedStandards must be an array of strings' });
+      }
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.authors', 'paper.coordinators']
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      // Authorization: Only Authors or Coordinators can confirm
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+
+      if (!isAuthor && !isCoordinator) {
+        return res.status(403).json({ message: 'Forbidden: You must be an author or coordinator of this paper.' });
+      }
+
+      // Save confirmed checklist
+      round.confirmedChecklistJson = {
+        selectedStandards,
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: user.id,
+      };
+
+      await roundRepo.save(round);
+
+      return res.status(200).json({
+        message: 'Checklist selection confirmed',
+        data: round.confirmedChecklistJson
+      });
+
+    } catch (err: any) {
+      console.error('[RoundController] Error in confirmChecklistSelection:', err);
+      return res.status(500).json({ message: err.message || 'Internal server error' });
+    }
+  }
+
   static async getVenueRules(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;

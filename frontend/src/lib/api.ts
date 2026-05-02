@@ -470,6 +470,7 @@ export type RoundWithAssignments = {
   annotatedPdfUrl?: string | null;
   checklistJson?: EmpiricalStandardsChecklist | null;
   checklistUrl?: string | null;
+  confirmedChecklistJson?: { selectedStandards: string[]; confirmedAt: string; confirmedBy: string } | null;
 };
 
 export type MyAssignment = {
@@ -583,6 +584,13 @@ export function sendRemindersRequest(assignmentIds: string[]) {
   return apiRequest<{ message: string; sent: number; skipped: number }>('/assignments/remind', {
     method: 'POST',
     body: { assignmentIds },
+  });
+}
+
+export function confirmChecklistSelectionRequest(roundId: string, selectedStandards: string[]) {
+  return apiRequest<{ message: string; data: any }>(`/rounds/${roundId}/confirm-checklist`, {
+    method: 'POST',
+    body: { selectedStandards },
   });
 }
 
