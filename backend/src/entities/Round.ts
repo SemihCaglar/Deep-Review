@@ -41,6 +41,9 @@ export class Round {
   @Column({ nullable: true, type: 'text' })
   targetVenueUrl: string | null;
 
+  @Column({ nullable: true })
+  submissionRuleSetId: string | null;
+
   @Column({
     type: 'simple-enum',
     enum: VenueCategory,

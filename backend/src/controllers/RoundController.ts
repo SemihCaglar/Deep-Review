@@ -125,6 +125,13 @@ export class RoundController {
 
       await roundRepo.save(round);
 
+      // Extract submission rules asynchronously (non-blocking)
+      if (normalizedVenueUrl) {
+        RoundService.extractAndLinkRules(round.id, normalizedVenueUrl).catch(err => {
+          console.warn('[RoundController] Background rule extraction failed:', err);
+        });
+      }
+
       return res.status(201).json(round);
     } catch (err) {
       console.error(err);
@@ -228,8 +235,15 @@ export class RoundController {
         return res.status(400).json({ message: `Cannot update round details: the round is currently '${round.status}'. Details can only be changed while the round is in Draft status.` });
       }
 
+      let urlUpdated = false;
       if (targetVenue !== undefined) round.targetVenue = targetVenue.trim();
-      if (targetVenueUrl !== undefined) round.targetVenueUrl = RoundController.parseRequiredUrl(targetVenueUrl);
+      if (targetVenueUrl !== undefined) {
+        const newUrl = RoundController.parseRequiredUrl(targetVenueUrl);
+        if (newUrl !== round.targetVenueUrl) {
+          round.targetVenueUrl = newUrl;
+          urlUpdated = true;
+        }
+      }
       if (venueCategory !== undefined) round.venueCategory = venueCategory as VenueCategory;
       if (submissionDeadline !== undefined) {
         if (newSubDeadline && round.deadline && round.deadline.getTime() > newSubDeadline.getTime()) {
@@ -239,6 +253,14 @@ export class RoundController {
       }
 
       await roundRepo.save(round);
+
+      // Extract submission rules if URL was updated (async, non-blocking)
+      if (urlUpdated && round.targetVenueUrl) {
+        RoundService.extractAndLinkRules(round.id, round.targetVenueUrl).catch(err => {
+          console.warn('[RoundController] Background rule extraction failed:', err);
+        });
+      }
+
       return res.status(200).json(round);
     } catch (err) {
       console.error(err);

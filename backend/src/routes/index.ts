@@ -10,6 +10,7 @@ import { ReviewerResponseController } from '../controllers/ReviewerResponseContr
 import { RoundController } from '../controllers/RoundController';
 import { SearchController } from '../controllers/SearchController';
 import { TopicController } from '../controllers/TopicController';
+import { SubmissionRuleController } from '../controllers/SubmissionRuleController';
 import { authenticateRequest, requireAdmin, requireCoordinator, requireActiveAccount } from '../middleware/auth';
 
 import multer, { FileFilterCallback } from 'multer';
@@ -182,5 +183,11 @@ router.get('/search/reviews/deadline', SearchController.searchReviewsByDeadline)
 router.get('/search/members/name', SearchController.searchLabMembersByName);
 router.get('/search/members/topic/:id', SearchController.searchLabMembersByTopic);
 router.get('/search/members/workload', SearchController.searchLabMembersByWorkload);
+
+// ==== SUBMISSION RULES ROUTES ====
+router.post('/submission-rules/extract', authenticateRequest, SubmissionRuleController.extractRules);
+router.get('/submission-rules', authenticateRequest, SubmissionRuleController.getRules);
+router.get('/submission-rules/all', authenticateRequest, SubmissionRuleController.getAllRules);
+router.delete('/submission-rules', authenticateRequest, SubmissionRuleController.deleteRules);
 
 export default router;

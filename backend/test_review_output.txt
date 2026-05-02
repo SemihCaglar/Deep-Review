@@ -1,43 +1,47 @@
 ## Paper Title
-SERSEM: Selective Entropy-Weighted Scoring for Membership
+SERSEM: Selective Entropy-Weighted Scoring for Membership Inference in Code Language Models
 
 ## Overall Decision
 Accept
 
 ## Summary of Contribution
-The paper introduces SERSEM, a novel white-box Membership Inference Attack (MIA) framework tailored for Large Language Models (LLMs) trained on code. SERSEM leverages selective entropy-weighted scoring to suppress uninformative syntactic boilerplate and amplify memorization signals, addressing the challenge of detecting data contamination in LLMs trained on massive, often non-permissively licensed datasets.
+The paper introduces SERSEM, a novel white-box membership inference attack framework tailored for code language models. By leveraging selective entropy-weighted scoring and internal transformer activations, SERSEM robustly distinguishes memorized code from boilerplate, outperforming standard probability-based baselines on StarCoder2 models.
 
 ## Critical Review
+
 ### Methodology & Validity
-The methodology is innovative, combining a dual-signal approach that utilizes both continuous character-level entropy and selective weighting to focus on informative code regions. However, the paper lacks detailed experimental results and comparative baselines, making it difficult to fully assess the robustness and generalizability of SERSEM. The absence of a thorough ablation study or statistical significance analysis further limits the evaluation of the proposed method's validity.
+The methodology is well-motivated and addresses a key limitation of existing MIAs on code models: the high false positive rate due to boilerplate syntax. SERSEM’s dual approach—combining static code analysis for anomaly weighting with probing of internal transformer activations—demonstrates technical depth and innovation. The use of a balanced 25,000-sample dataset and comparison against strong baselines (Loss, Min-K%Prob, PAC) strengthens the validity of the results. However, details on dataset construction, statistical significance, and ablation studies are limited in the provided pages.
 
 ### Industrial Relevance
-The work addresses a highly relevant problem in the deployment of code LLMs, especially regarding legal and ethical risks associated with memorization of proprietary or non-permissively licensed code. SERSEM’s approach could be valuable for organizations seeking to audit or mitigate data contamination in their models. However, practical deployment considerations, such as computational overhead and integration into existing pipelines, are not discussed.
+The work is highly relevant for practitioners concerned with data leakage and intellectual property risks in code LLMs. SERSEM’s focus on human-centric anomalies and its demonstrated improvement over existing methods make it a practical tool for auditing and evaluating code models deployed in industry.
 
 ### Clarity & Presentation
-The paper is generally well-written, with a clear motivation and structured presentation. The abstract and introduction effectively communicate the problem and the proposed solution. However, the lack of detailed experimental sections and visualizations (e.g., figures or tables) reduces the clarity of the empirical validation.
+The paper is generally well-written and clearly structured. The motivation, technical approach, and results are presented logically. However, the dense formatting and occasional run-on sentences may hinder readability. The methodology section is detailed, but some implementation specifics (e.g., dataset splits, hyperparameters) are missing or underexplained in the excerpt.
 
 ## Prioritized Improvements
+
 ### High Priority
-- Provide comprehensive experimental results, including quantitative comparisons with existing MIA methods.
-- Include an ablation study to isolate the contributions of each component of SERSEM.
+- Provide more details on dataset construction, including sources, balancing, and preprocessing.
+- Include statistical significance testing or confidence intervals for reported improvements.
+- Clarify the ablation of individual components (e.g., weighting scheme vs. internal activation probing).
 
 ### Medium Priority
-- Discuss computational costs and practical deployment scenarios.
-- Add visualizations (e.g., figures, tables) to illustrate key findings and results.
+- Improve the clarity of technical explanations, especially in the methodology section.
+- Add more discussion on limitations and potential failure cases of SERSEM.
+- Expand on the generalizability of the approach to other code models or domains.
 
 ### Low Priority
-- Expand on related work to better position SERSEM within the broader MIA literature.
-- Improve sectioning for easier navigation (e.g., explicit "Methods" and "Results" sections).
+- Refine formatting to improve readability (e.g., paragraph breaks, clearer tables).
+- Provide more visualizations or diagrams to illustrate the dual-signal methodology.
+- Proofread for minor typographical errors.
 
 ## Scope Analysis
+
 ### Underemphasized Areas
-- Practical considerations for integrating SERSEM into real-world LLM auditing workflows.
-- Limitations and potential failure cases of the proposed approach.
+- Limitations and potential adversarial adaptations to SERSEM.
+- Broader applicability to non-code LLMs or multilingual codebases.
+- Ethical considerations and responsible disclosure practices.
 
 ### Overemphasized Areas
-- Theoretical motivation and background, relative to the limited empirical validation provided.
-
-You can download the annotated PDF with review highlights and comments here:
-
-[Download annotated_output.pdf](sandbox:/mnt/data/annotated_output.pdf)
+- The technical description of the weighting scheme could be condensed in favor of more empirical analysis.
+- Repeated justification of boilerplate suppression, which is well-motivated early on.
