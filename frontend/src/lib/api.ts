@@ -178,7 +178,7 @@ export function updateProfileRequest(name: string, email: string, currentPositio
     body: {
       name,
       email,
-      ...(currentPosition !== undefined ? { currentPosition } : {}),
+      ...(currentPosition !== undefined ? { currentPosition: currentPosition ?? '' } : {}),
     },
   });
 }
