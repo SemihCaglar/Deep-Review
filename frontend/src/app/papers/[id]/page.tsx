@@ -257,7 +257,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         switch (status) {
             case 'Draft': return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
             case 'In Review': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-            case 'Review Done': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+            case 'Completed': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Accepted': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Archived': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
             default: return 'bg-white/10 text-slate-300 border-white/20';
@@ -292,18 +292,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
-    // Calculate effective assignment statuses including local mocks
-    const getEffectiveAssignmentStatus = (assignmentId: string, reviewerId: string, originalStatus: string) => {
-        if (reviewerId === user.id && localAssignmentStatus) {
-            return localAssignmentStatus;
-        }
-        return originalStatus;
-    };
-
-    const isRoundComplete = assignments.length > 0 && assignments.every(a =>
-        getEffectiveAssignmentStatus(a.id, a.reviewerId, a.status) === 'Submitted'
-    );
-    const effectivePaperStatus = isRoundComplete && currentStatus === 'In Review' ? 'Review Done' : currentStatus;
+    const effectivePaperStatus = currentStatus;
     const canEditAuthors = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
     const canEditLinks = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
     const canChangeArchiveState = user.isCoordinator || isAuthor;
@@ -1108,7 +1097,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
 
                     {/* Reviewer Actions */}
-                    {!user.isCoordinator && (effectivePaperStatus === 'In Review' || effectivePaperStatus === 'Review Done') && myAssignment?.status === 'Pending' && !showDeclineForm && (
+                    {!user.isCoordinator && effectivePaperStatus === 'In Review' && myAssignment?.status === 'Pending' && !showDeclineForm && (
                         <div className="flex gap-2">
                             <button
                                 onClick={() => setLocalAssignmentStatus('Accepted')}
@@ -1128,7 +1117,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
 
                     {/* Decline Reason Form */}
-                    {!user.isCoordinator && (effectivePaperStatus === 'In Review' || effectivePaperStatus === 'Review Done') && myAssignment?.status === 'Pending' && showDeclineForm && (
+                    {!user.isCoordinator && effectivePaperStatus === 'In Review' && myAssignment?.status === 'Pending' && showDeclineForm && (
                         <div className="glass p-4 rounded-xl border border-red-500/30 mt-2 bg-red-500/5 animate-in slide-in-from-top-2">
                             <label className="block text-xs font-medium text-slate-300 mb-2">Reason for declining <span className="text-red-400">*</span></label>
                             <textarea
@@ -1154,7 +1143,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         </div>
                     )}
 
-                    {!user.isCoordinator && (effectivePaperStatus === 'In Review' || effectivePaperStatus === 'Review Done') && myAssignment?.status === 'Accepted' && localAssignmentStatus !== 'Submitted' && (
+                    {!user.isCoordinator && effectivePaperStatus === 'In Review' && myAssignment?.status === 'Accepted' && localAssignmentStatus !== 'Submitted' && (
                         <div className="space-y-2">
                             <button
                                 onClick={handleSubmitReview}

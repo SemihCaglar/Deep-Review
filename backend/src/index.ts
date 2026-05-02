@@ -1,13 +1,14 @@
 import 'reflect-metadata';
 import 'dotenv/config';
 
-import { AppDataSource } from './data-source';
+import { AppDataSource, normalizeLegacyPaperStatuses } from './data-source';
 import app from './app';
 import { startOverdueChecker } from './jobs/overdueChecker';
 
 const PORT = process.env.PORT || 3001;
 
-AppDataSource.initialize()
+normalizeLegacyPaperStatuses()
+    .then(() => AppDataSource.initialize())
     .then(() => {
         console.log('✅ Database connected & Models strictly synchronized!');
         startOverdueChecker();
