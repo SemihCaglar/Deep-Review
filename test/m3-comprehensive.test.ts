@@ -501,9 +501,9 @@ describe('8 · Approve round — happy path', () => {
         expect(r.body.assigned).toBe(3);
         expect(r.body.skipped).toBe(0);
     });
-    test('paper transitions to HumanReview', async () => {
+    test('paper transitions to InReview', async () => {
         const paper = await AppDataSource.getRepository(Paper).findOne({ where: { id: paperId } });
-        expect(paper?.status).toBe(PaperStatus.HumanReview);
+        expect(paper?.status).toBe(PaperStatus.InReview);
     });
     test('three assignments created — all Invited + invitationSent=true', async () => {
         const r = await api(coordToken).get(`/api/papers/${paperId}/rounds`);

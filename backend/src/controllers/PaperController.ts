@@ -260,6 +260,7 @@ export class PaperController {
           'rounds.assignments.rating',
           'rounds.checklistItems',
           'rounds.aiReviewReports',
+          'rounds.aiReviewReports.requestedBy',
           'labs',
           'labs.coordinator',
         ],
@@ -326,7 +327,7 @@ export class PaperController {
               })),
           })),
           aiReviewReport: round.aiReviewReport,
-          complianceReport: round.complianceReport,
+          complianceReport: round.complianceReportsByUser?.[userId]?.report ?? (round.complianceReportsByUser ? null : round.complianceReport),
           annotatedPdfUrl: round.annotatedPdfUrl,
           artifacts: {
             checklistItems: (round.checklistItems ?? []).map(item => ({
@@ -334,13 +335,15 @@ export class PaperController {
               description: item.description,
               isChecked: item.isChecked,
             })),
-            aiReviewReports: (round.aiReviewReports ?? []).map(report => ({
-              id: report.id,
-              reviewText: report.reviewText,
-              annotatedPdfUrl: report.annotatedPdfUrl,
-              venue: report.venue,
-              createdAt: report.createdAt,
-            })),
+            aiReviewReports: (round.aiReviewReports ?? [])
+              .filter(report => !report.requestedBy || report.requestedBy.id === userId)
+              .map(report => ({
+                id: report.id,
+                reviewText: report.reviewText,
+                annotatedPdfUrl: report.annotatedPdfUrl,
+                venue: report.venue,
+                createdAt: report.createdAt,
+              })),
           },
         }));
 
@@ -668,8 +671,8 @@ export class PaperController {
       const id = req.params.id as string;
       const { status } = req.body;
       if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-      if (status !== PaperStatus.Archived && status !== PaperStatus.Draft) {
-        return res.status(400).json({ message: 'Only Archived and Draft status updates are supported' });
+      if (!Object.values(PaperStatus).includes(status)) {
+        return res.status(400).json({ message: `status must be one of: ${Object.values(PaperStatus).join(', ')}` });
       }
 
       const paperRepo = AppDataSource.getRepository(Paper);
@@ -686,12 +689,13 @@ export class PaperController {
       }
 
       if (status === PaperStatus.Archived) {
-        if (paper.status === PaperStatus.HumanReview || paper.status === PaperStatus.AIReview) {
-          return res.status(400).json({ message: 'Paper cannot be archived while it is in human review or AI review' });
+        const now = new Date();
+        const roundsWithSubmissionDeadline = (paper.rounds ?? []).filter(round => !!round.submissionDeadline);
+        if (roundsWithSubmissionDeadline.length === 0) {
+          return res.status(400).json({ message: 'Paper cannot be archived because no submission deadline is set' });
         }
 
-        const now = new Date();
-        const futureSubmission = (paper.rounds ?? []).find(round =>
+        const futureSubmission = roundsWithSubmissionDeadline.find(round =>
           round.submissionDeadline && round.submissionDeadline.getTime() > now.getTime()
         );
         if (futureSubmission) {

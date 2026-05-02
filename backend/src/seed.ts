@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { AppDataSource } from './data-source';
+import { AppDataSource, normalizeLegacyPaperStatuses } from './data-source';
 import { IsNull } from 'typeorm';
 import { Coordinator } from './entities/Coordinator';
 import { Admin } from './entities/GlobalAdmin';
@@ -30,6 +30,10 @@ const DEFAULT_TOPIC_NAMES = [
 
 export async function runSeed(options: { reset?: boolean } = {}) {
   const { reset = false } = options;
+
+  if (!reset) {
+    await normalizeLegacyPaperStatuses();
+  }
 
   await AppDataSource.initialize();
 
@@ -133,7 +137,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       title: 'Attention Mechanisms in Transformer Models',
       abstractText: 'A comprehensive study of attention mechanisms and their role in modern transformer architectures.',
       creationTime: new Date(),
-      status: PaperStatus.HumanReview,
+      status: PaperStatus.InReview,
       coordinators: [{ id: coordA.id } as Coordinator],
       labs: [{ id: labA.id } as Lab],
       authors: [{ id: memberA.id } as LabMember],

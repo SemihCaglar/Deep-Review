@@ -5,7 +5,9 @@ import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { User, UserRole } from '../entities/User';
 import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest';
 import { Extension, ExtensionStatus } from '../entities/Extension';
+import { SubmissionRuleSet } from '../entities/SubmissionRuleSet';
 import { sendEmail } from './emailService';
+import { SubmissionRuleExtractionService } from '../ai_content/services/SubmissionRuleExtractionService';
 import { EntityManager, In, Not } from 'typeorm';
 
 export class RoundServiceError extends Error {
@@ -28,6 +30,45 @@ export class RoundService {
 
   private static hasOverleafLink(paper: Paper): boolean {
     return typeof paper.overleafLink === 'string' && paper.overleafLink.trim().length > 0;
+  }
+
+  private static async extractAndLinkSubmissionRules(venueUrl: string | null): Promise<string | null> {
+    if (!venueUrl || typeof venueUrl !== 'string') {
+      return null;
+    }
+
+    try {
+      console.log(`[RoundService] Attempting to extract rules for: ${venueUrl}`);
+      const rules = await SubmissionRuleExtractionService.extractSubmissionRules(venueUrl);
+
+      // Get the rule set ID from the database
+      const ruleSetRepo = AppDataSource.getRepository(SubmissionRuleSet);
+      const ruleSet = await ruleSetRepo.findOne({ where: { sourceUrl: venueUrl } });
+
+      if (ruleSet) {
+        console.log(`[RoundService] Successfully linked rules with ID: ${ruleSet.id}`);
+        return ruleSet.id;
+      }
+
+      return null;
+    } catch (error) {
+      // Gracefully handle extraction failures - don't fail the round creation
+      console.warn(`[RoundService] Failed to extract submission rules for ${venueUrl}:`, error);
+      return null;
+    }
+  }
+
+  static async extractAndLinkRules(roundId: string, venueUrl: string): Promise<void> {
+    try {
+      const ruleSetId = await this.extractAndLinkSubmissionRules(venueUrl);
+      if (ruleSetId) {
+        const roundRepo = AppDataSource.getRepository(Round);
+        await roundRepo.update(roundId, { submissionRuleSetId: ruleSetId });
+        console.log(`[RoundService] Round ${roundId} linked to rules ${ruleSetId}`);
+      }
+    } catch (error) {
+      console.error(`[RoundService] Error in extractAndLinkRules for round ${roundId}:`, error);
+    }
   }
 
   static async completeRoundIfAllAssignmentsTerminal(
@@ -67,6 +108,23 @@ export class RoundService {
       status: RoundStatus.Completed,
       completedAt: new Date(),
     });
+
+    if (round.paper?.id) {
+      await manager.getRepository(Paper).update(round.paper.id, {
+        status: PaperStatus.Completed,
+      });
+    } else {
+      const completedRound = await roundRepo.findOne({
+        where: { id: roundId },
+        relations: ['paper'],
+      });
+      if (completedRound?.paper?.id) {
+        await manager.getRepository(Paper).update(completedRound.paper.id, {
+          status: PaperStatus.Completed,
+        });
+      }
+    }
+
     return true;
   }
 
@@ -105,6 +163,9 @@ export class RoundService {
 
       round.status = RoundStatus.Open;
       round.startedAt = new Date();
+      if (round.paper.status !== PaperStatus.InReview) {
+        await manager.getRepository(Paper).update(round.paper.id, { status: PaperStatus.InReview });
+      }
 
       return roundRepo.save(round);
     });
@@ -202,10 +263,10 @@ export class RoundService {
         assigned++;
       }
 
-      // Transition paper to HumanReview
-      if (assigned > 0 && round.paper.status !== PaperStatus.HumanReview) {
+      // Transition paper to In Review
+      if (assigned > 0 && round.paper.status !== PaperStatus.InReview) {
         const paperRepo = manager.getRepository(Paper);
-        await paperRepo.update(round.paper.id, { status: PaperStatus.HumanReview });
+        await paperRepo.update(round.paper.id, { status: PaperStatus.InReview });
       }
 
       const startedAt = new Date();

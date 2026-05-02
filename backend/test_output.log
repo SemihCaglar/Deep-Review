@@ -1,0 +1,26 @@
+
+> backend@1.0.0 dev
+> ts-node src/index.ts src/testSubmissionRules.ts
+
+/home/semih/Dev/cs319/Team8/backend/node_modules/ts-node/src/index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+src/ai_content/services/WebsiteScraperService.ts(11,9): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(input: string | URL | Request, init?: RequestInit | undefined): Promise<Response>', gave the following error.
+    Object literal may only specify known properties, and 'timeout' does not exist in type 'RequestInit'.
+  Overload 2 of 2, '(input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>', gave the following error.
+    Object literal may only specify known properties, and 'timeout' does not exist in type 'RequestInit'.
+
+    at createTSError (/home/semih/Dev/cs319/Team8/backend/node_modules/ts-node/src/index.ts:859:12)
+    at reportTSError (/home/semih/Dev/cs319/Team8/backend/node_modules/ts-node/src/index.ts:863:19)
+    at getOutput (/home/semih/Dev/cs319/Team8/backend/node_modules/ts-node/src/index.ts:1077:36)
+    at Object.compile (/home/semih/Dev/cs319/Team8/backend/node_modules/ts-node/src/index.ts:1433:41)
+    at Module.m._compile (/home/semih/Dev/cs319/Team8/backend/node_modules/ts-node/src/index.ts:1617:30)
+    at node:internal/modules/cjs/loader:1971:10
+    at Object.require.extensions.<computed> [as .ts] (/home/semih/Dev/cs319/Team8/backend/node_modules/ts-node/src/index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19) {
+  diagnosticCodes: [ 2769 ]
+}

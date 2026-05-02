@@ -38,6 +38,14 @@ export class AssignmentController {
       const isOwner = round.paper.coordinators?.some(c => c.id === coordinator.id);
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
+      const now = new Date();
+      const shouldReopenCompletedRound = round.status === RoundStatus.Completed;
+      if (shouldReopenCompletedRound) {
+        if (!round.deadline || round.deadline.getTime() < now.getTime()) {
+          return res.status(400).json({ message: 'Cannot add reviewers to a completed round after the round deadline has passed' });
+        }
+      }
+
       const authorIds = new Set(round.paper.authors?.map(a => a.id) ?? []);
       const userRepo = AppDataSource.getRepository('User');
       const assignRepo = AppDataSource.getRepository(Assignment);
@@ -73,6 +81,19 @@ export class AssignmentController {
       }
 
       await assignRepo.save(newAssignments);
+
+      if (shouldReopenCompletedRound) {
+        round.status = RoundStatus.Open;
+        round.completedAt = null;
+        await roundRepo.save(round);
+      }
+
+      if (round.paper.status !== PaperStatus.InReview) {
+        const paperRepo = AppDataSource.getRepository(Paper);
+        round.paper.status = PaperStatus.InReview;
+        await paperRepo.save(round.paper);
+      }
+
       return res.status(201).json(newAssignments.map(a => ({
         id: a.id,
         reviewerId: a.reviewer.id,
@@ -128,11 +149,11 @@ export class AssignmentController {
         await assignRepo.save(pendingInvitations);
       }
 
-      // Transition paper to HumanReview when first invitations are sent
+      // Transition paper to In Review when first invitations are sent
       const paper = round.paper;
-      if (pendingInvitations.length > 0 && paper.status !== PaperStatus.HumanReview) {
+      if (pendingInvitations.length > 0 && paper.status !== PaperStatus.InReview) {
         const paperRepo = AppDataSource.getRepository(Paper);
-        paper.status = PaperStatus.HumanReview;
+        paper.status = PaperStatus.InReview;
         await paperRepo.save(paper);
       }
 

@@ -178,7 +178,7 @@ export function updateProfileRequest(name: string, email: string, currentPositio
     body: {
       name,
       email,
-      ...(currentPosition !== undefined ? { currentPosition } : {}),
+      ...(currentPosition !== undefined ? { currentPosition: currentPosition ?? '' } : {}),
     },
   });
 }
@@ -433,11 +433,12 @@ export type AuthorRound = {
   completedAt: string | null;
   proposedReviewers: { id: string; name: string; email: string }[];
   aiReviewReport?: AIReviewReport | null;
+  aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
   annotatedPdfUrl?: string | null;
   artifacts?: {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
-    aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
+    aiReviewReports: AIReviewReportHistory[];
   };
 };
 
@@ -813,38 +814,16 @@ export function getUserAnalyticsRequest(userId: string) {
 // ==== AI POST-REVIEW API FUNCTIONS ====
 
 /**
- * Starts an AI review by uploading the paper's PDF.
+ * Starts an AI review with compliance check by uploading the paper's PDF.
  * Sends multipart/form-data with a 'pdf' field.
+ * Compliance check runs first if rules are linked, then AI review.
  */
 export async function startAIReviewRequest(roundId: string, pdfFile: File): Promise<{ message: string; data: any }> {
   const token = getToken();
   const formData = new FormData();
   formData.append('pdf', pdfFile);
 
-  const response = await fetch(buildUrl(`/rounds/${roundId}/ai-review`), {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData,
-  });
-
-  const payload = await parseResponseBody(response);
-  if (!response.ok) {
-    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
-  }
-  return payload as { message: string; data: any };
-}
-
-/**
- * Runs the compliance check by uploading the paper's PDF.
- * Sends multipart/form-data with a 'pdf' field + venueRules as stringified JSON.
- */
-export async function runComplianceCheckRequest(roundId: string, pdfFile: File, venueRules: any = {}): Promise<{ message: string; data: any }> {
-  const token = getToken();
-  const formData = new FormData();
-  formData.append('pdf', pdfFile);
-  formData.append('venueRules', JSON.stringify(venueRules));
-
-  const response = await fetch(buildUrl(`/rounds/${roundId}/compliance`), {
+  const response = await fetch(buildUrl(`/rounds/${roundId}/ai-review-with-compliance`), {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,

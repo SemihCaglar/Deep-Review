@@ -375,9 +375,9 @@ describe('5 · Approve round — happy path', () => {
         expect(res.body.skipped).toBe(0);
     });
 
-    test('paper transitions to HumanReview after approve', async () => {
+    test('paper transitions to InReview after approve', async () => {
         const paper = await AppDataSource.getRepository(Paper).findOne({ where: { id: paperId } });
-        expect(paper?.status).toBe(PaperStatus.HumanReview);
+        expect(paper?.status).toBe(PaperStatus.InReview);
     });
 
     test('round now has assignments for both proposed reviewers', async () => {

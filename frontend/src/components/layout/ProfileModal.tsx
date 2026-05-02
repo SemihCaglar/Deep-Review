@@ -200,7 +200,7 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
     setError('');
 
     try {
-      const response = await updateProfileRequest(nextName, nextEmail, nextCurrentPosition || null);
+      const response = await updateProfileRequest(nextName, nextEmail, nextCurrentPosition);
       const nextUser: StoredAuthUser = {
         ...profileUser,
         ...response.user,

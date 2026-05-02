@@ -22,7 +22,7 @@ export interface Paper {
     title: string;
     abstract: string;
     topics: string[];
-    status: 'Draft' | 'In Review' | 'Review Done' | 'Accepted' | 'Rejected' | 'Archived';
+    status: 'Draft' | 'In Review' | 'Completed' | 'Accepted' | 'Archived';
     authors: string[];
     parentPapers?: string[];
     overleafLink?: string;
@@ -34,7 +34,7 @@ export interface ReviewRound {
     paperId: string;
     roundNumber: number;
     deadline: string;
-    status: 'Open' | 'Closed';
+    status: 'Open' | 'Completed';
 }
 
 export interface ReviewRating {

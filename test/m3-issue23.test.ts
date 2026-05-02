@@ -465,13 +465,13 @@ describe('6 · Send invitations & paper status', () => {
         assignment1Id = res.body[0].id;
     });
 
-    test('send invitations → paper transitions to HumanReview', async () => {
+    test('send invitations → paper transitions to InReview', async () => {
         const res = await api(coordinatorToken).post('/api/assignments/invite', { roundId: conferenceRoundId });
         expect(res.status).toBe(200);
 
         const paperRepo = AppDataSource.getRepository(Paper);
         const paper = await paperRepo.findOne({ where: { id: paperId } });
-        expect(paper?.status).toBe(PaperStatus.HumanReview);
+        expect(paper?.status).toBe(PaperStatus.InReview);
     });
 
     test('sending invitations again sends 0 (idempotent)', async () => {
@@ -825,7 +825,7 @@ describe('13 · Overdue detection & round auto-completion', () => {
             abstractText: 'Used to test overdue logic.',
             overleafLink: 'https://overleaf.com/read/overdue-test',
             creationTime: new Date(),
-            status: PaperStatus.HumanReview,
+            status: PaperStatus.InReview,
         });
         const lab = await AppDataSource.getRepository(Lab).findOne({ where: { id: labId } });
         const coordinator = await AppDataSource.getRepository('User').findOne({ where: { id: coordinatorId } }) as any;

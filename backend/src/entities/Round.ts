@@ -41,6 +41,9 @@ export class Round {
   @Column({ nullable: true, type: 'text' })
   targetVenueUrl: string | null;
 
+  @Column({ nullable: true, type: 'text' })
+  submissionRuleSetId: string | null;
+
   @Column({
     type: 'simple-enum',
     enum: VenueCategory,
@@ -86,6 +89,9 @@ export class Round {
 
   @Column({ type: 'simple-json', nullable: true })
   complianceReport: any;
+
+  @Column({ type: 'simple-json', nullable: true })
+  complianceReportsByUser: Record<string, { report: any; createdAt: string }> | null;
 
   @Column({ nullable: true })
   annotatedPdfUrl: string;

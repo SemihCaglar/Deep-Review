@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Star, Search, FlaskConical, X } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, Download } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
@@ -19,6 +19,7 @@ import {
   getLabsRequest,
   getPaperInvitationsRequest, sendCollaborationInvitationsRequest, cancelCollaborationInvitationRequest,
   LabCollaborationInvitation,
+  startAIReviewRequest,
 } from '@/lib/api';
 
 
@@ -40,6 +41,15 @@ function maxDateInputValue(...values: Array<string | null | undefined>) {
     const sorted = values.filter((value): value is string => Boolean(value)).sort();
     return sorted[sorted.length - 1];
 }
+
+const AI_PHASES = [
+    { at: 0, msg: 'Uploading PDF to agent…' },
+    { at: 4, msg: 'Agent is reading the paper…' },
+    { at: 12, msg: 'Analyzing content and generating feedback…' },
+    { at: 22, msg: 'Annotating PDF…' },
+    { at: 32, msg: 'Downloading annotated PDF…' },
+    { at: 42, msg: 'Almost done…' },
+];
 
 export default function PaperDetails({ params }: { params: { id: string } }) {
     const { user } = useUser();
@@ -112,6 +122,11 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [roundDeadlineDraft, setRoundDeadlineDraft] = useState('');
     const [editingSubmissionDeadline, setEditingSubmissionDeadline] = useState<string | null>(null);
     const [submissionDeadlineDraft, setSubmissionDeadlineDraft] = useState('');
+    const aiFileRef = useRef<HTMLInputElement>(null);
+    const pendingAiRoundId = useRef<string | null>(null);
+    const [runningAiRoundId, setRunningAiRoundId] = useState<string | null>(null);
+    const [aiStatusByRound, setAiStatusByRound] = useState<Record<string, string>>({});
+    const [aiResultsByRound, setAiResultsByRound] = useState<Record<string, any>>({});
 
     // Collaboration state
     const [collabInvitations, setCollabInvitations] = useState<LabCollaborationInvitation[]>([]);
@@ -263,7 +278,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         switch (status) {
             case 'Draft': return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
             case 'In Review': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-            case 'Review Done': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+            case 'Completed': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Accepted': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Archived': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
             default: return 'bg-white/10 text-slate-300 border-white/20';
@@ -298,18 +313,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         }
     };
 
-    // Calculate effective assignment statuses including local mocks
-    const getEffectiveAssignmentStatus = (assignmentId: string, reviewerId: string, originalStatus: string) => {
-        if (reviewerId === user.id && localAssignmentStatus) {
-            return localAssignmentStatus;
-        }
-        return originalStatus;
-    };
-
-    const isRoundComplete = assignments.length > 0 && assignments.every(a =>
-        getEffectiveAssignmentStatus(a.id, a.reviewerId, a.status) === 'Submitted'
-    );
-    const effectivePaperStatus = isRoundComplete && currentStatus === 'In Review' ? 'Review Done' : currentStatus;
+    const effectivePaperStatus = currentStatus;
     const canEditAuthors = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
     const canEditLinks = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
     const canChangeArchiveState = user.isCoordinator || isAuthor;
@@ -532,6 +536,42 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
             setProposedMap(prev => ({ ...prev, [roundId]: updated }));
         } catch (e) {
             setRoundErrors(prev => ({ ...prev, [roundId]: e instanceof ApiError ? e.message : 'Failed to remove reviewer' }));
+        }
+    };
+
+    const openAiUpload = (roundId: string) => {
+        pendingAiRoundId.current = roundId;
+        aiFileRef.current?.click();
+    };
+
+    const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        const roundId = pendingAiRoundId.current;
+        e.target.value = '';
+        if (!file || !roundId) return;
+
+        setRunningAiRoundId(roundId);
+        setRoundErrors(prev => ({ ...prev, [roundId]: '' }));
+        setAiStatusByRound(prev => ({ ...prev, [roundId]: AI_PHASES[0].msg }));
+
+        const start = Date.now();
+        const ticker = window.setInterval(() => {
+            const elapsed = (Date.now() - start) / 1000;
+            const phase = [...AI_PHASES].reverse().find(p => elapsed >= p.at);
+            if (phase) setAiStatusByRound(prev => ({ ...prev, [roundId]: phase.msg }));
+        }, 1000);
+
+        try {
+            const res = await startAIReviewRequest(roundId, file);
+            setAiResultsByRound(prev => ({ ...prev, [roundId]: res.data }));
+            await refreshRounds();
+        } catch (e) {
+            setRoundErrors(prev => ({ ...prev, [roundId]: e instanceof ApiError ? e.message : 'AI Review failed' }));
+        } finally {
+            window.clearInterval(ticker);
+            setAiStatusByRound(prev => ({ ...prev, [roundId]: '' }));
+            setRunningAiRoundId(null);
+            pendingAiRoundId.current = null;
         }
     };
 
@@ -1114,7 +1154,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
 
                     {/* Reviewer Actions */}
-                    {!user.isCoordinator && (effectivePaperStatus === 'In Review' || effectivePaperStatus === 'Review Done') && myAssignment?.status === 'Pending' && !showDeclineForm && (
+                    {!user.isCoordinator && effectivePaperStatus === 'In Review' && myAssignment?.status === 'Pending' && !showDeclineForm && (
                         <div className="flex gap-2">
                             <button
                                 onClick={() => setLocalAssignmentStatus('Accepted')}
@@ -1134,7 +1174,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
 
                     {/* Decline Reason Form */}
-                    {!user.isCoordinator && (effectivePaperStatus === 'In Review' || effectivePaperStatus === 'Review Done') && myAssignment?.status === 'Pending' && showDeclineForm && (
+                    {!user.isCoordinator && effectivePaperStatus === 'In Review' && myAssignment?.status === 'Pending' && showDeclineForm && (
                         <div className="glass p-4 rounded-xl border border-red-500/30 mt-2 bg-red-500/5 animate-in slide-in-from-top-2">
                             <label className="block text-xs font-medium text-slate-300 mb-2">Reason for declining <span className="text-red-400">*</span></label>
                             <textarea
@@ -1160,7 +1200,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         </div>
                     )}
 
-                    {!user.isCoordinator && (effectivePaperStatus === 'In Review' || effectivePaperStatus === 'Review Done') && myAssignment?.status === 'Accepted' && localAssignmentStatus !== 'Submitted' && (
+                    {!user.isCoordinator && effectivePaperStatus === 'In Review' && myAssignment?.status === 'Accepted' && localAssignmentStatus !== 'Submitted' && (
                         <div className="space-y-2">
                             <button
                                 onClick={handleSubmitReview}
@@ -1328,6 +1368,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     {/* Author / coordinator round proposal section */}
                     {(isAuthor || user.isCoordinator) && (
                         <div className="glass p-6 rounded-2xl border border-white/5 space-y-4">
+                            <input ref={aiFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
                             <div className="flex items-center justify-between flex-wrap gap-2">
                                 <h2 className="text-xl font-semibold text-white">Active Round</h2>
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -1425,6 +1466,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 const statusColor = round.status === 'Draft' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
                                     : round.status === 'Open' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
                                     : 'text-slate-400 border-slate-500/30 bg-slate-500/10';
+                                const aiReviews = round.aiReviewReports ?? round.artifacts?.aiReviewReports ?? [];
+                                const recentAiResult = aiResultsByRound[round.id];
 
                                 return (
                                     <div key={round.id} className="rounded-xl border border-white/10 overflow-hidden">
@@ -1587,6 +1630,60 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                             </p>
                                                         )}
                                                     </>
+                                                )}
+
+                                                {round.status !== 'Draft' && (
+                                                    <div className="pt-3 border-t border-white/5 space-y-3">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <button
+                                                                onClick={() => openAiUpload(round.id)}
+                                                                disabled={runningAiRoundId === round.id}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                {runningAiRoundId === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
+                                                                {runningAiRoundId === round.id ? 'Running…' : 'Run AI Review'}
+                                                            </button>
+                                                            {aiStatusByRound[round.id] && (
+                                                                <span className="text-xs text-indigo-300 animate-pulse">{aiStatusByRound[round.id]}</span>
+                                                            )}
+                                                        </div>
+
+                                                        {(aiReviews.length > 0 || recentAiResult) && (
+                                                            <div className="p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
+                                                                <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">My AI Review History</p>
+                                                                <div className="space-y-2">
+                                                                    {recentAiResult && (
+                                                                        <div className="rounded-lg bg-slate-800/30 p-2 space-y-2">
+                                                                            <p className="text-[10px] text-slate-500">Latest run</p>
+                                                                            <p className="text-xs text-slate-300 whitespace-pre-wrap max-h-72 overflow-y-auto">{recentAiResult.reviewText || recentAiResult.summaryReport}</p>
+                                                                            {recentAiResult.annotatedPdfUrl && (
+                                                                                <a href={recentAiResult.annotatedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
+                                                                                    <Download className="w-3 h-3" /> Download Annotated PDF
+                                                                                </a>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                    {aiReviews.map((review: any, idx: number) => (
+                                                                        <details key={review.id} className="rounded-lg bg-slate-800/30">
+                                                                            <summary className="cursor-pointer px-2 py-1.5 text-xs text-slate-300">
+                                                                                Review #{aiReviews.length - idx}
+                                                                                {review.createdAt && <span className="ml-2 text-[10px] text-slate-500">{new Date(review.createdAt).toLocaleString()}</span>}
+                                                                            </summary>
+                                                                            <div className="px-2 pb-2 space-y-2">
+                                                                                <p className="text-xs text-slate-300 whitespace-pre-wrap max-h-72 overflow-y-auto">{review.reviewText}</p>
+                                                                                {review.annotatedPdfUrl && (
+                                                                                    <a href={review.annotatedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
+                                                                                        <Download className="w-3 h-3" /> Download Annotated PDF
+                                                                                    </a>
+                                                                                )}
+                                                                            </div>
+                                                                        </details>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                    </div>
                                                 )}
 
                                                 {round.status === 'Open' && (
@@ -1858,7 +1955,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     try {
                                                         await cancelCollaborationInvitationRequest(inv.id);
                                                         setCollabInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'Cancelled' as const } : i));
-                                                        setAllLabs(prev => [...prev, { id: inv.invitedLab.id, name: inv.invitedLab.name }]);
+                                                        setAllLabs(prev => [...prev, { id: inv.invitedLab.id, name: inv.invitedLab.name, description: '' }]);
                                                     } catch (e: any) {
                                                         setCancelError(e.message || 'Failed to cancel invitation.');
                                                     } finally {
