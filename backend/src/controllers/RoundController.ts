@@ -847,8 +847,8 @@ export class RoundController {
       console.log(`[RoundController] File uploaded to Azure with ID: ${fileId}`);
 
       const venueName = round.targetVenue || 'the conference';
-      console.log(`[RoundController] Running peer review for venue: ${venueName}...`);
-      const reviewResult = await agentService.runAnnotatedReview(fileId, venueName);
+      console.log(`[RoundController] Running peer review...`);
+      const reviewResult = await agentService.runAnnotatedReview(fileId);
 
       // Log the review result
       const titleMatch = reviewResult.summaryText.match(/## Paper Title\n(.*?)($|\n)/);

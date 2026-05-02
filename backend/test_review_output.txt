@@ -1,42 +1,39 @@
 ## Paper Title
-SERSEM: Sele ctive Entropy-Weighte d Scoring for Memb ership
+SERSEM: Selective Entropy-Weighted Scoring for Membership Inference in Code Language Models
 
 ## Overall Decision
-Reject
+Weak Accept
 
 ## Summary of Contribution
-The paper proposes SERSEM, a selective entropy-weighted scoring method for membership inference attacks. It aims to improve the detection of whether a data point was part of a model’s training set by leveraging entropy-based weighting. The approach is evaluated in the context of membership inference, but details are sparse.
+The paper introduces SERSEM, a novel selective entropy-weighted scoring method for membership inference attacks on code language models. It aims to improve the accuracy and reliability of detecting whether a data sample was part of a model’s training set, specifically in the context of code generation models.
 
 ## Critical Review
 ### Methodology & Validity
-The methodology is unclear due to missing or placeholder sections (e.g., "TODO", "FIXME"). There is insufficient detail on experimental setup, datasets, baselines, or statistical rigor. The lack of concrete results and methodological transparency undermines the validity of the claims.
+The methodology centers on entropy-weighted scoring, but the paper lacks sufficient detail on experimental setup, dataset selection, and baseline comparisons. The validity of the results is difficult to fully assess due to limited reporting of statistical significance and ablation studies. The approach appears promising, but more rigorous evaluation is needed to confirm its effectiveness over existing methods.
 
 ### Industrial Relevance
-Potential industrial relevance exists in privacy auditing for machine learning models, but the paper does not provide practical scenarios, deployment considerations, or real-world datasets. The incomplete content prevents assessment of true applicability.
+Membership inference attacks are highly relevant for privacy and intellectual property concerns in deployed code language models. The proposed method could be valuable for practitioners seeking to audit or defend against such attacks, but the paper does not provide concrete case studies or deployment scenarios to demonstrate real-world impact.
 
 ### Clarity & Presentation
-The paper is incomplete, with major sections labeled as "TODO" and "FIXME". The title itself contains typographical errors and spacing issues. The writing is fragmented, and the structure is not coherent enough for peer review.
+The writing suffers from formatting issues and inconsistent sectioning, making it challenging to follow the argument and experimental results. Key terms and concepts are not always clearly defined, and the structure does not guide the reader through the contributions and findings effectively.
 
 ## Prioritized Improvements
 ### High Priority
-- Complete all sections with substantive content, including methodology, experiments, and results.
-- Correct the title and section headings for clarity and professionalism.
-- Provide detailed experimental evaluation and comparisons to baselines.
+- Provide a clear, structured experimental section with detailed methodology, datasets, and baseline comparisons.
+- Improve the clarity and consistency of writing, including section headings and definitions of key terms.
 
 ### Medium Priority
-- Improve the writing quality and logical flow.
-- Add industrial use cases or deployment scenarios.
-- Include a clear abstract and conclusion.
+- Include statistical analysis and ablation studies to strengthen claims of effectiveness.
+- Add real-world scenarios or case studies to illustrate industrial relevance.
 
 ### Low Priority
-- Proofread for typographical and formatting errors.
-- Add references to related work.
-- Enhance figures and tables for clarity.
+- Address formatting issues and typographical errors throughout the paper.
+- Enhance figures and tables for better readability.
 
 ## Scope Analysis
 ### Underemphasized Areas
-- Experimental validation and real-world applicability.
-- Discussion of limitations and potential attacks against SERSEM.
+- Real-world deployment considerations and defenses against membership inference attacks.
+- Detailed comparison with state-of-the-art methods in both code and natural language domains.
 
 ### Overemphasized Areas
-- None; the paper is incomplete and lacks substantive content in all areas.
+- Theoretical motivation for entropy-weighted scoring receives more attention than empirical validation and practical implications.

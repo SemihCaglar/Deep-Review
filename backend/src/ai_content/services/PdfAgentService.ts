@@ -11,13 +11,20 @@ export interface AgentReviewResult {
 }
 
 export interface ChecklistAnalysisResult {
+  paperTitle?: string;
   selectedStandards: Array<{ label: string; confidence: string; evidence: string }>;
 }
 
-const CHECKLIST_PROMPT = `Analyze the attached academic paper PDF and select the applicable SIGSOFT Empirical Standards checklist categories.
-Return ONLY valid JSON. Do not include markdown. Do not include explanations outside JSON.
+const CHECKLIST_PROMPT = `STEP 1: READ THE ATTACHED PDF USING PYTHON CODE
+Use Python with PyPDF2 or similar to:
+- Load the attached PDF file
+- Extract the full text content
+- Understand the research methodology and type
 
-If your manuscript proposes and assesses a new artifact (e.g. a tool) select Engineering Research and the empirical method(s) used to assess the artifact. If your manuscript reports a multimethodology or mixed-methods study, select Multimethodology and both methods. If your manuscript uses a method not listed here, choose the last option.
+STEP 2: ANALYZE AND RETURN JSON ONLY
+Analyze the paper content and select the applicable SIGSOFT Empirical Standards checklist categories.
+
+If the manuscript proposes and assesses a new artifact (e.g. a tool) select Engineering Research and the empirical method(s) used to assess the artifact. If the manuscript reports a multimethodology or mixed-methods study, select Multimethodology and both methods. If the manuscript uses a method not listed here, choose the last option.
 
 Possible standards:
 - Engineering Research
@@ -40,8 +47,9 @@ Possible standards:
 - Replication
 - Empirical Method Not Listed Above
 
-Return this exact JSON schema:
+Return ONLY this exact JSON (no markdown, no explanations):
 {
+  "paperTitle": "Extracted paper title from the PDF",
   "selectedStandards": [
     { "label": "Engineering Research", "confidence": "high", "evidence": "Short evidence from the paper" }
   ]
@@ -52,7 +60,7 @@ Rules:
 - Use confidence: "high", "medium", or "low".
 - Keep evidence short and concrete.
 - label must exactly match one of the 19 standards listed above.
-- Return JSON only.`;
+- Return JSON only - no other text.`;
 
 export class PdfAgentService {
   private client: AgentsClient;
@@ -95,7 +103,7 @@ export class PdfAgentService {
   }
 
 
-  async runAnnotatedReview(fileId: string, venueName: string = "the conference"): Promise<AgentReviewResult> {
+  async runAnnotatedReview(fileId: string): Promise<AgentReviewResult> {
     const thread = await this.client.threads.create();
 
     const reviewPrompt = `You are a critical academic peer reviewer.
@@ -258,6 +266,7 @@ CRITICAL RULES:
     try {
       const cleanedText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
       const result = JSON.parse(cleanedText) as ChecklistAnalysisResult;
+      console.log(`[PdfAgentService] Checklist analysis: paperTitle="${result.paperTitle}", ${result.selectedStandards.length} standards`);
       return result;
     } catch (e) {
       console.error(`[PdfAgentService] Failed to parse checklist JSON:`, jsonText);
