@@ -117,7 +117,7 @@ export default function RegisterPaper() {
                 authors: selectedAuthors,
                 topics: selectedTopics,
             });
-            router.push('/papers?filter=authored');
+            router.push(user.isCoordinator ? '/papers' : '/papers?filter=authored');
         } catch (err) {
             console.error(err);
             alert('Failed to register paper. Please try again.');
