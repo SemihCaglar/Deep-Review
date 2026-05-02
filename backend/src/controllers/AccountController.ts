@@ -7,6 +7,7 @@ import { Topic } from '../entities/Topic';
 import { ApprovalStatus, User, UserRole } from '../entities/User';
 import { Lab } from '../entities/Lab';
 import { Coordinator } from '../entities/Coordinator';
+import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import {
   accountSecurityPolicy,
   clearLoginLockout,
@@ -389,7 +390,7 @@ export class AccountController {
 
     const visibleLabIds = await AccountController.getVisibleLabIds(authenticatedUser);
     if (visibleLabIds.length === 0) {
-      return res.status(200).json({ users: [] });
+      return res.status(200).json({ users: [], frozenUsers: [] });
     }
 
     const userRepo = AppDataSource.getRepository<User>('User');
@@ -402,17 +403,22 @@ export class AccountController {
       .orderBy('user.name', 'ASC')
       .getMany();
 
+    const serializeUser = (user: User) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      currentPosition: user.currentPosition ?? null,
+      frozenAt: user.frozenAt ?? null,
+    });
+
     return res.status(200).json({
-      users: approvedUsers.map(user => ({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      })),
+      users: approvedUsers.filter(u => !u.frozenAt).map(serializeUser),
+      frozenUsers: approvedUsers.filter(u => !!u.frozenAt).map(serializeUser),
     });
   }
   static async updateProfile(req: AuthenticatedRequest, res: Response) {
-    const { name, email } = req.body ?? {};
+    const { name, email, currentPosition } = req.body ?? {};
     const authenticatedUser = req.user;
 
     if (!authenticatedUser) {
@@ -425,6 +431,14 @@ export class AccountController {
 
     if (typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({ message: 'email is required' });
+    }
+
+    if (currentPosition !== undefined && typeof currentPosition !== 'string') {
+      return res.status(400).json({ message: 'currentPosition must be a string' });
+    }
+
+    if (typeof currentPosition === 'string' && currentPosition.trim().length > 255) {
+      return res.status(400).json({ message: 'currentPosition must be 255 characters or fewer' });
     }
 
     const userRepo = AppDataSource.getRepository<User>('User');
@@ -445,6 +459,9 @@ export class AccountController {
 
     user.name = name.trim();
     user.email = normalizedEmail;
+    if (currentPosition !== undefined) {
+      user.currentPosition = currentPosition.trim() || null;
+    }
 
     try {
       const savedUser = await userRepo.save(user);
@@ -662,6 +679,105 @@ export class AccountController {
     });
   }
 
+  static async freezeMember(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!AccountController.isCoordinatorOrAdmin(authenticatedUser)) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
+    const id = AccountController.parseRouteId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: 'Valid user id is required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const member = await userRepo.findOne({ where: { id }, relations: ['labs'] });
+
+    if (!member) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (member.role !== UserRole.LabMember) {
+      return res.status(400).json({ message: 'Only lab members can be frozen' });
+    }
+
+    if (!(await AccountController.canReviewSignup(authenticatedUser, member as any))) {
+      return res.status(403).json({ message: 'You can only freeze members of your own lab' });
+    }
+
+    if (member.frozenAt) {
+      return res.status(409).json({ message: 'Account is already frozen' });
+    }
+
+    // Auto-cancel any open/invited/accepted assignments
+    const assignmentRepo = AppDataSource.getRepository(Assignment);
+    const activeAssignments = await assignmentRepo.find({
+      where: {
+        reviewer: { id: member.id },
+        status: In([AssignmentStatus.Invited, AssignmentStatus.Accepted]),
+      },
+    });
+
+    for (const assignment of activeAssignments) {
+      assignment.status = AssignmentStatus.Declined;
+      assignment.declineReason = 'Account frozen by coordinator';
+    }
+
+    if (activeAssignments.length > 0) {
+      await assignmentRepo.save(activeAssignments);
+    }
+
+    member.frozenAt = new Date();
+    await userRepo.save(member);
+
+    return res.status(200).json({
+      message: `Account frozen. ${activeAssignments.length} assignment(s) cancelled.`,
+      cancelledAssignments: activeAssignments.length,
+    });
+  }
+
+  static async unfreezeMember(req: AuthenticatedRequest, res: Response) {
+    const authenticatedUser = req.user;
+
+    if (!authenticatedUser) {
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    if (!AccountController.isCoordinatorOrAdmin(authenticatedUser)) {
+      return res.status(403).json({ message: 'Coordinator access is required' });
+    }
+
+    const id = AccountController.parseRouteId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: 'Valid user id is required' });
+    }
+
+    const userRepo = AppDataSource.getRepository<User>('User');
+    const member = await userRepo.findOne({ where: { id }, relations: ['labs'] });
+
+    if (!member) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!(await AccountController.canReviewSignup(authenticatedUser, member as any))) {
+      return res.status(403).json({ message: 'You can only unfreeze members of your own lab' });
+    }
+
+    if (!member.frozenAt) {
+      return res.status(409).json({ message: 'Account is not frozen' });
+    }
+
+    member.frozenAt = null;
+    await userRepo.save(member);
+
+    return res.status(200).json({ message: 'Account unfrozen successfully' });
+  }
+
   private static parseApprovalNote(note: unknown): string | null {
     if (typeof note !== 'string') {
       return null;
@@ -706,9 +822,21 @@ export class AccountController {
     return [...new Set((fullUser?.labs ?? []).map(lab => lab.id))];
   }
 
-  private static async canReviewSignup(reviewer: User, member: LabMember): Promise<boolean> {
+  private static async canReviewSignup(reviewer: User, member: User): Promise<boolean> {
     const visibleLabIds = await AccountController.getVisibleLabIds(reviewer);
-    return Boolean(member.requestedLab && visibleLabIds.includes(member.requestedLab.id));
+    
+    // Case 1: Check requestedLab (for pending signups)
+    if (member.requestedLab && visibleLabIds.includes(member.requestedLab.id)) {
+      return true;
+    }
+
+    // Case 2: Check labs (for already approved members)
+    const memberLabIds = (member.labs || []).map(l => l.id);
+    if (memberLabIds.some(id => visibleLabIds.includes(id))) {
+      return true;
+    }
+
+    return false;
   }
 
   private static serializeAccount(member: User, options: { includeInterests?: boolean } = {}) {
@@ -733,6 +861,8 @@ export class AccountController {
       updatedAt: member.updatedAt,
       otherInterests: member.otherInterests ?? [],
       labs: labs.map(l => ({ id: l.id, name: l.name })),
+      frozenAt: member.frozenAt ?? null,
+      currentPosition: member.currentPosition ?? null,
     };
 
     if (options.includeInterests) {

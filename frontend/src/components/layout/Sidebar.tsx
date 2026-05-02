@@ -26,6 +26,13 @@ export default function Sidebar() {
             ];
         }
 
+        if (user.isFrozen) {
+            return [
+                { name: 'My Dashboard', href: '/dashboard', icon: Home },
+                { name: 'Lab Members', href: '/lab-members', icon: Users },
+            ];
+        }
+
         const base = [
             { name: 'My Dashboard', href: '/dashboard', icon: Home },
             { name: 'Lab Members', href: '/lab-members', icon: Users },

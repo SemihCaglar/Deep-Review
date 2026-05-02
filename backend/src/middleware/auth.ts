@@ -66,3 +66,17 @@ export function requireCoordinator(
 
   return next();
 }
+
+export function requireActiveAccount(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+) {
+  if (req.user?.frozenAt) {
+    return res.status(403).json({
+      message: 'Your account is frozen. You cannot perform this action while your account is inactive.',
+    });
+  }
+
+  return next();
+}

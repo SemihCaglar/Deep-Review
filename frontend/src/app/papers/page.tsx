@@ -49,8 +49,27 @@ export default function PapersList() {
     }, [filter, user.id]);
 
     const currentUserId = String(user.id || '');
+    const getDisplayAuthors = (paper: Paper | AuthoredPaper) => {
+        const authorsById = new Map<string, PaperAuthor>();
+
+        for (const author of paper.authors ?? []) {
+            authorsById.set(author.id, author);
+        }
+
+        for (const coordinator of paper.coordinators ?? []) {
+            if (!authorsById.has(coordinator.id)) {
+                authorsById.set(coordinator.id, {
+                    id: coordinator.id,
+                    name: coordinator.name,
+                    email: coordinator.email,
+                });
+            }
+        }
+
+        return Array.from(authorsById.values());
+    };
     const isAuthoredByCurrentUser = (paper: Paper | AuthoredPaper) =>
-        Boolean(currentUserId && paper.authors?.some((author: PaperAuthor) => author.id === currentUserId));
+        Boolean(currentUserId && getDisplayAuthors(paper).some((author: PaperAuthor) => author.id === currentUserId));
     const getAuthorName = (author: PaperAuthor) => author.name;
     const getPaperAbstract = (paper: Paper | AuthoredPaper) =>
         paper.abstractText || paper.abstract || '';
@@ -78,7 +97,7 @@ export default function PapersList() {
         if (q && !p.title.toLowerCase().includes(q)) return false;
         if (authorFilter.trim()) {
             const af = authorFilter.trim().toLowerCase();
-            const hasAuthor = p.authors?.some(a => a.name.toLowerCase().includes(af));
+            const hasAuthor = getDisplayAuthors(p).some(a => a.name.toLowerCase().includes(af));
             if (!hasAuthor) return false;
         }
         if (statusFilter && p.status !== statusFilter) return false;
@@ -195,7 +214,7 @@ export default function PapersList() {
                                             </span>
                                         </div>
                                         <p className="text-sm text-slate-400 line-clamp-1 leading-relaxed mb-1">
-                                            <span className="font-semibold text-slate-300">Authors:</span> {paper.authors?.map(getAuthorName).join(', ') || 'Unknown'}
+                                            <span className="font-semibold text-slate-300">Authors:</span> {getDisplayAuthors(paper).map(getAuthorName).join(', ') || 'Unknown'}
                                         </p>
                                         <p className="text-sm text-slate-400 line-clamp-2 leading-relaxed mb-3">
                                             {getPaperAbstract(paper)}

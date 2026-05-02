@@ -26,7 +26,7 @@ type ProfileModalProps = {
 };
 
 type ProfileModalView = 'summary' | 'change-password' | 'edit-interests';
-type EditableProfileField = 'name' | 'email';
+type EditableProfileField = 'name' | 'email' | 'currentPosition';
 
 export default function ProfileModal({ onClose }: ProfileModalProps) {
   const { user, setUser } = useUser();
@@ -51,6 +51,7 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
 
   const displayName = profileUser?.name ?? user.name;
   const displayEmail = profileUser?.email ?? user.email;
+  const displayCurrentPosition = profileUser?.currentPosition ?? '';
   const isLabMember = profileUser?.role === 'LabMember';
   const otherTopic = topics.find(topic => topic.name === 'Other');
   const isOtherSelected = !!otherTopic && selectedTopicIds.includes(otherTopic.id);
@@ -165,7 +166,9 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
 
   const startFieldEdit = (field: EditableProfileField) => {
     setEditingField(field);
-    setFieldDraft(field === 'name' ? displayName : displayEmail);
+    if (field === 'name') setFieldDraft(displayName);
+    else if (field === 'email') setFieldDraft(displayEmail);
+    else setFieldDraft(displayCurrentPosition);
     setFeedback('');
     setError('');
   };
@@ -183,20 +186,21 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
 
     const trimmedValue = fieldDraft.trim();
 
-    if (!trimmedValue) {
+    if (!trimmedValue && editingField !== 'currentPosition') {
       setError(editingField === 'name' ? 'Full name is required.' : 'Email is required.');
       return;
     }
 
     const nextName = editingField === 'name' ? trimmedValue : displayName;
     const nextEmail = editingField === 'email' ? trimmedValue : displayEmail;
+    const nextCurrentPosition = editingField === 'currentPosition' ? trimmedValue : displayCurrentPosition;
 
     setIsFieldSaving(true);
     setFeedback('');
     setError('');
 
     try {
-      const response = await updateProfileRequest(nextName, nextEmail);
+      const response = await updateProfileRequest(nextName, nextEmail, nextCurrentPosition || null);
       const nextUser: StoredAuthUser = {
         ...profileUser,
         ...response.user,
@@ -356,6 +360,12 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
                 </div>
               </div>
 
+              {profileUser?.frozenAt ? (
+                <div className="mb-4 rounded-xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+                  ❄️ Your account is currently frozen (Alumni). You can still update your profile.
+                </div>
+              ) : null}
+
               <div className="grid min-w-0 gap-4 sm:grid-cols-2">
                 <ProfileFieldCard
                   disabled={isFieldSaving}
@@ -382,6 +392,24 @@ export default function ProfileModal({ onClose }: ProfileModalProps) {
                   draftValue={fieldDraft}
                   breakAll
                 />
+                {profileUser?.frozenAt ? (
+                  <div className="sm:col-span-2">
+                    <ProfileFieldCard
+                      disabled={isFieldSaving}
+                      editing={editingField === 'currentPosition'}
+                      inputType="text"
+                      label="Current Position"
+                      onCancel={cancelFieldEdit}
+                      onChange={setFieldDraft}
+                      onEdit={() => startFieldEdit('currentPosition')}
+                      onSave={saveFieldEdit}
+                      value={displayCurrentPosition}
+                      draftValue={fieldDraft}
+                      optional
+                      placeholder="e.g. PhD Candidate at MIT, Engineer at Google"
+                    />
+                  </div>
+                ) : null}
               </div>
             </section>
 
@@ -663,6 +691,8 @@ function ProfileFieldCard({
   onChange,
   onEdit,
   onSave,
+  optional = false,
+  placeholder = '',
   value,
 }: {
   breakAll?: boolean;
@@ -675,6 +705,8 @@ function ProfileFieldCard({
   onChange: (value: string) => void;
   onEdit: () => void;
   onSave: () => void;
+  optional?: boolean;
+  placeholder?: string;
   value: string;
 }) {
   return (
@@ -699,10 +731,11 @@ function ProfileFieldCard({
             type={inputType}
             value={draftValue}
             onChange={event => onChange(event.target.value)}
-            className="w-full min-w-0 rounded-xl border border-white/10 bg-background px-3 py-2.5 text-sm text-white transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+            placeholder={placeholder}
+            className="w-full min-w-0 rounded-xl border border-white/10 bg-background px-3 py-2.5 text-sm text-white placeholder:text-slate-500 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             disabled={disabled}
             autoFocus
-            required
+            required={!optional}
           />
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <button
@@ -726,7 +759,11 @@ function ProfileFieldCard({
           </div>
         </div>
       ) : (
-        <p className={`${breakAll ? 'break-all' : 'break-words'} font-medium text-slate-100`}>{value}</p>
+        optional && !value ? (
+          <p className="break-words text-sm text-slate-500 italic">Not set</p>
+        ) : (
+          <p className={`${breakAll ? 'break-all' : 'break-words'} font-medium text-slate-100`}>{value}</p>
+        )
       )}
     </div>
   );
