@@ -6,7 +6,7 @@ import { User, UserRole } from '../entities/User';
 import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest';
 import { Extension, ExtensionStatus } from '../entities/Extension';
 import { sendEmail } from './emailService';
-import { IsNull, LessThan, MoreThan } from 'typeorm';
+import { EntityManager, In, Not } from 'typeorm';
 
 export class RoundServiceError extends Error {
   statusCode: number;
@@ -18,8 +18,56 @@ export class RoundServiceError extends Error {
 }
 
 export class RoundService {
+  private static readonly terminalAssignmentStatuses = [
+    AssignmentStatus.Declined,
+    AssignmentStatus.Cancelled,
+    AssignmentStatus.Reassigned,
+    AssignmentStatus.Completed,
+    AssignmentStatus.Overdue,
+  ];
+
   private static hasOverleafLink(paper: Paper): boolean {
     return typeof paper.overleafLink === 'string' && paper.overleafLink.trim().length > 0;
+  }
+
+  static async completeRoundIfAllAssignmentsTerminal(
+    roundId: string,
+    manager: EntityManager = AppDataSource.manager,
+  ): Promise<boolean> {
+    const roundRepo = manager.getRepository(Round);
+    const round = await roundRepo.findOne({
+      where: { id: roundId },
+    });
+
+    if (!round || round.status !== RoundStatus.Open) {
+      return false;
+    }
+
+    const assignmentRepo = manager.getRepository(Assignment);
+    const totalAssignments = await assignmentRepo.count({
+      where: { round: { id: roundId } },
+    });
+
+    if (totalAssignments === 0) {
+      return false;
+    }
+
+    const nonTerminalAssignments = await assignmentRepo.count({
+      where: {
+        round: { id: roundId },
+        status: Not(In(this.terminalAssignmentStatuses)),
+      },
+    });
+
+    if (nonTerminalAssignments > 0) {
+      return false;
+    }
+
+    await roundRepo.update(roundId, {
+      status: RoundStatus.Completed,
+      completedAt: new Date(),
+    });
+    return true;
   }
 
   static async startRound(roundId: string, coordinatorId: string): Promise<Round> {
@@ -191,9 +239,12 @@ export class RoundService {
       .andWhere('a.status IN (:...statuses)', { statuses: activeStatuses })
       .getMany();
 
+    const affectedRoundIds = new Set<string>();
+
     for (const assignment of allOverdue) {
       assignment.status = AssignmentStatus.Overdue;
       await assignRepo.save(assignment);
+      if (assignment.round?.id) affectedRoundIds.add(assignment.round.id);
 
       await AppDataSource.getRepository(DeclineRequest).update(
         { assignment: { id: assignment.id }, status: DeclineRequestStatus.Pending },
@@ -226,30 +277,8 @@ export class RoundService {
       ).catch(err => console.error('[overdueAlert] reviewer email failed:', err));
     }
 
-    // Auto-complete rounds where all assignments are terminal
-    const terminalStatuses = new Set<AssignmentStatus>([
-      AssignmentStatus.Declined,
-      AssignmentStatus.Cancelled,
-      AssignmentStatus.Reassigned,
-      AssignmentStatus.Completed,
-      AssignmentStatus.Overdue,
-    ]);
-
-    const roundRepo = AppDataSource.getRepository(Round);
-    const openRounds = await roundRepo.find({
-      where: { status: RoundStatus.Open },
-      relations: ['assignments'],
-    });
-
-    for (const round of openRounds) {
-      if (round.assignments.length > 0) {
-        const allTerminal = round.assignments.every(a => terminalStatuses.has(a.status));
-        if (allTerminal) {
-          round.status = RoundStatus.Completed;
-          round.completedAt = now;
-          await roundRepo.save(round);
-        }
-      }
+    for (const roundId of affectedRoundIds) {
+      await this.completeRoundIfAllAssignmentsTerminal(roundId);
     }
   }
 

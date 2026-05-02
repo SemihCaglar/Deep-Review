@@ -8,6 +8,7 @@ import { ReviewerResponse, ReviewerResponseStatus } from '../entities/ReviewerRe
 import { User, UserRole } from '../entities/User';
 import { RoundStatus, VenueCategory } from '../entities/Round';
 import { sendEmail } from './emailService';
+import { RoundService } from './RoundService';
 
 export class CoordinatorServiceError extends Error {
   statusCode: number;
@@ -129,6 +130,10 @@ export class CoordinatorService {
           `Hello ${reviewer.name},\n\nYour decline request for paper "${paperTitle}" (Round ${roundNumber}) has been rejected. Your assignment remains active — please continue with the review.`,
         ).catch(console.error);
       }
+    }
+
+    if (decision === 'Approve') {
+      await RoundService.completeRoundIfAllAssignmentsTerminal(result.round.id);
     }
 
     return result;

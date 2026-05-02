@@ -6,6 +6,7 @@ import { Extension, ExtensionStatus } from '../entities/Extension';
 import { Summary } from '../entities/Summary';
 import { UserRole } from '../entities/User';
 import { sendEmail } from '../services/emailService';
+import { RoundService } from '../services/RoundService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class ReviewerResponseController {
@@ -332,6 +333,9 @@ export class ReviewerResponseController {
       }
 
       await declineRepo.save(declineRequest);
+      if (decision === 'approve') {
+        await RoundService.completeRoundIfAllAssignmentsTerminal(declineRequest.assignment.round.id);
+      }
 
       const reviewer = declineRequest.assignment.reviewer;
       const paperTitle = declineRequest.assignment.round.paper.title;
@@ -536,6 +540,8 @@ export class ReviewerResponseController {
         for (const e of pendingExtensions) e.status = ExtensionStatus.Rejected;
         await extensionRepo.save(pendingExtensions);
       }
+
+      await RoundService.completeRoundIfAllAssignmentsTerminal(assignment.round.id);
 
       const paperTitle = assignment.round.paper.title;
       const roundNumber = assignment.round.roundNumber;
