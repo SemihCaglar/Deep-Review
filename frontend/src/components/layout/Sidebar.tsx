@@ -5,12 +5,12 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useLabContext } from '@/components/context/LabContext';
 import { useUser } from '@/components/context/UserContext';
-import { Home, FileText, CheckCircle, LogOut, PlusSquare, UserCheck, Users, Shield, ClipboardList } from 'lucide-react';
+import { Home, FileText, CheckCircle, LogOut, PlusSquare, UserCheck, Users, Shield, ClipboardList, Building2 } from 'lucide-react';
 import ProfileModal from './ProfileModal';
 
 export default function Sidebar() {
     const { user, logout } = useUser();
-    const { clearSelectedLab } = useLabContext();
+    const { selectedLab, clearSelectedLab } = useLabContext();
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -20,6 +20,11 @@ export default function Sidebar() {
         clearSelectedLab();
         logout();
         router.push('/');
+    };
+
+    const handleSwitchLab = () => {
+        clearSelectedLab();
+        router.push('/lab-select');
     };
 
     const getNavItems = () => {
@@ -82,6 +87,25 @@ export default function Sidebar() {
                     </div>
                 </button>
             </div>
+
+            {!user.isAdmin && !user.isCoordinator && selectedLab ? (
+                <div className="px-4 mb-6">
+                    <button
+                        type="button"
+                        onClick={handleSwitchLab}
+                        className="w-full rounded-lg border border-white/10 bg-white/[0.04] p-3 text-left transition-colors hover:border-blue-400/30 hover:bg-white/[0.07] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                    >
+                        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-500">
+                            <Building2 className="h-3.5 w-3.5" />
+                            Selected Lab
+                        </div>
+                        <p className="truncate text-sm font-semibold text-slate-100">{selectedLab.name}</p>
+                        <p className={`mt-1 text-xs ${selectedLab.status === 'Alumni' ? 'text-sky-300' : 'text-blue-300'}`}>
+                            {selectedLab.status === 'Alumni' ? 'Alumni · read-only' : selectedLab.status}
+                        </p>
+                    </button>
+                </div>
+            ) : null}
 
             <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
                 {navItems.map((item) => {
