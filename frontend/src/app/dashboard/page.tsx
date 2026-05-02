@@ -3,18 +3,19 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { 
-  AlertCircle, 
-  CheckCircle, 
-  Clock, 
-  FileText, 
-  Trash2, 
-  UserCheck, 
-  BarChart2, 
+import {
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  FileText,
+  Snowflake,
+  Trash2,
+  UserCheck,
+  BarChart2,
   Search,
-  ChevronDown, 
+  ChevronDown,
   ChevronUp,
-  type LucideIcon 
+  type LucideIcon
 } from 'lucide-react';
 import {
   ApiError,
@@ -293,7 +294,7 @@ export default function DashboardPage() {
   }, [user.isCoordinator]);
 
   const loadRequestDecisions = React.useCallback(async () => {
-    if (user.isCoordinator || user.isAdmin) return;
+    if (user.isCoordinator || user.isAdmin || user.isFrozen) return;
     setIsLoadingMyReviews(true);
     setRequestDecisionsError('');
     try {
@@ -349,7 +350,7 @@ export default function DashboardPage() {
     if (user.isCoordinator) {
       loadReviewerRequests();
       loadAnalytics();
-    } else if (!user.isAdmin) {
+    } else if (!user.isAdmin && !user.isFrozen) {
       loadRequestDecisions();
     }
   }, [user.isCoordinator, user.isAdmin, loadPendingSignups, loadReviewerRequests, loadAnalytics, loadRequestDecisions]);
@@ -426,6 +427,11 @@ export default function DashboardPage() {
     ? [
         { label: 'Pending Approvals', value: isLoadingPending ? '...' : pendingCount, icon: UserCheck, color: 'text-blue-400', bg: 'bg-blue-500/10', href: '/pending-approvals' },
         { label: 'Round Requests', value: roundStartRequests.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '/rounds' },
+      ]
+    : user.isFrozen
+    ? [
+        { label: 'Account Status', value: 'Alumni', icon: Snowflake, color: 'text-sky-400', bg: 'bg-sky-500/10' },
+        { label: 'Profile Access', value: 'Active', icon: FileText, color: 'text-blue-400', bg: 'bg-blue-500/10' },
       ]
     : [
         { label: 'Account Status', value: 'Active', icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
@@ -637,8 +643,21 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* --- Frozen alumni info section --- */}
+      {!user.isCoordinator && !user.isAdmin && user.isFrozen && (
+        <section className="glass rounded-2xl border border-sky-500/20 bg-sky-500/[0.06] p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <Snowflake className="w-5 h-5 text-sky-400 shrink-0" />
+            <h2 className="text-lg font-semibold text-sky-200">Alumni Account</h2>
+          </div>
+          <p className="text-sm text-sky-300/80">
+            Your account is currently frozen. You can still view lab members and update your profile, but research activities are not available.
+          </p>
+        </section>
+      )}
+
       {/* --- Lab Member Section: Notifications --- */}
-      {!user.isCoordinator && !user.isAdmin && (
+      {!user.isCoordinator && !user.isAdmin && !user.isFrozen && (
         <section className="glass rounded-2xl border border-white/5 p-6">
           <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -678,7 +697,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {!user.isCoordinator && !user.isAdmin && (
+      {!user.isCoordinator && !user.isAdmin && !user.isFrozen && (
         <section className="glass rounded-2xl border border-white/5 p-6">
           <div className="flex items-center justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">

@@ -78,6 +78,12 @@ export abstract class User {
   @Column({ type: 'datetime', nullable: true })
   lastLoginAt: Date | null;
 
+  @Column({ type: 'datetime', nullable: true })
+  frozenAt: Date | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  currentPosition: string | null;
+
   @CreateDateColumn({ type: 'datetime' })
   createdAt: Date;
 

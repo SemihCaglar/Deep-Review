@@ -59,10 +59,13 @@ export type LabMember = {
   name: string;
   email: string;
   role: string;
+  frozenAt?: string | null;
+  currentPosition?: string | null;
 };
 
 export type LabMembersResponse = {
   users: LabMember[];
+  frozenUsers: LabMember[];
 };
 
 export type Lab = {
@@ -169,12 +172,13 @@ export function updateInterestsRequest(topicIds: string[], otherInterests: strin
   });
 }
 
-export function updateProfileRequest(name: string, email: string) {
+export function updateProfileRequest(name: string, email: string, currentPosition?: string | null) {
   return apiRequest<AccountUserResponse>('/account/profile', {
     method: 'PUT',
     body: {
       name,
       email,
+      ...(currentPosition !== undefined ? { currentPosition } : {}),
     },
   });
 }
@@ -203,6 +207,18 @@ export function approveSignupRequest(id: string) {
 
 export function rejectSignupRequest(id: string) {
   return apiRequest<AccountUserResponse>(`/account/reject/${id}`, {
+    method: 'POST',
+  });
+}
+
+export function freezeMemberRequest(id: string) {
+  return apiRequest<{ message: string; cancelledAssignments: number }>(`/account/freeze/${id}`, {
+    method: 'POST',
+  });
+}
+
+export function unfreezeMemberRequest(id: string) {
+  return apiRequest<{ message: string }>(`/account/unfreeze/${id}`, {
     method: 'POST',
   });
 }
