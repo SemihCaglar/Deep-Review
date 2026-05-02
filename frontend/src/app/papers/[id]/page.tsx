@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Star, Search, FlaskConical, X, Cpu, ShieldCheck, Download } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, Download } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
@@ -19,7 +19,7 @@ import {
   getLabsRequest,
   getPaperInvitationsRequest, sendCollaborationInvitationsRequest, cancelCollaborationInvitationRequest,
   LabCollaborationInvitation,
-  startAIReviewRequest, runComplianceCheckRequest,
+  startAIReviewRequest,
 } from '@/lib/api';
 
 
@@ -117,14 +117,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [editingSubmissionDeadline, setEditingSubmissionDeadline] = useState<string | null>(null);
     const [submissionDeadlineDraft, setSubmissionDeadlineDraft] = useState('');
     const aiFileRef = useRef<HTMLInputElement>(null);
-    const complianceFileRef = useRef<HTMLInputElement>(null);
     const pendingAiRoundId = useRef<string | null>(null);
-    const pendingComplianceRoundId = useRef<string | null>(null);
     const [runningAiRoundId, setRunningAiRoundId] = useState<string | null>(null);
-    const [runningComplianceRoundId, setRunningComplianceRoundId] = useState<string | null>(null);
     const [aiStatusByRound, setAiStatusByRound] = useState<Record<string, string>>({});
     const [aiResultsByRound, setAiResultsByRound] = useState<Record<string, any>>({});
-    const [complianceResultsByRound, setComplianceResultsByRound] = useState<Record<string, any>>({});
 
     // Collaboration state
     const [collabInvitations, setCollabInvitations] = useState<LabCollaborationInvitation[]>([]);
@@ -542,11 +538,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         aiFileRef.current?.click();
     };
 
-    const openComplianceUpload = (roundId: string) => {
-        pendingComplianceRoundId.current = roundId;
-        complianceFileRef.current?.click();
-    };
-
     const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         const roundId = pendingAiRoundId.current;
@@ -575,26 +566,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
             setAiStatusByRound(prev => ({ ...prev, [roundId]: '' }));
             setRunningAiRoundId(null);
             pendingAiRoundId.current = null;
-        }
-    };
-
-    const handleComplianceFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        const roundId = pendingComplianceRoundId.current;
-        e.target.value = '';
-        if (!file || !roundId) return;
-
-        setRunningComplianceRoundId(roundId);
-        setRoundErrors(prev => ({ ...prev, [roundId]: '' }));
-        try {
-            const res = await runComplianceCheckRequest(roundId, file);
-            setComplianceResultsByRound(prev => ({ ...prev, [roundId]: res.data }));
-            await refreshRounds();
-        } catch (e) {
-            setRoundErrors(prev => ({ ...prev, [roundId]: e instanceof ApiError ? e.message : 'Compliance check failed' }));
-        } finally {
-            setRunningComplianceRoundId(null);
-            pendingComplianceRoundId.current = null;
         }
     };
 
@@ -1392,7 +1363,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     {(isAuthor || user.isCoordinator) && (
                         <div className="glass p-6 rounded-2xl border border-white/5 space-y-4">
                             <input ref={aiFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
-                            <input ref={complianceFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleComplianceFileSelected} />
                             <div className="flex items-center justify-between flex-wrap gap-2">
                                 <h2 className="text-xl font-semibold text-white">Review Round Proposals</h2>
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -1492,7 +1462,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                     : 'text-slate-400 border-slate-500/30 bg-slate-500/10';
                                 const aiReviews = round.aiReviewReports ?? round.artifacts?.aiReviewReports ?? [];
                                 const recentAiResult = aiResultsByRound[round.id];
-                                const complianceResult = complianceResultsByRound[round.id] || round.complianceReport;
 
                                 return (
                                     <div key={round.id} className="rounded-xl border border-white/10 overflow-hidden">
@@ -1664,14 +1633,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                             {aiStatusByRound[round.id] && (
                                                                 <span className="text-xs text-indigo-300 animate-pulse">{aiStatusByRound[round.id]}</span>
                                                             )}
-                                                            <button
-                                                                onClick={() => openComplianceUpload(round.id)}
-                                                                disabled={runningComplianceRoundId === round.id}
-                                                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            >
-                                                                {runningComplianceRoundId === round.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-                                                                Compliance Check
-                                                            </button>
                                                         </div>
 
                                                         {(aiReviews.length > 0 || recentAiResult) && (
@@ -1709,24 +1670,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                             </div>
                                                         )}
 
-                                                        {complianceResult && (
-                                                            <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
-                                                                <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">My Compliance Check</p>
-                                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                                    {Object.entries(complianceResult).filter(([, val]) => typeof val === 'object' && val !== null && 'isCompliant' in val).map(([key, val]: [string, any]) => (
-                                                                        <div key={key} className="flex items-start gap-1.5">
-                                                                            {val.isCompliant
-                                                                                ? <CheckCircle2 className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />
-                                                                                : <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />}
-                                                                            <div>
-                                                                                <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-                                                                                <p className="text-[10px] text-slate-300">{val.details}</p>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 )}
 

@@ -38,7 +38,7 @@ import {
   confirmChecklistSelectionRequest,
 } from '@/lib/api';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download, ShieldCheck } from 'lucide-react';
+import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download } from 'lucide-react';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
@@ -763,9 +763,19 @@ function RoundCard({
 
     try {
       const res = await startAIReviewRequest(round.id, file);
-      setLocalAiResult(res.data);
-      if (res.data?.checklistJson?.selectedStandards) {
-        const standards = new Set<string>(res.data.checklistJson.selectedStandards.map((s: any) => s.label));
+      const aiReviewData = res.data?.aiReview;
+
+      // Normalize the response format for local display
+      setLocalAiResult({
+        reviewText: aiReviewData?.summaryReport,
+        annotatedPdfUrl: aiReviewData?.annotatedPdfUrl,
+        checklistJson: aiReviewData?.checklist,
+        checklistUrl: aiReviewData?.checklistUrl,
+        suggestedCitations: aiReviewData?.suggestedCitations
+      });
+
+      if (aiReviewData?.checklist?.selectedStandards) {
+        const standards = new Set<string>(aiReviewData.checklist.selectedStandards.map((s: any) => s.label));
         setConfirmedStandards(standards);
       }
       setAiStatus('');
@@ -787,8 +797,8 @@ function RoundCard({
       return;
     }
 
-    // Otherwise, pre-select AI-selected standards
-    if ((localAiResult?.checklistJson || round.checklistJson) && confirmedStandards.size === 0) {
+    // Otherwise, pre-select AI-selected standards from local result or round data
+    if (confirmedStandards.size === 0) {
       const checklist = localAiResult?.checklistJson || round.checklistJson;
       if (checklist?.selectedStandards) {
         const standards = new Set<string>(checklist.selectedStandards.map((s: any) => s.label));
@@ -1267,16 +1277,7 @@ function RoundCard({
                   {aiStatus && (
                     <span className="text-xs text-indigo-300 animate-pulse">{aiStatus}</span>
                   )}
-                  <button
-                    onClick={() => complianceFileRef.current?.click()}
-                    disabled={runningCompliance}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {runningCompliance ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-                    Compliance Check
-                  </button>
                   {aiError && <p className="text-xs text-red-400">{aiError}</p>}
-                  {complianceError && <p className="text-xs text-red-400">{complianceError}</p>}
                 </div>
 
                 {/* AI Review History */}
@@ -1366,7 +1367,7 @@ function RoundCard({
                                 em: ({node, ...props}) => <em className="italic text-slate-200" {...props} />,
                               }}
                             >
-                              {recentReport.summaryReport}
+                              {typeof recentReport === 'string' ? recentReport : (recentReport.reviewText || 'Review text not available')}
                             </ReactMarkdown>
                           </div>
                         </div>
@@ -1377,23 +1378,37 @@ function RoundCard({
 
                 {/* Compliance result */}
                 {(() => {
-                  const comp = localComplianceResult || round.complianceReport;
+                  const comp = round.complianceReport;
                   if (!comp) return null;
+
                   return (
                     <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
                       <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Compliance Check</p>
                       <div className="grid grid-cols-2 gap-2">
-                        {Object.entries(comp).map(([key, val]: [string, any]) => (
-                          <div key={key} className="flex items-start gap-1.5">
-                            {val.isCompliant
-                              ? <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />
-                              : <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />}
-                            <div>
-                              <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-                              <p className="text-[10px] text-slate-300">{val.details}</p>
+                        {Object.entries(comp).map(([key, val]: [string, any]) => {
+                          let icon;
+                          if (val.status === 'pass') {
+                            icon = <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />;
+                          } else if (val.status === 'fail') {
+                            icon = <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />;
+                          } else if (val.status === 'skipped') {
+                            icon = <AlertCircle className="w-3 h-3 text-slate-500 mt-0.5 shrink-0" />;
+                          } else {
+                            icon = <AlertCircle className="w-3 h-3 text-amber-400 mt-0.5 shrink-0" />;
+                          }
+
+                          return (
+                            <div key={key} className="flex items-start gap-1.5">
+                              {icon}
+                              <div>
+                                <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                                <p className="text-[10px] text-slate-300">
+                                  {val.status === 'skipped' ? 'Not applicable' : (val.details || val.status)}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -1553,7 +1568,6 @@ function RoundCard({
 
               {/* Hidden file inputs */}
               <input ref={aiFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
-              <input ref={complianceFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleComplianceFileSelected} />
             </>
           )}
         </div>
