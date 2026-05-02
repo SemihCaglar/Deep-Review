@@ -16,6 +16,9 @@ export class AIReviewReport {
   @Column({ nullable: true })
   venue: string;
 
+  @Column({ type: 'simple-json', nullable: true })
+  complianceReport: any;
+
   @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 

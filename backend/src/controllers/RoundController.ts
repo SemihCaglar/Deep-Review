@@ -7,6 +7,7 @@ import { AssignmentStatus } from '../entities/Assignment';
 import { DeclineRequestStatus } from '../entities/DeclineRequest';
 import { ExtensionStatus } from '../entities/Extension';
 import { SubmissionRuleSet } from '../entities/SubmissionRuleSet';
+import { AIReviewReport } from '../entities/AIReviewReport';
 import { RoundService, RoundServiceError } from '../services/RoundService';
 import { ComplianceCheckAgentService } from '../ai_content/services/ComplianceCheckAgentService';
 import type { AuthenticatedRequest } from '../types/auth';
@@ -1277,18 +1278,37 @@ export class RoundController {
       console.log(`[RoundController] Checklist: ${aiReviewResult.checklistJson?.selectedStandards?.length || 0} standards selected`);
       console.log(`[RoundController] =========================================\n`);
 
-      // STEP 3: Save results to round
+      // STEP 3: Save results to database
       console.log(`[RoundController] Saving results to database...`);
-      round.complianceReport = complianceReport;
+
+      // Create new AIReviewReport record for this run
+      const aiReviewReportRepo = AppDataSource.getRepository(AIReviewReport);
+      const aiReviewReport = new AIReviewReport();
+      aiReviewReport.reviewText = aiReviewResult.summaryReport;
+      aiReviewReport.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+      aiReviewReport.complianceReport = complianceReport;
+      aiReviewReport.venue = round.targetVenue;
+      aiReviewReport.round = round;
+      aiReviewReport.requestedBy = user as any;
+
+      await aiReviewReportRepo.save(aiReviewReport);
+      console.log(`[RoundController] ✓ AIReviewReport saved with ID: ${aiReviewReport.id}`);
+
+      // Update round with latest data (for backwards compatibility)
       round.aiReviewReport = aiReviewResult.summaryReport;
-      if (aiReviewResult.annotatedPdfUrl) {
-        round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+      round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+
+      // Only set checklist if it's the first time (not already set)
+      if (!round.checklistJson && aiReviewResult.checklistJson) {
+        round.checklistJson = aiReviewResult.checklistJson;
+        round.checklistUrl = aiReviewResult.checklistUrl;
+        console.log(`[RoundController] ✓ Checklist prefilled (first time)`);
+      } else if (round.checklistJson) {
+        console.log(`[RoundController] ⚪ Checklist already exists, not overwriting`);
       }
-      round.checklistJson = aiReviewResult.checklistJson;
-      round.checklistUrl = aiReviewResult.checklistUrl;
 
       await roundRepo.save(round);
-      console.log(`[RoundController] ✓ Results saved to round`);
+      console.log(`[RoundController] ✓ Round updated`);
 
       // STEP 4: Return combined results
       return res.status(200).json({
