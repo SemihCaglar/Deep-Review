@@ -1370,6 +1370,11 @@ function RoundCard({
                               {typeof recentReport === 'string' ? recentReport : (recentReport.reviewText || 'Review text not available')}
                             </ReactMarkdown>
                           </div>
+                          {(typeof recentReport !== 'string' && recentReport?.annotatedPdfUrl) && (
+                            <a href={recentReport.annotatedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
+                              <Download className="w-3 h-3" /> Download Annotated PDF
+                            </a>
+                          )}
                         </div>
                       ) : null}
                     </div>
