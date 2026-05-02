@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
 import { useUser } from '@/components/context/UserContext';
 import {
   CoordinatedPaper,
@@ -1331,7 +1332,24 @@ function RoundCard({
 
                               {expandedReviewId === review.id && (
                                 <div className="px-2 py-2 border-t border-slate-700/50 bg-slate-800/20 space-y-2">
-                                  <p className="text-xs text-slate-300 leading-relaxed">{review.reviewText}</p>
+                                  <div className="text-xs text-slate-300 leading-relaxed markdown-content">
+                                    <ReactMarkdown
+                                      components={{
+                                        h1: ({node, ...props}) => <h1 className="text-sm font-bold text-slate-100 mt-3 mb-2" {...props} />,
+                                        h2: ({node, ...props}) => <h2 className="text-xs font-bold text-slate-100 mt-2 mb-1" {...props} />,
+                                        h3: ({node, ...props}) => <h3 className="text-xs font-semibold text-slate-100 mt-2 mb-1" {...props} />,
+                                        h4: ({node, ...props}) => <h4 className="text-xs font-semibold text-slate-200 mt-1 mb-1" {...props} />,
+                                        p: ({node, ...props}) => <p className="text-xs text-slate-300 mb-1" {...props} />,
+                                        ul: ({node, ...props}) => <ul className="text-xs text-slate-300 list-disc list-inside mb-1" {...props} />,
+                                        ol: ({node, ...props}) => <ol className="text-xs text-slate-300 list-decimal list-inside mb-1" {...props} />,
+                                        li: ({node, ...props}) => <li className="text-xs text-slate-300 ml-2" {...props} />,
+                                        strong: ({node, ...props}) => <strong className="text-slate-100 font-semibold" {...props} />,
+                                        em: ({node, ...props}) => <em className="italic text-slate-200" {...props} />,
+                                      }}
+                                    >
+                                      {review.reviewText}
+                                    </ReactMarkdown>
+                                  </div>
                                   {review.annotatedPdfUrl && (
                                     <a href={review.annotatedPdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
                                       <Download className="w-3 h-3" /> Download Annotated PDF
