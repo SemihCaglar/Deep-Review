@@ -19,7 +19,7 @@ export default function LoginPage() {
   React.useEffect(() => {
     const storedUser = getStoredUser();
     if (getToken() && storedUser) {
-      router.replace(storedUser.role === 'Admin' ? '/admin' : '/dashboard');
+      router.replace(getLoginDestination(storedUser.role));
     }
   }, [router]);
 
@@ -33,7 +33,7 @@ export default function LoginPage() {
       setToken(response.token);
       setStoredUser(response.user);
       setUser(mapStoredUserToLegacyUser(response.user));
-      router.push(response.user.role === 'Admin' ? '/admin' : '/dashboard');
+      router.push(getLoginDestination(response.user.role));
     } catch (caughtError) {
       if (caughtError instanceof ApiError) {
         setError(caughtError.message);
@@ -135,4 +135,16 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
+
+function getLoginDestination(role: string) {
+  if (role === 'Admin') {
+    return '/admin';
+  }
+
+  if (role === 'Coordinator') {
+    return '/dashboard';
+  }
+
+  return '/lab-select';
 }

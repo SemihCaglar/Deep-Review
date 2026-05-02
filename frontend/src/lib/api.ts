@@ -74,6 +74,43 @@ export type Lab = {
   description: string;
 };
 
+export type LabMembershipStatus = 'Pending' | 'Active' | 'Alumni';
+
+export type LabMembership = {
+  id: string;
+  status: LabMembershipStatus;
+  createdAt: string;
+  statusChangedAt: string | null;
+  lab: Lab | null;
+};
+
+export type LabJoinRequest = LabMembership & {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  } | null;
+};
+
+export type MyLabsResponse = {
+  memberships: LabMembership[];
+};
+
+export type LabJoinRequestResponse = {
+  message: string;
+  membership: LabMembership;
+};
+
+export type PendingLabJoinRequestsResponse = {
+  requests: LabJoinRequest[];
+};
+
+export type ReviewLabJoinRequestResponse = {
+  message: string;
+  membership?: LabJoinRequest;
+};
+
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
 };
@@ -189,6 +226,33 @@ export function getCurrentProfileRequest() {
 
 export function getLabMembersRequest() {
   return apiRequest<LabMembersResponse>('/account/lab-members');
+}
+
+export function getMyLabsRequest() {
+  return apiRequest<MyLabsResponse>('/account/my-labs');
+}
+
+export function submitLabJoinRequest(labId: string) {
+  return apiRequest<LabJoinRequestResponse>('/account/lab-join-requests', {
+    method: 'POST',
+    body: { labId },
+  });
+}
+
+export function getPendingLabJoinRequestsRequest() {
+  return apiRequest<PendingLabJoinRequestsResponse>('/account/pending-lab-join-requests');
+}
+
+export function approveLabJoinRequestApi(id: string) {
+  return apiRequest<ReviewLabJoinRequestResponse>(`/account/lab-join-requests/${id}/approve`, {
+    method: 'POST',
+  });
+}
+
+export function rejectLabJoinRequestApi(id: string) {
+  return apiRequest<ReviewLabJoinRequestResponse>(`/account/lab-join-requests/${id}/reject`, {
+    method: 'POST',
+  });
 }
 
 export function getPendingSignupsRequest() {
