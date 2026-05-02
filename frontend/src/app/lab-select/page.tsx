@@ -11,12 +11,12 @@ import {
   type Lab,
   type LabMembership,
 } from '@/lib/api';
+import { useLabContext } from '@/components/context/LabContext';
 import { getStoredUser, getToken } from '@/lib/auth';
-
-const SELECTED_LAB_KEY = 'bilsen_selected_lab';
 
 export default function LabSelectPage() {
   const router = useRouter();
+  const { selectLab: setSelectedLab } = useLabContext();
   const [memberships, setMemberships] = React.useState<LabMembership[]>([]);
   const [availableLabs, setAvailableLabs] = React.useState<Lab[]>([]);
   const [selectedLabId, setSelectedLabId] = React.useState('');
@@ -87,14 +87,11 @@ export default function LabSelectPage() {
       return;
     }
 
-    window.localStorage.setItem(
-      SELECTED_LAB_KEY,
-      JSON.stringify({
-        id: membership.lab.id,
-        name: membership.lab.name,
-        status: membership.status,
-      }),
-    );
+    setSelectedLab({
+      id: membership.lab.id,
+      name: membership.lab.name,
+      status: membership.status,
+    });
     router.push('/dashboard');
   };
 

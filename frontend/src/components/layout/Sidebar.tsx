@@ -3,18 +3,21 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useLabContext } from '@/components/context/LabContext';
 import { useUser } from '@/components/context/UserContext';
 import { Home, FileText, CheckCircle, LogOut, PlusSquare, UserCheck, Users, Shield, ClipboardList } from 'lucide-react';
 import ProfileModal from './ProfileModal';
 
 export default function Sidebar() {
     const { user, logout } = useUser();
+    const { clearSelectedLab } = useLabContext();
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const router = useRouter();
     const [isProfileOpen, setIsProfileOpen] = React.useState(false);
 
     const handleLogout = () => {
+        clearSelectedLab();
         logout();
         router.push('/');
     };
