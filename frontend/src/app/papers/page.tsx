@@ -14,6 +14,11 @@ export default function PapersList() {
     const filter = searchParams.get('filter');
 
     useEffect(() => {
+        if (!user.id) {
+            router.replace('/login');
+            return;
+        }
+
         if (user.id && !user.isCoordinator && filter !== 'authored') {
             router.replace('/papers?filter=authored');
         }

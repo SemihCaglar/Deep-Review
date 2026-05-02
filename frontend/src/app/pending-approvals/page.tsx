@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCcw, UserCheck, UserX, FlaskConical, CheckCircle, XCircle } from 'lucide-react';
+import { UserCheck, UserX, FlaskConical, CheckCircle, XCircle } from 'lucide-react';
 import {
   ApiError,
   approveSignupRequest,
@@ -178,24 +178,11 @@ export default function PendingApprovalsPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8">
-      <div className="flex items-start justify-between gap-4">
+      <div>
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight">Pending Approvals</h1>
-          <p className="text-slate-400 mt-2">Review pending signup requests from lab members waiting for access.</p>
+          <p className="text-slate-400 mt-2">Review pending signup requests from lab members waiting for access and collaboration invitations from other labs.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            loadPendingSignups();
-            loadReviewedSignups();
-            loadCollabInvitations();
-          }}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/10 transition-colors"
-          disabled={isLoading}
-        >
-          <RefreshCcw className="w-4 h-4" />
-          {isLoading ? 'Refreshing...' : 'Refresh'}
-        </button>
       </div>
 
       {actionMessage ? (
@@ -232,7 +219,7 @@ export default function PendingApprovalsPage() {
         {isLoadingCollabs ? (
           <p className="text-sm text-slate-400">Loading collaboration invitations...</p>
         ) : collabInvitations.length ? (
-          <div className="space-y-4">
+          <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-2">
             {collabInvitations.map(inv => (
               <div key={inv.id} className="rounded-2xl border border-white/10 bg-background/60 p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
@@ -271,10 +258,20 @@ export default function PendingApprovalsPage() {
       </section>
 
       <section className="glass rounded-2xl border border-white/5 p-8">
+        <div className="flex items-center gap-2 mb-6">
+          <UserCheck className="w-5 h-5 text-emerald-400" />
+          <h2 className="text-xl font-semibold text-white">Pending Signup Requests</h2>
+          {pendingSignups.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              {pendingSignups.length}
+            </span>
+          )}
+        </div>
+
         {isLoading ? (
           <p className="text-sm text-slate-400">Loading pending approvals...</p>
         ) : pendingSignups.length ? (
-          <div className="space-y-4">
+          <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-2">
             {pendingSignups.map(signup => (
               <div key={signup.id} className="rounded-2xl border border-white/10 bg-background/60 p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
@@ -327,7 +324,7 @@ export default function PendingApprovalsPage() {
         {isLoadingHistory ? (
           <p className="text-sm text-slate-400">Loading approval history...</p>
         ) : reviewedSignups.length ? (
-          <div className="space-y-4">
+          <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-2">
             {reviewedSignups.map(signup => (
               <div key={signup.id} className="rounded-2xl border border-white/10 bg-background/60 p-5 space-y-2">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

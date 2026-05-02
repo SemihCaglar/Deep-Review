@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import type { EntityManager } from 'typeorm';
 import { AppDataSource } from '../data-source';
 import { User, UserRole, ApprovalStatus } from '../entities/User';
 import { LabMember } from '../entities/LabMember';
@@ -8,15 +9,32 @@ import { Lab } from '../entities/Lab';
 import { AuditLog, AuditAction } from '../entities/AuditLog';
 import { SystemPolicy } from '../entities/SystemPolicy';
 import { Template } from '../entities/Template';
+import { LabCollaborationInvitation } from '../entities/LabCollaborationInvitation';
+import { ReviewerResponse } from '../entities/ReviewerResponse';
+import { EmailNotification } from '../entities/EmailNotification';
 import { hashPassword } from '../services/accountSecurity';
 import type { AuthenticatedRequest } from '../types/auth';
 import * as crypto from 'crypto';
 import { sendEmail } from '../services/emailService';
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function isValidEmail(email: string) {
+  return EMAIL_PATTERN.test(email.trim());
+}
+
 export class AdminController {
   // ==== USER MANAGEMENT ====
 
   static async getAllUsers(req: AuthenticatedRequest, res: Response) {
+    await AppDataSource.transaction(async manager => {
+      await AdminController.deleteOrphanCoordinators(manager);
+    });
+
     const userRepo = AppDataSource.getRepository<User>('User');
     const users = await userRepo.find({ order: { createdAt: 'DESC' } });
     return res.status(200).json(users);
@@ -125,8 +143,17 @@ export class AdminController {
     if (!coordinatorName || !coordinatorName.trim()) return res.status(400).json({ message: 'Coordinator name is required' });
     if (!coordinatorEmail || !coordinatorEmail.trim()) return res.status(400).json({ message: 'Coordinator email is required' });
 
+    const normalizedCoordinatorEmail = normalizeEmail(coordinatorEmail);
+    if (!isValidEmail(normalizedCoordinatorEmail)) {
+      return res.status(400).json({ message: 'Coordinator email must be a valid email address' });
+    }
+
+    await AppDataSource.transaction(async manager => {
+      await AdminController.deleteOrphanCoordinators(manager);
+    });
+
     const userRepo = AppDataSource.getRepository<User>('User');
-    const existing = await userRepo.findOne({ where: { email: coordinatorEmail.trim().toLowerCase() } });
+    const existing = await userRepo.findOne({ where: { email: normalizedCoordinatorEmail } });
     if (existing) {
       return res.status(409).json({ message: 'Coordinator email already in use' });
     }
@@ -136,7 +163,7 @@ export class AdminController {
 
     const coordinator = new Coordinator();
     coordinator.name = coordinatorName.trim();
-    coordinator.email = coordinatorEmail.trim().toLowerCase();
+    coordinator.email = normalizedCoordinatorEmail;
     coordinator.passwordHash = await hashPassword(password);
     coordinator.approvalStatus = ApprovalStatus.Approved;
     coordinator.approvalReviewedAt = new Date();
@@ -183,20 +210,77 @@ BILSEN Admin Team`;
 
     if (!lab) return res.status(404).json({ message: 'Lab not found' });
 
-    const coordinator = lab.coordinator;
+    const labName = lab.name;
 
-    // Disassociate coordinator from lab first to avoid FK constraint errors
-    lab.coordinator = null as any;
-    await labRepo.save(lab);
-    await labRepo.remove(lab);
+    await AppDataSource.transaction(async manager => {
+      const labInTransaction = await manager.getRepository(Lab).findOne({
+        where: { id },
+        relations: ['coordinator', 'members', 'papers', 'topics'],
+      });
 
-    // Delete the coordinator account — coordinators cannot exist without a lab
-    if (coordinator) {
-      const userRepo = AppDataSource.getRepository<User>('User');
-      await userRepo.remove(coordinator as any);
-    }
+      if (!labInTransaction) return;
 
-    await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Lab', id, `Deleted lab: ${lab.name}`);
+      const coordinator = labInTransaction.coordinator;
+
+      await manager
+        .createQueryBuilder()
+        .update(User)
+        .set({ requestedLab: null })
+        .where('requestedLabId = :id', { id })
+        .execute();
+
+      await manager
+        .createQueryBuilder()
+        .update(ReviewerResponse)
+        .set({ lab: null })
+        .where('labId = :id', { id })
+        .execute();
+
+      await manager
+        .createQueryBuilder()
+        .delete()
+        .from(LabCollaborationInvitation)
+        .where('invitingLabId = :id OR invitedLabId = :id', { id })
+        .execute();
+
+      await manager
+        .createQueryBuilder()
+        .delete()
+        .from(Template)
+        .where('labId = :id', { id })
+        .execute();
+
+      await manager
+        .createQueryBuilder()
+        .delete()
+        .from(SystemPolicy)
+        .where('labId = :id', { id })
+        .execute();
+
+      await manager
+        .createQueryBuilder()
+        .delete()
+        .from(AuditLog)
+        .where('labId = :id', { id })
+        .execute();
+
+      await manager.query('DELETE FROM lab_members_user WHERE labId = ?', [id]);
+      await manager.query('DELETE FROM lab_papers_paper WHERE labId = ?', [id]);
+      await manager.query('DELETE FROM lab_topics_topic WHERE labId = ?', [id]);
+
+      labInTransaction.members = [];
+      labInTransaction.papers = [];
+      labInTransaction.topics = [];
+      labInTransaction.coordinator = null as any;
+      await manager.getRepository(Lab).save(labInTransaction);
+      await manager.getRepository(Lab).remove(labInTransaction);
+
+      if (coordinator) {
+        await AdminController.deleteCoordinatorAccount(manager, coordinator.id);
+      }
+    });
+
+    await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Lab', id, `Deleted lab: ${labName}`);
 
     return res.status(200).json({ message: 'Lab deleted' });
   }
@@ -301,5 +385,54 @@ BILSEN Admin Team`;
       createdAt: new Date(),
     });
     await logRepo.save(log);
+  }
+
+  private static async deleteOrphanCoordinators(manager: EntityManager) {
+    const orphanCoordinators = await manager
+      .getRepository(Coordinator)
+      .createQueryBuilder('coordinator')
+      .leftJoin('coordinator.lab', 'lab')
+      .where('lab.id IS NULL')
+      .getMany();
+
+    for (const coordinator of orphanCoordinators) {
+      await AdminController.deleteCoordinatorAccount(manager, coordinator.id);
+    }
+  }
+
+  private static async deleteCoordinatorAccount(manager: EntityManager, coordinatorId: string) {
+    const coordinator = await manager.getRepository(Coordinator).findOne({
+      where: { id: coordinatorId },
+      relations: ['labs', 'writtenPapers', 'interests', 'coordinatedPapers'],
+    });
+
+    if (coordinator) {
+      coordinator.labs = [];
+      coordinator.writtenPapers = [];
+      coordinator.interests = [];
+      coordinator.coordinatedPapers = [];
+      await manager.getRepository(Coordinator).save(coordinator);
+    }
+
+    await manager
+      .createQueryBuilder()
+      .delete()
+      .from(EmailNotification)
+      .where('recipientId = :coordinatorId', { coordinatorId })
+      .execute();
+
+    await manager.query('DELETE FROM lab_members_user WHERE userId = ?', [coordinatorId]);
+    await manager.query('DELETE FROM paper_coordinators_user WHERE userId = ?', [coordinatorId]);
+    await manager.query('DELETE FROM user_written_papers_paper WHERE userId = ?', [coordinatorId]);
+    await manager.query('DELETE FROM user_interests_topic WHERE userId = ?', [coordinatorId]);
+
+    await manager
+      .createQueryBuilder()
+      .update(AuditLog)
+      .set({ actor: null })
+      .where('actorId = :coordinatorId', { coordinatorId })
+      .execute();
+
+    await manager.getRepository(User).delete(coordinatorId);
   }
 }

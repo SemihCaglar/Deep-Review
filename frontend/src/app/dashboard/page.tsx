@@ -32,7 +32,6 @@ import {
   type PendingCollaborationInvitation,
 } from '@/lib/api';
 import { useUser } from '@/components/context/UserContext';
-import { LabTopicManager } from '@/components/LabTopicManager';
 
 // --- Types & Helpers ---
 
@@ -799,20 +798,6 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* Lab Management for Coordinators and Members */}
-      {user.labs && user.labs.length > 0 && (
-        <div className="space-y-6">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-blue-400" />
-            Lab Management
-          </h2>
-          <div className="grid gap-6">
-            {user.labs.map(lab => (
-              <LabTopicManager key={lab.id} labId={lab.id} labName={lab.name} />
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

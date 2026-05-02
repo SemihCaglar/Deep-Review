@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Snowflake, RotateCcw } from 'lucide-react';
+import { CheckCircle, RotateCcw, Snowflake } from 'lucide-react';
 import { ApiError, getLabMembersRequest, freezeMemberRequest, unfreezeMemberRequest, type LabMember } from '@/lib/api';
 import { useUser } from '@/components/context/UserContext';
+import { LabTopicManager } from '@/components/LabTopicManager';
 
 export default function LabMembersPage() {
   const { user } = useUser();
@@ -65,14 +66,11 @@ export default function LabMembersPage() {
     return 'Lab Member';
   };
 
-  const sortByCoordinator = (a: LabMember, b: LabMember) =>
-    a.role === 'Coordinator' ? -1 : b.role === 'Coordinator' ? 1 : 0;
-
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">Lab Members</h1>
-        <p className="text-slate-400 mt-2">Browse approved members in the lab and see their core contact details.</p>
+        <h1 className="text-3xl font-bold text-white tracking-tight">Lab Information</h1>
+        <p className="text-slate-400 mt-2">Browse lab members, alumni, and the topics assigned to your lab.</p>
       </div>
 
       {error ? (
@@ -219,6 +217,21 @@ export default function LabMembersPage() {
           ) : (
             <p className="text-sm text-slate-500">No alumni yet. Frozen accounts will appear here.</p>
           )}
+        </section>
+      )}
+
+      {/* Lab Topics */}
+      {user.labs && user.labs.length > 0 && (
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-blue-400" />
+            Lab Topics
+          </h2>
+          <div className="grid gap-6">
+            {user.labs.map(lab => (
+              <LabTopicManager key={lab.id} labId={lab.id} labName={lab.name} />
+            ))}
+          </div>
         </section>
       )}
     </div>

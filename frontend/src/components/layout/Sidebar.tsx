@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { Home, FileText, CheckCircle, LogOut, PlusSquare, UserCheck, Users, Shield, ClipboardList } from 'lucide-react';
 import ProfileModal from './ProfileModal';
+import { getPendingCollaborationInvitationsRequest, getPendingSignupsRequest } from '@/lib/api';
 
 export default function Sidebar() {
     const { user, logout } = useUser();
@@ -13,10 +14,11 @@ export default function Sidebar() {
     const searchParams = useSearchParams();
     const router = useRouter();
     const [isProfileOpen, setIsProfileOpen] = React.useState(false);
+    const [hasPendingApprovals, setHasPendingApprovals] = React.useState(false);
 
     const handleLogout = () => {
         logout();
-        router.push('/');
+        router.replace('/login');
     };
 
     const getNavItems = () => {
@@ -29,13 +31,13 @@ export default function Sidebar() {
         if (user.isFrozen) {
             return [
                 { name: 'My Dashboard', href: '/dashboard', icon: Home },
-                { name: 'Lab Members', href: '/lab-members', icon: Users },
+                { name: 'Lab Information', href: '/lab-members', icon: Users },
             ];
         }
 
         const base = [
             { name: 'My Dashboard', href: '/dashboard', icon: Home },
-            { name: 'Lab Members', href: '/lab-members', icon: Users },
+            { name: 'Lab Information', href: '/lab-members', icon: Users },
             ...(user.isCoordinator ? [{ name: 'Pending Approvals', href: '/pending-approvals', icon: UserCheck }] : []),
         ];
 
@@ -53,6 +55,36 @@ export default function Sidebar() {
     };
 
     const navItems = getNavItems();
+
+    React.useEffect(() => {
+        if (!user.isCoordinator || user.isAdmin || user.isFrozen) {
+            setHasPendingApprovals(false);
+            return;
+        }
+
+        let isMounted = true;
+
+        const loadPendingIndicator = async () => {
+            const [signupsResult, collabsResult] = await Promise.allSettled([
+                getPendingSignupsRequest(),
+                getPendingCollaborationInvitationsRequest(),
+            ]);
+
+            if (!isMounted) return;
+
+            const pendingSignupCount = signupsResult.status === 'fulfilled' ? signupsResult.value.users.length : 0;
+            const pendingCollabCount = collabsResult.status === 'fulfilled' ? collabsResult.value.length : 0;
+            setHasPendingApprovals(pendingSignupCount + pendingCollabCount > 0);
+        };
+
+        loadPendingIndicator();
+        window.addEventListener('focus', loadPendingIndicator);
+
+        return () => {
+            isMounted = false;
+            window.removeEventListener('focus', loadPendingIndicator);
+        };
+    }, [pathname, user.isAdmin, user.isCoordinator, user.isFrozen]);
 
     return (
         <aside className="w-64 border-r border-[#ffffff1a] glass flex flex-col pt-6 pb-4">
@@ -116,7 +148,10 @@ export default function Sidebar() {
                                 }`}
                         >
                             <Icon className={`w-5 h-5 ${isActive ? 'text-blue-400' : 'text-slate-500'}`} />
-                            {item.name}
+                            <span className="flex-1 truncate">{item.name}</span>
+                            {item.href === '/pending-approvals' && hasPendingApprovals ? (
+                                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.16)]" />
+                            ) : null}
                         </Link>
                     );
                 })}

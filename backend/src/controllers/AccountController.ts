@@ -402,6 +402,20 @@ export class AccountController {
       .andWhere('lab.id IN (:...labIds)', { labIds: visibleLabIds })
       .orderBy('user.name', 'ASC')
       .getMany();
+    const visibleLabs = await AppDataSource.getRepository(Lab).find({
+      where: { id: In(visibleLabIds) },
+      relations: ['coordinator'],
+    });
+    const usersById = new Map<string, User>();
+    for (const user of approvedUsers) {
+      usersById.set(user.id, user);
+    }
+    for (const lab of visibleLabs) {
+      if (lab.coordinator?.approvalStatus === ApprovalStatus.Approved) {
+        usersById.set(lab.coordinator.id, lab.coordinator as unknown as User);
+      }
+    }
+    const visibleUsers = [...usersById.values()].sort((a, b) => a.name.localeCompare(b.name));
 
     const serializeUser = (user: User) => ({
       id: user.id,
@@ -413,8 +427,8 @@ export class AccountController {
     });
 
     return res.status(200).json({
-      users: approvedUsers.filter(u => !u.frozenAt).map(serializeUser),
-      frozenUsers: approvedUsers.filter(u => !!u.frozenAt).map(serializeUser),
+      users: visibleUsers.filter(u => !u.frozenAt).map(serializeUser),
+      frozenUsers: visibleUsers.filter(u => !!u.frozenAt).map(serializeUser),
     });
   }
   static async updateProfile(req: AuthenticatedRequest, res: Response) {

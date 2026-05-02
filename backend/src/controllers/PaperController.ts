@@ -82,7 +82,13 @@ export class PaperController {
         paper
       });
     } catch (e: any) {
-      if (e.message && e.message.includes('invalid')) {
+      if (
+        e.message &&
+        (e.message.includes('invalid') ||
+          e.message.includes('cannot be assigned') ||
+          e.message.includes('not available') ||
+          e.message.includes('can only be selected'))
+      ) {
         return res.status(400).json({ error: e.message });
       }
       return res.status(500).json({ error: e.message || 'Internal Server Error' });
@@ -646,18 +652,35 @@ export class PaperController {
       res.status(500).json({ error: e.message });
     }
   }
-  static async updateAuthors(req: Request<{ id: string }>, res: Response) {
+  static async updateAuthors(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      const user = req.user;
+      if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+      const id = String(req.params.id ?? '').trim();
       const { authors } = req.body;
       if (!id) return res.status(400).json({ message: 'Missing paper ID' });
-      const paper = await PaperService.updateAuthors(id, authors);
+
+      const paperRepo = AppDataSource.getRepository(Paper);
+      const existingPaper = await paperRepo.findOne({ where: { id }, relations: ['authors', 'coordinators'] });
+      if (!existingPaper) return res.status(404).json({ message: 'Paper not found' });
+
+      const canEdit = existingPaper.authors?.some(author => author.id === user.id)
+        || existingPaper.coordinators?.some(coordinator => coordinator.id === user.id);
+      if (!canEdit) return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
+
+      const paper = await PaperService.updateAuthors(id, authors, user);
       res.status(200).json(paper);
     } catch (e: any) {
       if (e.message === 'Paper not found') {
         return res.status(404).json({ message: e.message });
       }
-      if (e.message && e.message.includes('invalid')) {
+      if (
+        e.message &&
+        (e.message.includes('invalid') ||
+          e.message.includes('cannot be removed') ||
+          e.message.includes('cannot be assigned'))
+      ) {
         return res.status(400).json({ error: e.message });
       }
       res.status(500).json({ error: e.message });
