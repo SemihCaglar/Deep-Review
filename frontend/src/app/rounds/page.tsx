@@ -1326,6 +1326,17 @@ function RoundCard({
                                   {review.venue && (
                                     <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{review.venue}</span>
                                   )}
+                                  {review.annotatedPdfUrl && (
+                                    <a
+                                      href={review.annotatedPdfUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 text-[10px] bg-indigo-500/30 text-indigo-300 hover:bg-indigo-500/50 px-2 py-0.5 rounded transition-colors"
+                                    >
+                                      <Download className="w-3 h-3" /> PDF
+                                    </a>
+                                  )}
                                 </div>
                                 <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${expandedReviewId === review.id ? 'rotate-180' : ''}`} />
                               </button>
