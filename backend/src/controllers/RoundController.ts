@@ -1267,10 +1267,15 @@ export class RoundController {
       console.log(`[RoundController] ========== STEP 2: AI REVIEW ==========`);
       console.log(`[RoundController] Running AI review agent...`);
       const { AIReviewService } = require('../ai_content/services/AIReviewService');
+      const skipChecklistGeneration = !!round.checklistJson;
+      if (skipChecklistGeneration) {
+        console.log(`[RoundController] ⚪ Checklist already exists, will skip generation`);
+      }
       const aiReviewResult = await AIReviewService.generateAIReview(
         round.paper.id,
         id,
-        file.buffer
+        file.buffer,
+        skipChecklistGeneration
       );
       console.log(`[RoundController] ✓ AI review completed`);
       console.log(`[RoundController] Review length: ${aiReviewResult.summaryReport?.length || 0} chars`);
@@ -1294,17 +1299,15 @@ export class RoundController {
       await aiReviewReportRepo.save(aiReviewReport);
       console.log(`[RoundController] ✓ AIReviewReport saved with ID: ${aiReviewReport.id}`);
 
-      // Update round with latest data (for backwards compatibility)
+      // Update round with latest data
       round.aiReviewReport = aiReviewResult.summaryReport;
       round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
 
-      // Only set checklist if it's the first time (not already set)
-      if (!round.checklistJson && aiReviewResult.checklistJson) {
+      // Set checklist only if generated (first time only)
+      if (aiReviewResult.checklistJson) {
         round.checklistJson = aiReviewResult.checklistJson;
         round.checklistUrl = aiReviewResult.checklistUrl;
-        console.log(`[RoundController] ✓ Checklist prefilled (first time)`);
-      } else if (round.checklistJson) {
-        console.log(`[RoundController] ⚪ Checklist already exists, not overwriting`);
+        console.log(`[RoundController] ✓ Checklist prefilled`);
       }
 
       await roundRepo.save(round);
