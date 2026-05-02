@@ -807,7 +807,7 @@ export async function startAIReviewRequest(roundId: string, pdfFile: File): Prom
   const formData = new FormData();
   formData.append('pdf', pdfFile);
 
-  const response = await fetch(buildUrl(`/rounds/${roundId}/ai`), {
+  const response = await fetch(buildUrl(`/rounds/${roundId}/ai-review`), {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,
