@@ -6,16 +6,19 @@ import { notFound } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Star, Search } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Github, Star, Search, FlaskConical, X } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
-  getLabMembersRequest, ApiError, LabMember,
+  getLabMembersRequest, ApiError, LabMember, Lab,
   AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest, editSubmissionDeadlineRequest,
   getSuggestedReviewersRequest, SuggestedReviewer,
   getProposedReviewersRequest, addProposedReviewerRequest, removeProposedReviewerRequest,
   updateOverleafLinkRequest, updatePaperStatusRequest,
   submitRatingRequest,
+  getLabsRequest,
+  getPaperInvitationsRequest, sendCollaborationInvitationsRequest, cancelCollaborationInvitationRequest,
+  LabCollaborationInvitation,
 } from '@/lib/api';
 
 
@@ -104,6 +107,17 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [editingSubmissionDeadline, setEditingSubmissionDeadline] = useState<string | null>(null);
     const [submissionDeadlineDraft, setSubmissionDeadlineDraft] = useState('');
 
+    // Collaboration state
+    const [collabInvitations, setCollabInvitations] = useState<LabCollaborationInvitation[]>([]);
+    const [allLabs, setAllLabs] = useState<Lab[]>([]);
+    const [showInviteLabPanel, setShowInviteLabPanel] = useState(false);
+    const [selectedInviteLabIds, setSelectedInviteLabIds] = useState<string[]>([]);
+    const [labSearchQuery, setLabSearchQuery] = useState('');
+    const [sendingInvites, setSendingInvites] = useState(false);
+    const [inviteError, setInviteError] = useState('');
+    const [cancellingInviteId, setCancellingInviteId] = useState<string | null>(null);
+    const [cancelError, setCancelError] = useState('');
+
     // Rating Modal state
     const [ratingModalOpen, setRatingModalOpen] = useState(false);
     const [ratingAssignmentId, setRatingAssignmentId] = useState<string | null>(null);
@@ -164,6 +178,25 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         };
         fetchData();
     }, [params.id]);
+
+    // Load collaboration invitations and available labs (coordinator only)
+    useEffect(() => {
+        if (!paper || !user.isCoordinator) return;
+        const paperLabIds = new Set((paper.labs ?? []).map(l => l.id));
+        const userLabIds = new Set((user.labs ?? []).map(l => l.id));
+        Promise.all([
+            getPaperInvitationsRequest(params.id).catch(() => [] as LabCollaborationInvitation[]),
+            getLabsRequest().catch(() => [] as Lab[]),
+        ]).then(([invitations, labs]) => {
+            setCollabInvitations(invitations);
+            const pendingLabIds = new Set(
+                invitations.filter(inv => inv.status === 'Pending').map(inv => inv.invitedLab.id)
+            );
+            setAllLabs(labs.filter(l =>
+                !paperLabIds.has(l.id) && !userLabIds.has(l.id) && !pendingLabIds.has(l.id)
+            ));
+        });
+    }, [paper, user.isCoordinator, params.id, user.labs]);
 
     // Load author rounds when paper is available and user is author/coordinator
     useEffect(() => {
@@ -606,34 +639,9 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
             ) : !paperHistory?.rounds?.length ? (
                 <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
                     <p className="text-sm text-slate-500">No review rounds recorded yet.</p>
-                    {(paperHistory?.overleafLink || paper.overleafLink) && (
-                        <a
-                            href={(paperHistory?.overleafLink || paper.overleafLink) ?? ''}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-4 inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"
-                        >
-                            <ExternalLink className="w-4 h-4" />
-                            Open Overleaf Manuscript
-                        </a>
-                    )}
                 </div>
             ) : (
                 <div className="space-y-5">
-                    {(paperHistory.overleafLink || paper.overleafLink) && (
-                        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-                            <a
-                                href={(paperHistory.overleafLink || paper.overleafLink) ?? ''}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-2 text-sm text-blue-300 hover:text-blue-200"
-                            >
-                                <ExternalLink className="w-4 h-4" />
-                                Overleaf manuscript
-                            </a>
-                        </div>
-                    )}
-
                     {paperHistory.rounds.map(round => {
                         const roundKey = round.id || `round-${round.roundNumber}`;
                         const isRoundExpanded = expandedHistoryRounds.has(roundKey);
@@ -1575,7 +1583,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         </div>
                     )}
 
-                    {canViewHistory && renderPaperHistory()}
                 </div>
 
                 <div className="space-y-6">
@@ -1762,6 +1769,171 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     )}
                 </div>
             </div>
+
+            {/* History & Collaborating Labs */}
+            <div className="space-y-6 mt-6">
+                {canViewHistory && renderPaperHistory()}
+
+                {user.isCoordinator && (
+                <div className="glass p-6 rounded-2xl border border-white/5 space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                        <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                            <FlaskConical className="w-5 h-5 text-indigo-400" />
+                            Collaborating Labs
+                        </h2>
+                        {!showInviteLabPanel && (
+                            <button
+                                onClick={() => { setShowInviteLabPanel(true); setInviteError(''); setSelectedInviteLabIds([]); setLabSearchQuery(''); }}
+                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Invite Lab
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Current collaborating labs */}
+                    {(paper.labs ?? []).length === 0 ? (
+                        <p className="text-sm text-slate-500">No collaborating labs yet.</p>
+                    ) : (
+                        <div className="flex flex-wrap gap-2">
+                            {(paper.labs ?? []).map((lab) => (
+                                <span key={lab.id} className="px-3 py-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-sm font-medium">
+                                    {lab.name}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Invitation history */}
+                    {collabInvitations.length > 0 && (
+                        <div className="space-y-2 pt-2 border-t border-white/5">
+                            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Invitations</h3>
+                            {cancelError && <p className="text-xs text-red-400">{cancelError}</p>}
+                            {collabInvitations.map(inv => (
+                                <div key={inv.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                                    <div>
+                                        <p className="text-sm font-medium text-white">{inv.invitedLab.name}</p>
+                                        <p className="text-xs text-slate-500">{new Date(inv.createdAt).toLocaleDateString()}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
+                                            inv.status === 'Accepted' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                            inv.status === 'Rejected' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                                            inv.status === 'Cancelled' ? 'bg-slate-500/10 text-slate-400 border-slate-500/20' :
+                                            'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                        }`}>
+                                            {inv.status}
+                                        </span>
+                                        {inv.status === 'Pending' && (
+                                            <button
+                                                disabled={cancellingInviteId === inv.id}
+                                                onClick={async () => {
+                                                    setCancellingInviteId(inv.id);
+                                                    setCancelError('');
+                                                    try {
+                                                        await cancelCollaborationInvitationRequest(inv.id);
+                                                        setCollabInvitations(prev => prev.map(i => i.id === inv.id ? { ...i, status: 'Cancelled' as const } : i));
+                                                        setAllLabs(prev => [...prev, { id: inv.invitedLab.id, name: inv.invitedLab.name }]);
+                                                    } catch (e: any) {
+                                                        setCancelError(e.message || 'Failed to cancel invitation.');
+                                                    } finally {
+                                                        setCancellingInviteId(null);
+                                                    }
+                                                }}
+                                                className="p-1 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                                                title="Cancel invitation"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Invite panel */}
+                    {showInviteLabPanel && (
+                        <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4 space-y-3">
+                            <h3 className="text-sm font-semibold text-indigo-400">Invite a Lab to Collaborate</h3>
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                <input
+                                    type="text"
+                                    placeholder="Search labs..."
+                                    value={labSearchQuery}
+                                    onChange={e => setLabSearchQuery(e.target.value)}
+                                    className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                                />
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                                {allLabs.filter(l => l.name.toLowerCase().includes(labSearchQuery.toLowerCase())).length === 0 ? (
+                                    <p className="text-sm text-slate-500 text-center py-4">No available labs to invite.</p>
+                                ) : (
+                                    allLabs
+                                        .filter(l => l.name.toLowerCase().includes(labSearchQuery.toLowerCase()))
+                                        .map(lab => (
+                                            <button
+                                                key={lab.id}
+                                                type="button"
+                                                onClick={() => setSelectedInviteLabIds(prev =>
+                                                    prev.includes(lab.id) ? prev.filter(id => id !== lab.id) : [...prev, lab.id]
+                                                )}
+                                                className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${selectedInviteLabIds.includes(lab.id) ? 'bg-indigo-600/20 border-indigo-500/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                            >
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${selectedInviteLabIds.includes(lab.id) ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                                                    {lab.name.charAt(0)}
+                                                </div>
+                                                <p className={`text-sm font-medium truncate ${selectedInviteLabIds.includes(lab.id) ? 'text-indigo-100' : 'text-slate-300'}`}>{lab.name}</p>
+                                            </button>
+                                        ))
+                                )}
+                            </div>
+                            {inviteError && <p className="text-xs text-red-400">{inviteError}</p>}
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={async () => {
+                                        if (selectedInviteLabIds.length === 0) return;
+                                        setSendingInvites(true);
+                                        setInviteError('');
+                                        try {
+                                            const result = await sendCollaborationInvitationsRequest(params.id, selectedInviteLabIds);
+                                            // Refresh invitation list independently — failure here doesn't mean send failed
+                                            getPaperInvitationsRequest(params.id)
+                                                .then(setCollabInvitations)
+                                                .catch(() => {});
+                                            const successfulLabIds = new Set(result.invited.map(i => i.invitedLabId));
+                                            setAllLabs(prev => prev.filter(l => !successfulLabIds.has(l.id)));
+                                            setSelectedInviteLabIds([]);
+                                            if (result.errors?.length) {
+                                                setInviteError(result.errors.map((e: any) => e.reason).join('; '));
+                                            } else {
+                                                setShowInviteLabPanel(false);
+                                            }
+                                        } catch (e: any) {
+                                            setInviteError(e.message || 'Failed to send invitations.');
+                                        } finally {
+                                            setSendingInvites(false);
+                                        }
+                                    }}
+                                    disabled={selectedInviteLabIds.length === 0 || sendingInvites}
+                                    className="px-4 py-2 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 transition-colors"
+                                >
+                                    {sendingInvites ? 'Sending…' : `Send Invitation${selectedInviteLabIds.length > 1 ? 's' : ''}`}
+                                </button>
+                                <button
+                                    onClick={() => { setShowInviteLabPanel(false); setSelectedInviteLabIds([]); setInviteError(''); }}
+                                    className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+            </div>{/* end history + collab grid */}
 
             {/* Rating Modal */}
             {ratingModalOpen && (

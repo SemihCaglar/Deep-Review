@@ -57,92 +57,97 @@ export async function runSeed(options: { reset?: boolean } = {}) {
   const allTopics = await ensureDefaultTopics(topicRepo);
 
   // 2. Admin
-  const admin = await ensureUser(userRepo, {
-    create: () => {
-      const u = new Admin();
-      u.email = 'admin@bilsen.app';
-      u.name = 'Global Administrator';
-      return u;
-    },
+  await ensureUser(userRepo, {
+    create: () => Object.assign(new Admin(), {
+      name: 'Global Administrator',
+      email: 'admin@bilsen.app',
+    }),
     password: 'admin123',
   });
 
-  // 3. Coordinator
-  const coordinator = await ensureUser(userRepo, {
+  // 3a. Coordinator of Lab A
+  const coordA = await ensureUser(userRepo, {
     create: () => Object.assign(new Coordinator(), {
-      name: 'Semih Çağlar',
-      email: 'semih.caglar@ug.bilkent.edu.tr',
+      name: 'Esra Nur Tat',
+      email: 'esranurtatoglu24@gmail.com',
     }),
     password: '123',
   }) as Coordinator;
 
-  // 4. Lab (BILSEN/CS319 Combined)
-  const lab = await ensureLab(labRepo, {
-    name: 'CS319 Lab',
-    description: 'Bilkent CS319 course project lab.',
-    coordinator,
-    members: [coordinator],
+  // 4a. Lab A — Bilkent AI Research Lab
+  const labA = await ensureLab(labRepo, {
+    name: 'Bilkent AI Research Lab',
+    description: 'Focuses on machine learning, deep learning, and NLP research.',
+    coordinator: coordA,
+    members: [coordA],
     topics: allTopics.slice(0, 5),
   });
 
-  // 5. System Policies & Templates
-  await ensureDefaultPolicies(policyRepo);
-  await ensureDefaultTemplates(templateRepo);
-
-  // 6. Reviewer 1 (LabMember) — email receives the test invitation
-  const reviewer = await ensureUser(userRepo, {
+  // 5a. Member of Lab A
+  const memberA = await ensureUser(userRepo, {
     create: () => Object.assign(new LabMember(), {
-      name: 'Test Reviewer',
-      email: 'bilkentcs319@gmail.com',
+      name: 'Adur Bilkom',
+      email: 'bilkomadur@gmail.com',
     }),
     password: '123',
   }) as LabMember;
-  // Reviewer 2 (LabMember) — fresh reviewer for invitation testing
-  const reviewer2 = await ensureUser(userRepo, {
-    create: () => Object.assign(new LabMember(), {
-      name: 'Second Reviewer',
-      email: 'esranurtatoglu24@gmail.com',
+
+  await addMemberToLab(labRepo, labA.id, memberA);
+
+  // 3b. Coordinator of Lab B
+  const coordB = await ensureUser(userRepo, {
+    create: () => Object.assign(new Coordinator(), {
+      name: 'Deniz Yılmaz',
+      email: 'esranurtatoglu2198@gmail.com',
     }),
     password: '123',
+  }) as Coordinator;
+
+  // 4b. Lab B — Bilkent Systems Lab
+  const labB = await ensureLab(labRepo, {
+    name: 'Bilkent Systems Lab',
+    description: 'Focuses on distributed systems, databases, and software engineering.',
+    coordinator: coordB,
+    members: [coordB],
+    topics: allTopics.slice(5, 10),
   });
 
-  // Add both reviewers to lab if not already members
-  const labWithMembers = await labRepo.findOne({ where: { id: lab.id }, relations: ['members'] });
-  if (labWithMembers) {
-    let changed = false;
-    if (!labWithMembers.members.find(m => m.id === reviewer.id)) {
-      labWithMembers.members.push(reviewer);
-      changed = true;
-    }
-    if (!labWithMembers.members.find(m => m.id === reviewer2.id)) {
-      labWithMembers.members.push(reviewer2);
-      changed = true;
-    }
-    if (changed) {
-      await labRepo.save(labWithMembers);
-      console.log('✅ Reviewer(s) added to lab');
-    }
-  }
+  // 5b. Member of Lab B
+  const memberB = await ensureUser(userRepo, {
+    create: () => Object.assign(new LabMember(), {
+      name: 'Selin Arslan',
+      email: 'esranurtat2025@gmail.com',
+    }),
+    password: '123',
+  }) as LabMember;
 
-  // Paper — reviewer (bilkentcs319) is the author
-  let paper = await paperRepo.findOne({ where: { title: 'Test Paper for Review' }, relations: ['coordinators', 'labs', 'authors'] });
+  await addMemberToLab(labRepo, labB.id, memberB);
+
+  // 6. System Policies & Templates
+  await ensureDefaultPolicies(policyRepo);
+  await ensureDefaultTemplates(templateRepo);
+
+  // 7. Demo paper under Lab A
+  let paper = await paperRepo.findOne({
+    where: { title: 'Attention Mechanisms in Transformer Models' },
+    relations: ['coordinators', 'labs', 'authors'],
+  });
   if (!paper) {
     paper = paperRepo.create({
-      title: 'Test Paper for Review',
-      abstractText: 'This is a test paper for development purposes.',
+      title: 'Attention Mechanisms in Transformer Models',
+      abstractText: 'A comprehensive study of attention mechanisms and their role in modern transformer architectures.',
       creationTime: new Date(),
       status: PaperStatus.InReview,
-      coordinators: [{ id: coordinator.id } as Coordinator],
-      labs: [{ id: lab.id } as Lab],
-      authors: [{ id: reviewer.id } as LabMember],
-      overleafLink: 'https://www.overleaf.com/project/test-paper',
+      coordinators: [{ id: coordA.id } as Coordinator],
+      labs: [{ id: labA.id } as Lab],
+      authors: [{ id: memberA.id } as LabMember],
+      overleafLink: 'https://www.overleaf.com/project/attention-mechanisms-demo',
     });
-
     await paperRepo.save(paper);
-    console.log('✅ Paper created (author: bilkentcs319@gmail.com)');
+    console.log('✅ Demo paper created');
   }
 
-  // Round
+  // 8. Round for demo paper
   let round = await roundRepo.findOne({ where: { paper: { id: paper.id } as any, roundNumber: 1 } });
   if (!round) {
     const deadline = new Date();
@@ -152,7 +157,7 @@ export async function runSeed(options: { reset?: boolean } = {}) {
       roundNumber: 1,
       deadline,
       status: RoundStatus.Open,
-      targetVenue: 'ICSE 2026',
+      targetVenue: 'NeurIPS 2026',
       venueCategory: VenueCategory.Conference,
       submissionDeadline: new Date(deadline.getTime() + 7 * 24 * 60 * 60 * 1000),
     });
@@ -160,27 +165,38 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     console.log('✅ Round created');
   }
 
-  // Assignment for reviewer 2 (esranurtatoglu24 — she is not the author, so eligible)
-  const existingAssignment = await assignRepo.findOne({ where: { round: { id: round.id } as any, reviewer: { id: reviewer2.id } as any } });
+  // 9. Assign memberB as reviewer for the demo paper round
+  const existingAssignment = await assignRepo.findOne({
+    where: { round: { id: round.id } as any, reviewer: { id: memberB.id } as any },
+  });
   if (!existingAssignment) {
     const assignment = assignRepo.create({
       round: { id: round.id } as Round,
-      reviewer: { id: reviewer2.id } as LabMember,
+      reviewer: { id: memberB.id } as LabMember,
       status: AssignmentStatus.Invited,
       deadline: round.deadline,
     });
     await assignRepo.save(assignment);
-    console.log('✅ Assignment created for esranurtatoglu24@gmail.com (Invited)');
+    console.log('✅ Review assignment created for Selin Arslan');
   }
 
-  // Reviewer 2 has no pre-created assignment — coordinator assigns via the UI which also sends the invitation email
-
-  console.log(`\n🌱 Seed complete!`);
-  console.log(`   Coordinator — email: coordinator@mock.test           password: 123`);
-  console.log(`   Author      — email: bilkentcs319@gmail.com          password: 123`);
-  console.log(`   Reviewer    — email: esranurtatoglu24@gmail.com      password: 123  (assigned)`);
+  console.log('\n🌱 Seed complete!');
+  console.log('   Admin       — email: admin@bilsen.app                  password: admin123');
+  console.log('   Coordinator — email: esranurtatoglu24@gmail.com        password: 123  (Lab A: Bilkent AI Research Lab)');
+  console.log('   Member      — email: bilkomadur@gmail.com              password: 123  (Lab A)');
+  console.log('   Coordinator — email: esranurtatoglu2198@gmail.com      password: 123  (Lab B: Bilkent Systems Lab)');
+  console.log('   Member      — email: esranurtat2025@gmail.com          password: 123  (Lab B)');
   console.log(`   Round ID    — ${round.id}`);
   await AppDataSource.destroy();
+}
+
+async function addMemberToLab(labRepo: ReturnType<typeof AppDataSource.getRepository<Lab>>, labId: string, member: User) {
+  const lab = await labRepo.findOne({ where: { id: labId }, relations: ['members'] });
+  if (lab && !lab.members.find(m => m.id === member.id)) {
+    lab.members.push(member);
+    await labRepo.save(lab);
+    console.log(`✅ ${member.name} added to lab`);
+  }
 }
 
 async function ensureDefaultTopics(topicRepo: ReturnType<typeof AppDataSource.getRepository<Topic>>) {
@@ -236,6 +252,7 @@ async function ensureLab(
       topics: options.topics,
     });
     await labRepo.save(lab);
+    console.log(`✅ Lab "${options.name}" created`);
   }
   return lab;
 }
@@ -249,10 +266,7 @@ async function ensureDefaultPolicies(policyRepo: ReturnType<typeof AppDataSource
 
   for (const item of defaults) {
     const existing = await policyRepo.findOne({
-      where: {
-        key: item.key,
-        lab: IsNull()
-      } as any
+      where: { key: item.key, lab: IsNull() } as any,
     });
     if (!existing) {
       await policyRepo.save(policyRepo.create({ key: item.key, value: item.value, lab: null }));
@@ -276,10 +290,7 @@ async function ensureDefaultTemplates(templateRepo: ReturnType<typeof AppDataSou
 
   for (const item of defaults) {
     const existing = await templateRepo.findOne({
-      where: {
-        name: item.name,
-        lab: IsNull()
-      } as any
+      where: { name: item.name, lab: IsNull() } as any,
     });
     if (!existing) {
       await templateRepo.save(templateRepo.create({ ...item, lab: null }));

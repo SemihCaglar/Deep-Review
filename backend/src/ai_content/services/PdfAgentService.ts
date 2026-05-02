@@ -11,13 +11,20 @@ export interface AgentReviewResult {
 }
 
 export interface ChecklistAnalysisResult {
+  paperTitle?: string;
   selectedStandards: Array<{ label: string; confidence: string; evidence: string }>;
 }
 
-const CHECKLIST_PROMPT = `Analyze the attached academic paper PDF and select the applicable SIGSOFT Empirical Standards checklist categories.
-Return ONLY valid JSON. Do not include markdown. Do not include explanations outside JSON.
+const CHECKLIST_PROMPT = `STEP 1: READ THE ATTACHED PDF USING PYTHON CODE
+Use Python with PyPDF2 or similar to:
+- Load the attached PDF file
+- Extract the full text content
+- Understand the research methodology and type
 
-If your manuscript proposes and assesses a new artifact (e.g. a tool) select Engineering Research and the empirical method(s) used to assess the artifact. If your manuscript reports a multimethodology or mixed-methods study, select Multimethodology and both methods. If your manuscript uses a method not listed here, choose the last option.
+STEP 2: ANALYZE AND RETURN JSON ONLY
+Analyze the paper content and select the applicable SIGSOFT Empirical Standards checklist categories.
+
+If the manuscript proposes and assesses a new artifact (e.g. a tool) select Engineering Research and the empirical method(s) used to assess the artifact. If the manuscript reports a multimethodology or mixed-methods study, select Multimethodology and both methods. If the manuscript uses a method not listed here, choose the last option.
 
 Possible standards:
 - Engineering Research
@@ -40,8 +47,9 @@ Possible standards:
 - Replication
 - Empirical Method Not Listed Above
 
-Return this exact JSON schema:
+Return ONLY this exact JSON (no markdown, no explanations):
 {
+  "paperTitle": "Extracted paper title from the PDF",
   "selectedStandards": [
     { "label": "Engineering Research", "confidence": "high", "evidence": "Short evidence from the paper" }
   ]
@@ -52,7 +60,7 @@ Rules:
 - Use confidence: "high", "medium", or "low".
 - Keep evidence short and concrete.
 - label must exactly match one of the 19 standards listed above.
-- Return JSON only.`;
+- Return JSON only - no other text.`;
 
 export class PdfAgentService {
   private client: AgentsClient;
@@ -95,52 +103,66 @@ export class PdfAgentService {
   }
 
 
-  async runAnnotatedReview(fileId: string, venueName: string = "the conference"): Promise<AgentReviewResult> {
+  async runAnnotatedReview(fileId: string): Promise<AgentReviewResult> {
     const thread = await this.client.threads.create();
 
-    const reviewPrompt = `You are a critical academic peer reviewer for ${venueName}.
+    const reviewPrompt = `You are a critical academic peer reviewer.
 
-IMPORTANT: Output ONLY the review content. No preamble, no explanation, no metadata. Just the review itself.
+STEP 1: READ THE ATTACHED PDF USING PYTHON CODE
+Use Python with PyPDF2 or similar to:
+- Load the attached PDF file
+- Extract the full text content
+- Find the paper title (usually at the beginning)
+- Identify all major sections and their content
 
-Review the attached PDF paper and provide a structured peer review in Markdown format:
+STEP 2: WRITE THE REVIEW in EXACTLY this format (with NO preamble or postamble):
 
 ## Paper Title
-[Extract from PDF]
+[The EXACT paper title extracted from the PDF]
 
-### 1. Overall Decision
-(Strong Accept / Accept / Weak Accept / Weak Reject / Reject)
+## Overall Decision
+[Your decision: Strong Accept / Accept / Weak Accept / Weak Reject / Reject]
 
-### 2. Summary of Contribution
-(2-3 sentences)
+## Summary of Contribution
+[2-3 sentences describing what the paper contributes]
 
-### 3. Critical Review & Attack Points
-#### Methodology & Validity
-(Critique the study design, data collection, threats to validity, and bias.)
+## Critical Review
+### Methodology & Validity
+[Critical analysis of research methods and validity]
 
-#### Industrial Relevance
-(Is this truly useful for industry practitioners? Is the problem real? Is the solution scalable?)
+### Industrial Relevance
+[Analysis of practical importance and applicability]
 
-#### Clarity & Presentation
-(Critique the structure, figures, and writing quality.)
+### Clarity & Presentation
+[Assessment of writing quality and clarity]
 
-### 4. Prioritized Improvements
-**High Priority - Must Address:**
-(Fatal flaws or major missing pieces that will likely lead to rejection.)
+## Prioritized Improvements
+### High Priority
+[List items that must be addressed]
 
-**Medium Priority - Should Improve:**
-(Weak points or underemphasized areas that should be strengthened.)
+### Medium Priority
+[List items that should be addressed]
 
-**Low Priority - Nice to Have:**
-(Minor nitpicks, formatting issues, or overemphasized sections.)
+### Low Priority
+[List items that could be addressed]
 
-### 5. Scope & Balance Analysis
-**Underemphasized Areas:**
-(Crucial details, related work, or context currently missing.)
+## Scope Analysis
+### Underemphasized Areas
+[What is under-explored in the paper]
 
-**Overemphasized Areas:**
-(Fluff, basic definitions, or common knowledge that takes up too much space.)
+### Overemphasized Areas
+[What receives too much attention relative to importance]
 
-Be tough but fair. Output ONLY the review in Markdown. After the review, create an annotated PDF highlighting key issues.`;
+STEP 3: CREATE AN ANNOTATED PDF
+- Read the original PDF
+- Create a new PDF with annotations/highlights marking key sections and issues from your review
+- Save it as output
+
+CRITICAL RULES:
+- You MUST extract and use the actual paper title from the PDF, not a generic title
+- Output only the review text in Step 2 format - no preamble like "Certainly" or postamble like "I will"
+- Start immediately with "## Paper Title"
+- Then create the annotated PDF`;
 
     await this.client.messages.create(thread.id, "user", reviewPrompt, {
       attachments: [{ fileId, tools: [{ type: "code_interpreter" }] }],
@@ -190,14 +212,15 @@ Be tough but fair. Output ONLY the review in Markdown. After the review, create 
     // Clean preamble and postamble from review text
     let cleanedText = summaryText.trim();
 
-    // Remove preamble (everything before the first markdown header or "Paper Title")
-    const headerMatch = cleanedText.match(/^[\s\S]*?(## Paper Title|### Paper Title|#+ Paper Title|#+ 1\. Overall Decision)/i);
-    if (headerMatch && headerMatch.index !== undefined && headerMatch.index > 0) {
-      cleanedText = cleanedText.substring(headerMatch.index);
+    // Remove preamble (everything before "## Paper Title")
+    const paperTitleMatch = cleanedText.match(/^[\s\S]*?(## Paper Title)/i);
+    if (paperTitleMatch && paperTitleMatch.index !== undefined && paperTitleMatch.index > 0) {
+      cleanedText = cleanedText.substring(paperTitleMatch.index);
     }
 
-    // Remove postamble (everything after "Scope & Balance Analysis" section ends)
-    const postambleMatch = cleanedText.match(/(^|\n)(The review is complete|Next, I will|If you need|You can download|\[Download)/i);
+    // Remove postamble (everything after completion markers)
+    // Look for patterns that mark the end of the scope analysis section
+    const postambleMatch = cleanedText.match(/(\n\n\[Annotated PDF|The review is complete|Next, I will|Annotation complete)/i);
     if (postambleMatch && postambleMatch.index !== undefined) {
       cleanedText = cleanedText.substring(0, postambleMatch.index);
     }
@@ -243,6 +266,7 @@ Be tough but fair. Output ONLY the review in Markdown. After the review, create 
     try {
       const cleanedText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
       const result = JSON.parse(cleanedText) as ChecklistAnalysisResult;
+      console.log(`[PdfAgentService] Checklist analysis: paperTitle="${result.paperTitle}", ${result.selectedStandards.length} standards`);
       return result;
     } catch (e) {
       console.error(`[PdfAgentService] Failed to parse checklist JSON:`, jsonText);

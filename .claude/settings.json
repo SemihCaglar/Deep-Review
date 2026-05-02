@@ -9,7 +9,11 @@
       "Bash(git add *)",
       "Bash(npx -y typescript --noEmit)",
       "Bash(gh pr *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(git push *)",
+      "Bash(git fetch *)",
+      "Bash(npm run *)",
+      "Read(//tmp/**)"
     ]
   }
 }

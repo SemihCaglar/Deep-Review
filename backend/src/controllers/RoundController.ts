@@ -572,7 +572,9 @@ export class RoundController {
         annotatedPdfUrl: r.annotatedPdfUrl,
         artifacts: {
           checklistItems: (r.checklistItems ?? []).map(ci => ({ id: ci.id, description: ci.description, isChecked: ci.isChecked })),
-          aiReviewReports: (r.aiReviewReports ?? []).map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
+          aiReviewReports: (r.aiReviewReports ?? [])
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
         }
       })));
     } catch (err) {
@@ -637,13 +639,15 @@ export class RoundController {
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
-        aiReviewReports: (round.aiReviewReports ?? []).map(ar => ({
-          id: ar.id,
-          reviewText: ar.reviewText,
-          annotatedPdfUrl: ar.annotatedPdfUrl,
-          venue: ar.venue,
-          createdAt: ar.createdAt,
-        })),
+        aiReviewReports: (round.aiReviewReports ?? [])
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .map(ar => ({
+            id: ar.id,
+            reviewText: ar.reviewText,
+            annotatedPdfUrl: ar.annotatedPdfUrl,
+            venue: ar.venue,
+            createdAt: ar.createdAt,
+          })),
         assignments: (round.assignments ?? []).map(a => ({
           id: a.id,
           status: a.status,
@@ -866,12 +870,20 @@ export class RoundController {
       const agentService = new PdfAgentService();
       const inputFilename = `paper_${round.paper.id}_round_${round.id}.pdf`;
 
-      console.log(`[RoundController] Uploading PDF for peer review...`);
+      console.log(`[RoundController] PDF received: ${file.originalname || 'unknown'} (${file.buffer.length} bytes)`);
+      console.log(`[RoundController] Uploading PDF for peer review as: ${inputFilename}...`);
       const fileId = await agentService.uploadPdf(file.buffer, inputFilename);
+      console.log(`[RoundController] File uploaded to Azure with ID: ${fileId}`);
 
       const venueName = round.targetVenue || 'the conference';
-      console.log(`[RoundController] Running peer review for venue: ${venueName}...`);
-      const reviewResult = await agentService.runAnnotatedReview(fileId, venueName);
+      console.log(`[RoundController] Running peer review...`);
+      const reviewResult = await agentService.runAnnotatedReview(fileId);
+
+      // Log the review result
+      const titleMatch = reviewResult.summaryText.match(/## Paper Title\n(.*?)($|\n)/);
+      const reviewTitle = titleMatch ? titleMatch[1].trim() : 'Unknown';
+      console.log(`[RoundController] Review completed. Paper title: "${reviewTitle}"`);
+      console.log(`[RoundController] Review text length: ${reviewResult.summaryText.length} chars, PDF generated: ${reviewResult.annotatedPdfBuffer ? 'YES' : 'NO'}`);
 
       // Save annotated PDF if present
       let annotatedPdfUrl: string | null = null;
@@ -955,12 +967,16 @@ export class RoundController {
       const agentService = new PdfAgentService();
       const inputFilename = `paper_${round.paper.id}_round_${round.id}.pdf`;
 
-      console.log(`[RoundController] Uploading PDF for checklist analysis...`);
+      console.log(`[RoundController] PDF received: ${file.originalname || 'unknown'} (${file.buffer.length} bytes)`);
+      console.log(`[RoundController] Uploading PDF for checklist analysis as: ${inputFilename}...`);
       const fileId = await agentService.uploadPdf(file.buffer, inputFilename);
+      console.log(`[RoundController] File uploaded to Azure with ID: ${fileId}`);
 
       console.log(`[RoundController] Running checklist analysis...`);
       const raw = await agentService.runChecklistAnalysis(fileId);
+      console.log(`[RoundController] Raw checklist result: ${raw.selectedStandards.length} standards found (before filtering)`);
       const filtered = ChecklistService.filterValidStandards(raw.selectedStandards);
+      console.log(`[RoundController] Filtered checklist result: ${filtered.length} standards after validation`);
       const checklistJson = { selectedStandards: filtered };
       const checklistUrl = ChecklistService.buildEmpiricalStandardsUrl(filtered.map((s: any) => s.label));
 
