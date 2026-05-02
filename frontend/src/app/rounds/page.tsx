@@ -1361,8 +1361,25 @@ function RoundCard({
                           ))}
                         </div>
                       ) : recentReport ? (
-                        <div className="p-2 rounded-lg bg-slate-800/30 space-y-2">
-                          <p className="text-xs text-slate-300 leading-relaxed line-clamp-5">{recentReport.summaryReport}</p>
+                        <div className="p-2 rounded-lg bg-slate-800/30 space-y-2 max-h-96 overflow-y-auto">
+                          <div className="text-xs text-slate-300 leading-relaxed markdown-content whitespace-pre-wrap">
+                            <ReactMarkdown
+                              components={{
+                                h1: ({node, ...props}) => <h1 className="text-sm font-bold text-slate-100 mt-3 mb-2" {...props} />,
+                                h2: ({node, ...props}) => <h2 className="text-xs font-bold text-slate-100 mt-2 mb-1" {...props} />,
+                                h3: ({node, ...props}) => <h3 className="text-xs font-semibold text-slate-100 mt-2 mb-1" {...props} />,
+                                h4: ({node, ...props}) => <h4 className="text-xs font-semibold text-slate-200 mt-1 mb-1" {...props} />,
+                                p: ({node, ...props}) => <p className="text-xs text-slate-300 mb-1" {...props} />,
+                                ul: ({node, ...props}) => <ul className="text-xs text-slate-300 list-disc list-inside mb-1" {...props} />,
+                                ol: ({node, ...props}) => <ol className="text-xs text-slate-300 list-decimal list-inside mb-1" {...props} />,
+                                li: ({node, ...props}) => <li className="text-xs text-slate-300 ml-2" {...props} />,
+                                strong: ({node, ...props}) => <strong className="text-slate-100 font-semibold" {...props} />,
+                                em: ({node, ...props}) => <em className="italic text-slate-200" {...props} />,
+                              }}
+                            >
+                              {recentReport.summaryReport}
+                            </ReactMarkdown>
+                          </div>
                         </div>
                       ) : null}
                     </div>
@@ -1457,7 +1474,10 @@ function RoundCard({
                             <p className="text-[10px] text-emerald-300/70 mt-1">{finalizedChecklist.selectedStandards.length} standards selected</p>
                           </div>
                           <button
-                            onClick={() => setFinalizedChecklist(null)}
+                            onClick={() => {
+                              setFinalizedChecklist(null);
+                              setConfirmedStandards(new Set(finalizedChecklist.selectedStandards));
+                            }}
                             className="px-2 py-1 text-xs rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 transition-colors"
                             title="Update checklist selection"
                           >
