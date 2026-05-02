@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { BookOpen, CheckCircle2, Users, ArrowUp, ArrowDown, Search, X, FlaskConical } from 'lucide-react';
-import { getLabMembersRequest, getTopicsRequest, registerPaperRequest, getLabsRequest, LabMember, TopicOption, Lab } from '@/lib/api';
+import { BookOpen, CheckCircle2, Users, ArrowUp, ArrowDown, Search, X } from 'lucide-react';
+import { ApiError, getLabMembersRequest, getLabTopicsRequest, registerPaperRequest, LabMember, TopicOption } from '@/lib/api';
 
 export default function RegisterPaper() {
     const { user } = useUser();
@@ -14,9 +14,6 @@ export default function RegisterPaper() {
 
     const [availableUsers, setAvailableUsers] = useState<LabMember[]>([]);
     const [topicsList, setTopicsList] = useState<TopicOption[]>([]);
-    const [availableLabs, setAvailableLabs] = useState<Lab[]>([]);
-    const [selectedCollabLabs, setSelectedCollabLabs] = useState<string[]>([]);
-    const [labSearch, setLabSearch] = useState('');
 
     // Form state
     const [title, setTitle] = useState('');
@@ -29,6 +26,7 @@ export default function RegisterPaper() {
 
     const [authorSearch, setAuthorSearch] = useState('');
     const [topicSearch, setTopicSearch] = useState('');
+    const currentLabId = user.labs?.[0]?.id;
 
     useEffect(() => {
         if (user.isFrozen) {
@@ -40,27 +38,27 @@ export default function RegisterPaper() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [membersRes, topicsRes, labsRes] = await Promise.all([
+                const [membersRes, topicsRes] = await Promise.all([
                     getLabMembersRequest(),
-                    getTopicsRequest(),
-                    getLabsRequest(),
+                    currentLabId ? getLabTopicsRequest(currentLabId) : Promise.resolve([]),
                 ]);
                 setAvailableUsers(membersRes.users);
                 setTopicsList(topicsRes);
-                // Exclude the coordinator's own lab from the collaborating labs list
-                const myLabIds = new Set((user.labs || []).map((l: any) => l.id));
-                setAvailableLabs(labsRes.filter(l => !myLabIds.has(l.id)));
+                setSelectedTopics(current => current.filter(topicId => topicsRes.some(topic => topic.id === topicId)));
+                setSelectedAuthors(current => {
+                    const requiredIds = Array.from(new Set([
+                        user.id,
+                        ...membersRes.users.filter(member => member.role === 'Coordinator').map(member => member.id),
+                    ].filter((id): id is string => Boolean(id))));
 
-                // Automatically add current user to authors if not already there
-                if (user?.id && !selectedAuthors.includes(user.id)) {
-                    setSelectedAuthors([user.id]);
-                }
+                    return [...requiredIds, ...current.filter(authorId => !requiredIds.includes(authorId))];
+                });
             } catch (err) {
                 console.error('Failed to fetch form data', err);
             }
         };
         fetchData();
-    }, [user?.id, selectedAuthors]);
+    }, [user?.id, currentLabId]);
 
     if (!user.id) {
         return (
@@ -98,12 +96,6 @@ export default function RegisterPaper() {
         }
     };
 
-    const toggleCollabLab = (labId: string) => {
-        setSelectedCollabLabs(prev =>
-            prev.includes(labId) ? prev.filter(id => id !== labId) : [...prev, labId]
-        );
-    };
-
     const handleNext = (e: React.FormEvent) => {
         e.preventDefault();
         if (step === 1) {
@@ -117,7 +109,7 @@ export default function RegisterPaper() {
             }
             setOverleafError('');
         }
-        if (step < 4) setStep(step + 1);
+        if (step < 3) setStep(step + 1);
     };
 
     const handleBack = () => {
@@ -135,12 +127,11 @@ export default function RegisterPaper() {
                 overleafLink,
                 authors: selectedAuthors,
                 topics: selectedTopics,
-                collaboratingLabIds: selectedCollabLabs,
             });
             router.push(user.isCoordinator ? '/papers' : '/papers?filter=authored');
         } catch (err) {
             console.error(err);
-            alert('Failed to register paper. Please try again.');
+            alert(err instanceof ApiError ? err.message : 'Failed to register paper. Please try again.');
             setIsSubmitting(false);
         }
     };
@@ -152,6 +143,10 @@ export default function RegisterPaper() {
             u.name.toLowerCase().includes(authorSearch.toLowerCase()) ||
             u.email.toLowerCase().includes(authorSearch.toLowerCase())
         );
+    const requiredAuthorIds = new Set([
+        user.id,
+        ...availableUsers.filter(u => u.role === 'Coordinator').map(u => u.id),
+    ]);
 
     const filteredTopics = topicsList
         .filter(t => t.name.toLowerCase().includes(topicSearch.toLowerCase()));
@@ -165,13 +160,12 @@ export default function RegisterPaper() {
 
             <div className="flex items-center justify-between mb-8 relative">
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-0.5 bg-white/10 z-0"></div>
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 h-0.5 bg-blue-500 z-0 transition-all duration-500" style={{ width: `${((step - 1) / 3) * 100}%` }}></div>
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 h-0.5 bg-blue-500 z-0 transition-all duration-500" style={{ width: `${((step - 1) / 2) * 100}%` }}></div>
 
                 {[
                     { num: 1, label: 'Basic Info', icon: BookOpen },
                     { num: 2, label: 'Meta & Authors', icon: Users },
-                    { num: 3, label: 'Collaborations', icon: FlaskConical },
-                    { num: 4, label: 'Review', icon: CheckCircle2 }
+                    { num: 3, label: 'Review', icon: CheckCircle2 }
                 ].map(s => (
                     <div key={s.num} className="relative z-10 flex flex-col items-center gap-2">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${step >= s.num ? 'bg-blue-600 border-blue-500 text-white' : 'bg-background border-slate-700 text-slate-500'
@@ -184,7 +178,7 @@ export default function RegisterPaper() {
             </div>
 
             <div className="glass p-8 rounded-2xl border border-white/5 shadow-xl">
-                <form onSubmit={step === 4 ? handleSubmit : handleNext}>
+                <form onSubmit={step === 3 ? handleSubmit : handleNext}>
 
                     {step === 1 && (
                         <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
@@ -262,12 +256,16 @@ export default function RegisterPaper() {
                                             {selectedAuthors.map((authorId, index) => {
                                                 const authorInfo = availableUsers.find(u => u.id === authorId) || (authorId === user.id ? { name: user.name + ' (You)', email: user.email } : null);
                                                 if (!authorInfo) return null;
+                                                const isRequiredAuthor = requiredAuthorIds.has(authorId);
                                                 return (
                                                     <div key={authorId} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl group">
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-blue-500 font-bold text-sm w-4">{index + 1}.</span>
                                                             <div>
                                                                 <p className="text-sm font-medium text-white">{authorInfo.name}</p>
+                                                                {'role' in authorInfo && authorInfo.role === 'Coordinator' && (
+                                                                    <p className="text-xs text-blue-300">Coordinator</p>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="flex gap-1 items-center">
@@ -289,7 +287,7 @@ export default function RegisterPaper() {
                                                                     <ArrowDown className="w-4 h-4" />
                                                                 </button>
                                                             </div>
-                                                            {authorId !== user.id && (
+                                                            {!isRequiredAuthor && (
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => toggleAuthor(authorId)}
@@ -352,66 +350,8 @@ export default function RegisterPaper() {
                         </div>
                     )}
 
+
                     {step === 3 && (
-                        <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-1">Invite Collaborating Labs <span className="text-slate-500 font-normal">(optional)</span></label>
-                                <p className="text-slate-500 text-sm mb-4">Select other labs to invite as co-collaborators. Their coordinators will receive an invitation and can accept or decline.</p>
-
-                                <div className="relative mb-4">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search labs..."
-                                        value={labSearch}
-                                        onChange={e => setLabSearch(e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                                    />
-                                    {labSearch && (
-                                        <button type="button" onClick={() => setLabSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-white/10 rounded-full">
-                                            <X className="w-3 h-3 text-slate-400" />
-                                        </button>
-                                    )}
-                                </div>
-
-                                <div className="space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
-                                    {availableLabs.filter(l => l.name.toLowerCase().includes(labSearch.toLowerCase())).length === 0 ? (
-                                        <p className="text-center py-8 text-slate-500 text-sm border border-dashed border-white/10 rounded-xl bg-white/[0.02]">
-                                            {availableLabs.length === 0 ? 'No other labs available.' : 'No labs match your search.'}
-                                        </p>
-                                    ) : (
-                                        availableLabs
-                                            .filter(l => l.name.toLowerCase().includes(labSearch.toLowerCase()))
-                                            .map(lab => (
-                                                <button
-                                                    key={lab.id}
-                                                    type="button"
-                                                    onClick={() => toggleCollabLab(lab.id)}
-                                                    className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${selectedCollabLabs.includes(lab.id) ? 'bg-blue-600/20 border-blue-500/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
-                                                >
-                                                    <div className={`w-9 h-9 flex-shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${selectedCollabLabs.includes(lab.id) ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
-                                                        {lab.name.charAt(0)}
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className={`font-medium truncate ${selectedCollabLabs.includes(lab.id) ? 'text-blue-100' : 'text-slate-300'}`}>{lab.name}</p>
-                                                        {lab.description && <p className={`text-xs truncate ${selectedCollabLabs.includes(lab.id) ? 'text-blue-300/70' : 'text-slate-500'}`}>{lab.description}</p>}
-                                                    </div>
-                                                    {selectedCollabLabs.includes(lab.id) && (
-                                                        <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
-                                                    )}
-                                                </button>
-                                            ))
-                                    )}
-                                </div>
-
-                                {selectedCollabLabs.length > 0 && (
-                                    <p className="mt-3 text-xs text-blue-400">{selectedCollabLabs.length} lab{selectedCollabLabs.length !== 1 ? 's' : ''} selected — invitation{selectedCollabLabs.length !== 1 ? 's' : ''} will be sent on registration.</p>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {step === 4 && (
                         <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300 text-center py-6">
                             <div className="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/20">
                                 <CheckCircle2 className="w-10 h-10" />
@@ -423,7 +363,6 @@ export default function RegisterPaper() {
                                     : 'Once it is registered, the first review round can be initialized by a Coordinator from the paper details page.'}
                                 <br /><br />
                                 {selectedAuthors.length > 0 && <span className="text-blue-400">{selectedAuthors.length} author(s) will be notified by the Email Service.</span>}
-                                {selectedCollabLabs.length > 0 && <><br /><span className="text-indigo-400">{selectedCollabLabs.length} collaboration invitation{selectedCollabLabs.length !== 1 ? 's' : ''} will be sent.</span></>}
                             </p>
                         </div>
                     )}
@@ -443,7 +382,7 @@ export default function RegisterPaper() {
                             className="px-6 py-2.5 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-500 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                             {isSubmitting && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                            {step === 4 ? (isSubmitting ? 'Registering...' : 'Complete Registration') : 'Continue'}
+                            {step === 3 ? (isSubmitting ? 'Registering...' : 'Complete Registration') : 'Continue'}
                         </button>
                     </div>
                 </form>

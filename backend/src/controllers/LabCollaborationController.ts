@@ -6,7 +6,7 @@ import { LabCollaborationInvitation, CollaborationInvitationStatus } from '../en
 import { Paper } from '../entities/Paper';
 import { Lab } from '../entities/Lab';
 import { Coordinator } from '../entities/Coordinator';
-import { UserRole } from '../entities/User';
+import { User, UserRole } from '../entities/User';
 import { sendEmail } from '../services/emailService';
 
 export class LabCollaborationController {
@@ -242,7 +242,7 @@ export class LabCollaborationController {
         const paperRepo = manager.getRepository(Paper);
         const paper = await paperRepo.findOne({
           where: { id: invitation.paper.id },
-          relations: ['labs', 'coordinators'],
+          relations: ['labs', 'coordinators', 'authors'],
         });
         if (paper) {
           if (!paper.labs?.some(l => l.id === invitation.invitedLab.id)) {
@@ -253,6 +253,13 @@ export class LabCollaborationController {
             if (invitedCoordinator) {
               paper.coordinators = [...(paper.coordinators ?? []), invitedCoordinator];
             }
+          }
+          const invitedCoordinator = await manager.getRepository(Coordinator).findOne({ where: { id: user.id } });
+          if (invitedCoordinator && !paper.authors?.some(author => author.id === invitedCoordinator.id)) {
+            paper.authors = [...(paper.authors ?? []), invitedCoordinator as unknown as User];
+          }
+          if (invitedCoordinator && !paper.authorOrder?.includes(invitedCoordinator.id)) {
+            paper.authorOrder = [...(paper.authorOrder ?? []), invitedCoordinator.id];
           }
           await paperRepo.save(paper);
         }

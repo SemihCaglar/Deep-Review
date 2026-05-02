@@ -33,6 +33,12 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'logs',      label: 'Audit Logs',      icon: Activity },
 ];
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(email: string) {
+  return EMAIL_PATTERN.test(email.trim());
+}
+
 export default function AdminPage() {
   const { user } = useUser();
   const [activeTab, setActiveTab] = useState<Tab>('users');
@@ -364,6 +370,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
     if (!newLabName.trim()) { alert('Lab name is required'); return; }
     if (!coordName.trim()) { alert('Coordinator name is required'); return; }
     if (!coordEmail.trim()) { alert('Coordinator email is required'); return; }
+    if (!isValidEmail(coordEmail)) { alert('Enter a valid coordinator email address'); return; }
     
     setIsSubmitting(true);
     try {
@@ -373,7 +380,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
           name: newLabName, 
           description: newLabDesc,
           coordinatorName: coordName,
-          coordinatorEmail: coordEmail 
+          coordinatorEmail: coordEmail.trim() 
         } 
       });
       setNewLabName('');
@@ -545,10 +552,12 @@ function TopicsTab({ labs }: { labs: any[] }) {
         <select
           value={selectedLabId}
           onChange={(e) => setSelectedLabId(e.target.value)}
-          className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="bg-slate-900 border border-white/10 rounded-xl px-4 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {labs?.map(lab => (
-            <option key={lab.id} value={lab.id}>{lab.name}</option>
+            <option key={lab.id} value={lab.id} className="bg-slate-900 text-slate-100">
+              {lab.name}
+            </option>
           ))}
         </select>
       </div>

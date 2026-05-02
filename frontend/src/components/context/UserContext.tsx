@@ -47,7 +47,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             localStorage.removeItem(AUTH_USER_KEY);
             localStorage.removeItem(LEGACY_USER_KEY);
         }
-        handleSetUser(EMPTY_USER);
+        setUser(EMPTY_USER);
     };
 
     // Prevent rendering children until mounted to avoid hydration flash entirely

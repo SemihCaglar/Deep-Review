@@ -162,6 +162,10 @@ export function getTopicsRequest() {
   return apiRequest<TopicOption[]>('/topics');
 }
 
+export function getLabTopicsRequest(labId: string) {
+  return apiRequest<TopicOption[]>(`/labs/${labId}/topics`);
+}
+
 export function updateInterestsRequest(topicIds: string[], otherInterests: string[] = []) {
   return apiRequest<AccountUserResponse>('/account/interests', {
     method: 'PUT',
@@ -888,6 +892,10 @@ async function parseResponseBody(response: Response): Promise<unknown> {
 function getErrorMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === 'object' && 'message' in payload && typeof payload.message === 'string') {
     return payload.message;
+  }
+
+  if (payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string') {
+    return payload.error;
   }
 
   return fallback || 'Request failed';

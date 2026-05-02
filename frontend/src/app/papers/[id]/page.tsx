@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS, MOCK_USERS } from '@/lib/mockData';
 import { confirmCancel } from '@/lib/confirmAction';
 import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, Download } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
-  getTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
+  getLabTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
   getLabMembersRequest, ApiError, LabMember, Lab,
   AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest, editSubmissionDeadlineRequest,
   getSuggestedReviewersRequest, SuggestedReviewer,
@@ -53,6 +53,7 @@ const AI_PHASES = [
 
 export default function PaperDetails({ params }: { params: { id: string } }) {
     const { user } = useUser();
+    const router = useRouter();
     const [paper, setPaper] = useState<Paper | null>(null);
     const [loading, setLoading] = useState(true);
     const [availableTopics, setAvailableTopics] = useState<TopicOption[]>([]);
@@ -149,12 +150,21 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [ratingError, setRatingError] = useState('');
 
     useEffect(() => {
+        if (!user.id) {
+            setPaper(null);
+            setLoading(false);
+            router.replace('/login');
+            return;
+        }
+
+        let isActive = true;
+
         const fetchData = async () => {
             try {
-                const [paperData, topicsData] = await Promise.all([
-                    getPaperByIdRequest(params.id),
-                    getTopicsRequest()
-                ]);
+                const paperData = await getPaperByIdRequest(params.id);
+                const topicLabId = paperData.labs?.[0]?.id ?? user.labs?.[0]?.id;
+                const topicsData = topicLabId ? await getLabTopicsRequest(topicLabId) : [];
+                if (!isActive) return;
                 setPaper(paperData);
                 setLocalAbstract(paperData.abstractText || '');
                 setLocalTopics(paperData.topics?.map((t: any) => t.id) || []);
@@ -170,10 +180,12 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                 
                 // Fetch lab members for author editing
                 const membersRes = await getLabMembersRequest();
+                if (!isActive) return;
                 setAvailableUsers(membersRes.users);
 
                 try {
                     const historyData = await getPaperHistoryRequest(params.id);
+                    if (!isActive) return;
                     setPaperHistory(historyData);
                     setHistoryError('');
                 } catch (historyErr) {
@@ -194,11 +206,14 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
             } catch (err) {
                 console.error('Failed to fetch paper details', err);
             } finally {
-                setLoading(false);
+                if (isActive) setLoading(false);
             }
         };
         fetchData();
-    }, [params.id]);
+        return () => {
+            isActive = false;
+        };
+    }, [params.id, router, user.id, user.labs]);
 
     // Load collaboration invitations and available labs (coordinator only)
     useEffect(() => {
@@ -317,6 +332,21 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const canEditAuthors = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
     const canEditLinks = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
     const canChangeArchiveState = user.isCoordinator || isAuthor;
+    const authorDirectory = [
+        ...(paper.authors ?? []),
+        ...(paper.coordinators ?? []),
+        ...(availableUsers ?? []),
+    ].reduce<Record<string, { id: string; name: string; email: string; role?: string }>>((byId, author) => {
+        byId[author.id] = { ...byId[author.id], ...author };
+        return byId;
+    }, {});
+    const coordinatorAuthorIds = new Set((paper.coordinators ?? []).map(coordinator => coordinator.id));
+    const removableAuthorIds = new Set(
+        availableUsers
+            .filter(author => author.role !== 'Coordinator' && author.role !== 'Admin')
+            .map(author => author.id)
+    );
+    const orderedPaperAuthorIds = (paper.authors ?? []).map(author => author.id);
     const addableAuthorOptions = availableUsers.filter(candidate => {
         if (candidate.role === 'Coordinator' || candidate.role === 'Admin') return false;
         return !localAuthors.includes(candidate.id);
@@ -1711,7 +1741,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4 flex items-center justify-between">
                             Authors
                             {canEditAuthors && (
-                                <button onClick={() => { setLocalAuthors(paper.authors?.map(author => author.id) ?? []); setIsEditingAuthors(true); }} className="text-xs text-blue-400 hover:text-blue-300 capitalize flex items-center gap-1">
+                                <button onClick={() => { setLocalAuthors(orderedPaperAuthorIds); setIsEditingAuthors(true); }} className="text-xs text-blue-400 hover:text-blue-300 capitalize flex items-center gap-1">
                                     <Edit className="w-3 h-3" /> Edit
                                 </button>
                             )}
@@ -1769,18 +1799,24 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Order</h4>
                                         <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                                             {localAuthors.map((id, index) => {
-                                                const u = availableUsers.find(user => user.id === id);
+                                                const u = authorDirectory[id];
                                                 if (!u) return null;
+                                                const canRemoveAuthor = removableAuthorIds.has(id) && !coordinatorAuthorIds.has(id);
                                                 return (
                                                     <div key={id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg border border-white/5">
                                                         <span className="text-xs text-blue-400 font-mono w-4">{index + 1}</span>
-                                                        <span className="text-xs text-white truncate flex-1 px-2">{u.name}</span>
+                                                        <span className="text-xs text-white truncate flex-1 px-2">
+                                                            {u.name}
+                                                            {coordinatorAuthorIds.has(id) && <span className="ml-1 text-[10px] text-blue-300">Coordinator</span>}
+                                                        </span>
                                                         <div className="flex gap-1">
                                                             <button disabled={index === 0} onClick={() => moveAuthor(index, 'up')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowUp className="w-3 h-3 text-slate-400" /></button>
                                                             <button disabled={index === localAuthors.length - 1} onClick={() => moveAuthor(index, 'down')} className="p-1 hover:bg-white/10 rounded disabled:opacity-20"><ArrowDown className="w-3 h-3 text-slate-400" /></button>
-                                                            <button onClick={() => setLocalAuthors(current => current.filter(authorId => authorId !== id))} className="p-1 hover:bg-red-500/10 rounded text-slate-400 hover:text-red-400">
-                                                                <XCircle className="w-3 h-3" />
-                                                            </button>
+                                                            {canRemoveAuthor ? (
+                                                                <button onClick={() => setLocalAuthors(current => current.filter(authorId => authorId !== id))} className="p-1 hover:bg-red-500/10 rounded text-slate-400 hover:text-red-400">
+                                                                    <XCircle className="w-3 h-3" />
+                                                                </button>
+                                                            ) : null}
                                                         </div>
                                                     </div>
                                                 );
@@ -1790,7 +1826,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
                                     {authorsError && <p className="text-xs text-red-400">{authorsError}</p>}
                                     <div className="flex gap-2 pt-2">
-                                        <button onClick={async () => { if (await confirmCancel()) { setLocalAuthors(paper.authors?.map(author => author.id) ?? []); setIsEditingAuthors(false); setAuthorsError(''); } }} className="flex-1 py-2 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
+                                        <button onClick={async () => { if (await confirmCancel()) { setLocalAuthors(orderedPaperAuthorIds); setIsEditingAuthors(false); setAuthorsError(''); } }} className="flex-1 py-2 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
                                         <button onClick={handleSaveAuthors} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors">Save</button>
                                     </div>
                                 </div>

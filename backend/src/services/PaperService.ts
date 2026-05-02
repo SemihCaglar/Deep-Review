@@ -18,6 +18,23 @@ export class PaperService {
       relations: ['topics', 'authors', 'coordinators', 'labs']
     });
 
+    if (paper) {
+      const authorIds = new Set((paper.authors ?? []).map(author => author.id));
+      for (const coordinator of paper.coordinators ?? []) {
+        if (!authorIds.has(coordinator.id)) {
+          paper.authors = [...(paper.authors ?? []), coordinator as unknown as User];
+          authorIds.add(coordinator.id);
+        }
+      }
+      const orderedIds = [...(paper.authorOrder ?? [])];
+      for (const coordinator of paper.coordinators ?? []) {
+        if (!orderedIds.includes(coordinator.id)) {
+          orderedIds.push(coordinator.id);
+        }
+      }
+      paper.authorOrder = orderedIds;
+    }
+
     if (paper && paper.authorOrder && paper.authors) {
       // Sort authors based on authorOrder
       const orderMap = new Map(paper.authorOrder.map((id, index) => [id, index]));
@@ -35,8 +52,10 @@ export class PaperService {
    */
   static async registerPaper(dto: RegisterPaperDto, creator: User): Promise<Paper> {
     const paperRepo = AppDataSource.getRepository(Paper);
-    const topicRepo = AppDataSource.getRepository(Topic);
     const userRepo = AppDataSource.getRepository<User>('User');
+    const coordinatorRepo = AppDataSource.getRepository(Coordinator);
+    const labRepo = AppDataSource.getRepository(Lab);
+    const requestedTopicIds = [...new Set(dto.topics ?? [])];
 
     // Compose the base instance
     const paper = paperRepo.create({
@@ -47,17 +66,6 @@ export class PaperService {
       creationTime: new Date(),
     });
 
-    // Fetch and assign Topics
-    if (dto.topics && dto.topics.length > 0) {
-      const foundTopics = await topicRepo.find({ where: { id: In(dto.topics) } });
-      if (foundTopics.length !== dto.topics.length) {
-        throw new Error('One or more invalid topic IDs provided.');
-      }
-      paper.topics = foundTopics;
-    } else {
-      paper.topics = [];
-    }
-
     // Fetch and assign Parent Papers
     if (dto.parentPaperIds && dto.parentPaperIds.length > 0) {
       paper.parentPapers = await paperRepo.find({ where: { id: In(dto.parentPaperIds) } });
@@ -66,7 +74,7 @@ export class PaperService {
     }
 
     // Prepare authors and authorOrder
-    let authorIds = dto.authors || [];
+    let authorIds = [...new Set(dto.authors || [])];
 
     // Automatically add creator to authors if not present
     if (!authorIds.includes(creator.id)) {
@@ -76,26 +84,7 @@ export class PaperService {
 
     paper.authorOrder = authorIds;
 
-    // Fetch and assign the authors
-    if (authorIds.length > 0) {
-      const foundAuthors = await userRepo.find({ where: { id: In(authorIds) } });
-      if (foundAuthors.length !== new Set(authorIds).size) {
-        throw new Error('One or more invalid author IDs provided.');
-      }
-      const restricted = foundAuthors.find(
-        u => u.id !== creator.id && (u.role === UserRole.Coordinator || u.role === UserRole.Admin)
-      );
-      if (restricted) {
-        throw new Error(`User "${restricted.name}" has the role ${restricted.role} and cannot be assigned as an author.`);
-      }
-      paper.authors = foundAuthors;
-    } else {
-      paper.authors = [];
-    }
-
     // Connect Coordinator
-    const coordinatorRepo = AppDataSource.getRepository(Coordinator);
-    const labRepo = AppDataSource.getRepository(Lab);
     // Check if creator is a Coordinator
     const coordinator = await coordinatorRepo.findOne({ where: { id: creator.id } });
     let coordinatorLab: Lab | null = null;
@@ -125,6 +114,52 @@ export class PaperService {
         });
         paper.coordinators = labsWithCoordinators.map(l => l.coordinator).filter(c => !!c);
       }
+    }
+
+    // Fetch and assign the authors. Paper coordinators are allowed as required authors.
+    if (authorIds.length > 0) {
+      const foundAuthors = await userRepo.find({ where: { id: In(authorIds) } });
+      if (foundAuthors.length !== new Set(authorIds).size) {
+        throw new Error('One or more invalid author IDs provided.');
+      }
+
+      const paperCoordinatorIds = new Set((paper.coordinators ?? []).map(c => c.id));
+      const restricted = foundAuthors.find(
+        u => u.role === UserRole.Admin || (u.role === UserRole.Coordinator && !paperCoordinatorIds.has(u.id))
+      );
+      if (restricted) {
+        throw new Error(`User "${restricted.name}" has the role ${restricted.role} and cannot be assigned as an author.`);
+      }
+      paper.authors = foundAuthors;
+    } else {
+      paper.authors = [];
+    }
+
+    if (requestedTopicIds.length > 0) {
+      const paperLabIds = (paper.labs ?? []).map(lab => lab.id);
+      if (paperLabIds.length === 0) {
+        throw new Error('Topics can only be selected from the creator lab.');
+      }
+
+      const labsWithTopics = await labRepo.find({
+        where: { id: In(paperLabIds) },
+        relations: ['topics'],
+      });
+      const topicsById = new Map<string, Topic>();
+      for (const lab of labsWithTopics) {
+        for (const topic of lab.topics ?? []) {
+          topicsById.set(topic.id, topic);
+        }
+      }
+
+      const selectedTopics = requestedTopicIds.map(topicId => topicsById.get(topicId));
+      if (selectedTopics.some(topic => !topic)) {
+        throw new Error('One or more topic IDs are not available for this lab.');
+      }
+
+      paper.topics = selectedTopics as Topic[];
+    } else {
+      paper.topics = [];
     }
 
     // Ensure all coordinators are added as authors
@@ -187,13 +222,25 @@ export class PaperService {
 
   static async updateTopics(paperId: string, topicIds: string[]): Promise<Paper> {
     const paperRepo = AppDataSource.getRepository(Paper);
-    const topicRepo = AppDataSource.getRepository(Topic);
 
-    const paper = await paperRepo.findOne({ where: { id: paperId }, relations: ['topics'] });
+    const paper = await paperRepo.findOne({ where: { id: paperId }, relations: ['topics', 'labs', 'labs.topics'] });
     if (!paper) throw new Error('Paper not found');
 
-    if (topicIds && topicIds.length > 0) {
-      paper.topics = await topicRepo.find({ where: { id: In(topicIds) } });
+    const requestedTopicIds = [...new Set(topicIds ?? [])];
+    if (requestedTopicIds.length > 0) {
+      const topicsById = new Map<string, Topic>();
+      for (const lab of paper.labs ?? []) {
+        for (const topic of lab.topics ?? []) {
+          topicsById.set(topic.id, topic);
+        }
+      }
+
+      const selectedTopics = requestedTopicIds.map(topicId => topicsById.get(topicId));
+      if (selectedTopics.some(topic => !topic)) {
+        throw new Error('One or more topic IDs are not available for this paper lab.');
+      }
+
+      paper.topics = selectedTopics as Topic[];
     } else {
       paper.topics = [];
     }
@@ -205,24 +252,65 @@ export class PaperService {
     return updatedPaper;
   }
 
-  static async updateAuthors(paperId: string, authorIds: string[]): Promise<Paper> {
+  static async updateAuthors(paperId: string, authorIds: string[], requester?: User): Promise<Paper> {
     const paperRepo = AppDataSource.getRepository(Paper);
     const userRepo = AppDataSource.getRepository<User>('User');
 
-    const paper = await paperRepo.findOne({ where: { id: paperId }, relations: ['authors'] });
+    const paper = await paperRepo.findOne({
+      where: { id: paperId },
+      relations: ['authors', 'coordinators', 'labs', 'labs.members', 'labs.coordinator'],
+    });
     if (!paper) throw new Error('Paper not found');
 
-    const oldAuthors = paper.authors || [];
+    const coordinatorIds = (paper.coordinators ?? []).map(coordinator => coordinator.id);
+    const normalizedAuthorIds = [...new Set([...(authorIds ?? []), ...coordinatorIds])];
+    const normalizedAuthorIdSet = new Set(normalizedAuthorIds);
+    const requesterLabMemberIds = new Set<string>();
 
-    paper.authorOrder = authorIds;
-    if (authorIds && authorIds.length > 0) {
-      const foundAuthors = await userRepo.find({ where: { id: In(authorIds) } });
-      if (foundAuthors.length !== new Set(authorIds).size) {
+    if (requester) {
+      for (const lab of paper.labs ?? []) {
+        const isRequesterCoordinator = lab.coordinator?.id === requester.id;
+        const isRequesterMember = lab.members?.some(member => member.id === requester.id) ?? false;
+        if (isRequesterCoordinator || isRequesterMember) {
+          for (const member of lab.members ?? []) {
+            requesterLabMemberIds.add(member.id);
+          }
+          if (lab.coordinator) {
+            requesterLabMemberIds.add(lab.coordinator.id);
+          }
+        }
+      }
+    }
+
+    const removedProtectedAuthor = (paper.authors ?? []).find(author => {
+      if (normalizedAuthorIdSet.has(author.id)) return false;
+      if (coordinatorIds.includes(author.id) || author.role === UserRole.Coordinator) return true;
+      return requester ? !requesterLabMemberIds.has(author.id) : false;
+    });
+    if (removedProtectedAuthor) {
+      throw new Error(`User "${removedProtectedAuthor.name}" cannot be removed from this paper's authors.`);
+    }
+
+    paper.authorOrder = normalizedAuthorIds;
+    if (normalizedAuthorIds.length > 0) {
+      const foundAuthors = await userRepo.find({ where: { id: In(normalizedAuthorIds) } });
+      if (foundAuthors.length !== normalizedAuthorIds.length) {
         throw new Error('One or more invalid author IDs provided.');
       }
-      const restricted = foundAuthors.find(u => u.role === UserRole.Coordinator || u.role === UserRole.Admin);
+      const coordinatorIdSet = new Set(coordinatorIds);
+      const restricted = foundAuthors.find(
+        u => u.role === UserRole.Admin || (u.role === UserRole.Coordinator && !coordinatorIdSet.has(u.id))
+      );
       if (restricted) {
         throw new Error(`User "${restricted.name}" has the role ${restricted.role} and cannot be assigned as an author.`);
+      }
+      const addedUnavailableAuthor = foundAuthors.find(author => {
+        if ((paper.authors ?? []).some(existingAuthor => existingAuthor.id === author.id)) return false;
+        if (coordinatorIdSet.has(author.id)) return false;
+        return requester ? !requesterLabMemberIds.has(author.id) : false;
+      });
+      if (addedUnavailableAuthor) {
+        throw new Error(`User "${addedUnavailableAuthor.name}" cannot be assigned as an author from this lab.`);
       }
       paper.authors = foundAuthors;
     } else {
