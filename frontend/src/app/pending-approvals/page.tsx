@@ -12,14 +12,23 @@ import {
   getPendingCollaborationInvitationsRequest,
   acceptCollaborationInvitationRequest,
   rejectCollaborationInvitationRequest,
+  getPendingLabJoinRequestsRequest,
+  approveLabJoinRequestApi,
+  rejectLabJoinRequestApi,
   type PendingSignup,
   type PendingCollaborationInvitation,
+  type LabJoinRequest,
 } from '@/lib/api';
 import { useUser } from '@/components/context/UserContext';
 
 type PendingConfirmation = {
   action: 'approve' | 'reject';
   signup: PendingSignup;
+};
+
+type LabJoinConfirmation = {
+  action: 'approve' | 'reject';
+  request: LabJoinRequest;
 };
 
 export default function PendingApprovalsPage() {
@@ -39,6 +48,71 @@ export default function PendingApprovalsPage() {
   const [isLoadingCollabs, setIsLoadingCollabs] = React.useState(false);
   const [collabError, setCollabError] = React.useState('');
   const [activeCollabId, setActiveCollabId] = React.useState<string | null>(null);
+  const [labJoinRequests, setLabJoinRequests] = React.useState<LabJoinRequest[]>([]);
+  const [isLoadingLabJoinRequests, setIsLoadingLabJoinRequests] = React.useState(false);
+  const [labJoinError, setLabJoinError] = React.useState('');
+  const [activeLabJoinRequestId, setActiveLabJoinRequestId] = React.useState<string | null>(null);
+  const [labJoinConfirmation, setLabJoinConfirmation] = React.useState<LabJoinConfirmation | null>(null);
+
+  const loadLabJoinRequests = React.useCallback(async () => {
+    if (!user.isCoordinator) return;
+    setIsLoadingLabJoinRequests(true);
+    setLabJoinError('');
+    try {
+      const response = await getPendingLabJoinRequestsRequest();
+      setLabJoinRequests(response.requests);
+    } catch (caughtError) {
+      setLabJoinError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load lab join requests.');
+    } finally {
+      setIsLoadingLabJoinRequests(false);
+    }
+  }, [user.isCoordinator]);
+
+  const handleLabJoinAction = async (requestId: string, action: 'approve' | 'reject') => {
+    setActiveLabJoinRequestId(requestId);
+    setLabJoinError('');
+    setActionMessage('');
+
+    try {
+      if (action === 'approve') {
+        await approveLabJoinRequestApi(requestId);
+        setActionMessage('Lab join request approved.');
+      } else {
+        await rejectLabJoinRequestApi(requestId);
+        setActionMessage('Lab join request rejected.');
+      }
+
+      setLabJoinRequests(current => current.filter(request => request.id !== requestId));
+    } catch (caughtError) {
+      setLabJoinError(caughtError instanceof ApiError ? caughtError.message : 'Failed to update lab join request.');
+    } finally {
+      setActiveLabJoinRequestId(null);
+    }
+  };
+
+  const openLabJoinConfirmation = (request: LabJoinRequest, action: 'approve' | 'reject') => {
+    setActionMessage('');
+    setLabJoinError('');
+    setLabJoinConfirmation({ request, action });
+  };
+
+  const closeLabJoinConfirmation = () => {
+    if (activeLabJoinRequestId) {
+      return;
+    }
+
+    setLabJoinConfirmation(null);
+  };
+
+  const confirmLabJoinAction = async () => {
+    if (!labJoinConfirmation) {
+      return;
+    }
+
+    const { action, request } = labJoinConfirmation;
+    await handleLabJoinAction(request.id, action);
+    setLabJoinConfirmation(null);
+  };
 
   const loadCollabInvitations = React.useCallback(async () => {
     if (!user.isCoordinator) return;
@@ -123,7 +197,8 @@ export default function PendingApprovalsPage() {
     loadPendingSignups();
     loadReviewedSignups();
     loadCollabInvitations();
-  }, [loadPendingSignups, loadReviewedSignups, loadCollabInvitations, router, user.id, user.isCoordinator]);
+    loadLabJoinRequests();
+  }, [loadPendingSignups, loadReviewedSignups, loadCollabInvitations, loadLabJoinRequests, router, user.id, user.isCoordinator]);
 
   const handlePendingAction = async (signupId: string, action: 'approve' | 'reject') => {
     setActiveSignupId(signupId);
@@ -189,6 +264,7 @@ export default function PendingApprovalsPage() {
             loadPendingSignups();
             loadReviewedSignups();
             loadCollabInvitations();
+            loadLabJoinRequests();
           }}
           className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/10 transition-colors"
           disabled={isLoading}
@@ -209,6 +285,66 @@ export default function PendingApprovalsPage() {
           {error}
         </div>
       ) : null}
+
+      {/* Lab Join Requests */}
+      <section className="glass rounded-2xl border border-white/5 p-8">
+        <div className="flex items-center gap-2 mb-6">
+          <FlaskConical className="w-5 h-5 text-blue-400" />
+          <h2 className="text-xl font-semibold text-white">Lab Join Requests</h2>
+          {labJoinRequests.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+              {labJoinRequests.length}
+            </span>
+          )}
+        </div>
+
+        {labJoinError ? (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300 mb-4">
+            {labJoinError}
+          </div>
+        ) : null}
+
+        {isLoadingLabJoinRequests ? (
+          <p className="text-sm text-slate-400">Loading lab join requests...</p>
+        ) : labJoinRequests.length ? (
+          <div className="space-y-4">
+            {labJoinRequests.map(request => (
+              <div key={request.id} className="rounded-2xl border border-white/10 bg-background/60 p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <p className="text-lg font-semibold text-white">{request.user?.name ?? 'Unknown user'}</p>
+                  <p className="text-sm text-slate-300">{request.user?.email ?? 'No email available'}</p>
+                  <p className="text-sm text-blue-300">{request.lab?.name ?? 'Unknown lab'}</p>
+                  <p className="text-xs uppercase tracking-wider text-slate-500">
+                    Requested {new Date(request.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openLabJoinConfirmation(request, 'approve')}
+                    disabled={activeLabJoinRequestId === request.id}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/60 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openLabJoinConfirmation(request, 'reject')}
+                    disabled={activeLabJoinRequestId === request.id}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-red-200 transition-colors"
+                  >
+                    <UserX className="w-4 h-4" />
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">No pending lab join requests.</p>
+        )}
+      </section>
 
       {/* Collaboration Invitations */}
       <section className="glass rounded-2xl border border-white/5 p-8">
@@ -414,6 +550,63 @@ export default function PendingApprovalsPage() {
                 {activeSignupId === pendingConfirmation.signup.id
                   ? 'Working...'
                   : pendingConfirmation.action === 'approve'
+                    ? 'Confirm Approve'
+                    : 'Confirm Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {labJoinConfirmation ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm"
+          onClick={event => {
+            if (event.target === event.currentTarget) {
+              closeLabJoinConfirmation();
+            }
+          }}
+        >
+          <div className="glass w-full max-w-md rounded-2xl border border-white/10 p-6 shadow-2xl">
+            <div className="mb-5 space-y-2">
+              <h2 className="text-xl font-semibold text-white">
+                {labJoinConfirmation.action === 'approve' ? 'Approve Lab Join Request' : 'Reject Lab Join Request'}
+              </h2>
+              <p className="text-sm text-slate-300">
+                {labJoinConfirmation.action === 'approve'
+                  ? 'You are approving this lab join request. Are you sure?'
+                  : 'You are rejecting this lab join request. Are you sure?'}
+              </p>
+              <p className="break-words text-sm text-slate-500">
+                {labJoinConfirmation.request.user?.name ?? 'Unknown user'} · {labJoinConfirmation.request.user?.email ?? 'No email available'}
+              </p>
+              <p className="text-sm text-blue-300">
+                {labJoinConfirmation.request.lab?.name ?? 'Unknown lab'}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeLabJoinConfirmation}
+                disabled={activeLabJoinRequestId === labJoinConfirmation.request.id}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmLabJoinAction}
+                disabled={activeLabJoinRequestId === labJoinConfirmation.request.id}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  labJoinConfirmation.action === 'approve'
+                    ? 'bg-emerald-600 hover:bg-emerald-500'
+                    : 'bg-red-600 hover:bg-red-500'
+                }`}
+              >
+                {activeLabJoinRequestId === labJoinConfirmation.request.id
+                  ? 'Working...'
+                  : labJoinConfirmation.action === 'approve'
                     ? 'Confirm Approve'
                     : 'Confirm Reject'}
               </button>

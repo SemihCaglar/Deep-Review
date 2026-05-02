@@ -82,7 +82,7 @@ export class PaperController {
         paper
       });
     } catch (e: any) {
-      if (e.message && e.message.includes('invalid')) {
+      if (e.message && (e.message.includes('invalid') || e.message.includes('Selected lab'))) {
         return res.status(400).json({ error: e.message });
       }
       return res.status(500).json({ error: e.message || 'Internal Server Error' });

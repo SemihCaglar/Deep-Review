@@ -7,6 +7,7 @@ import { In } from 'typeorm';
 
 import { Coordinator } from '../entities/Coordinator';
 import { Lab } from '../entities/Lab';
+import { LabMembership, LabMembershipStatus } from '../entities/LabMembership';
 import { LabCollaborationInvitation, CollaborationInvitationStatus } from '../entities/LabCollaborationInvitation';
 import { sendEmail } from './emailService';
 
@@ -37,6 +38,7 @@ export class PaperService {
     const paperRepo = AppDataSource.getRepository(Paper);
     const topicRepo = AppDataSource.getRepository(Topic);
     const userRepo = AppDataSource.getRepository<User>('User');
+    const membershipRepo = AppDataSource.getRepository(LabMembership);
 
     // Compose the base instance
     const paper = paperRepo.create({
@@ -114,16 +116,34 @@ export class PaperService {
       paper.coordinators = [];
       paper.labs = [];
 
-      // Try to find lab from creator
-      const creatorWithLabs = await userRepo.findOne({ where: { id: creator.id }, relations: ['labs'] });
-      if (creatorWithLabs && creatorWithLabs.labs && creatorWithLabs.labs.length > 0) {
-        paper.labs = creatorWithLabs.labs;
-        // Also add labs' coordinators
-        const labsWithCoordinators = await labRepo.find({
-          where: { id: In(creatorWithLabs.labs.map(l => l.id)) },
-          relations: ['coordinator']
+      if (dto.labId) {
+        const selectedMembership = await membershipRepo.findOne({
+          where: {
+            userId: creator.id,
+            labId: dto.labId,
+            status: LabMembershipStatus.Active,
+          },
+          relations: ['lab', 'lab.coordinator'],
         });
-        paper.coordinators = labsWithCoordinators.map(l => l.coordinator).filter(c => !!c);
+
+        if (!selectedMembership) {
+          throw new Error('Selected lab must be an active lab membership.');
+        }
+
+        paper.labs = [selectedMembership.lab];
+        paper.coordinators = selectedMembership.lab.coordinator ? [selectedMembership.lab.coordinator] : [];
+      } else {
+        // Try to find lab from creator
+        const creatorWithLabs = await userRepo.findOne({ where: { id: creator.id }, relations: ['labs'] });
+        if (creatorWithLabs && creatorWithLabs.labs && creatorWithLabs.labs.length > 0) {
+          paper.labs = creatorWithLabs.labs;
+          // Also add labs' coordinators
+          const labsWithCoordinators = await labRepo.find({
+            where: { id: In(creatorWithLabs.labs.map(l => l.id)) },
+            relations: ['coordinator']
+          });
+          paper.coordinators = labsWithCoordinators.map(l => l.coordinator).filter(c => !!c);
+        }
       }
     }
 

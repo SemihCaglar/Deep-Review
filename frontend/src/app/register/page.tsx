@@ -3,11 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
+import { useLabContext } from '@/components/context/LabContext';
 import { BookOpen, CheckCircle2, Users, ArrowUp, ArrowDown, Search, X, FlaskConical } from 'lucide-react';
 import { getLabMembersRequest, getTopicsRequest, registerPaperRequest, getLabsRequest, LabMember, TopicOption, Lab } from '@/lib/api';
 
 export default function RegisterPaper() {
     const { user } = useUser();
+    const { selectedLab } = useLabContext();
     const router = useRouter();
     const [step, setStep] = useState(1);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,26 +43,27 @@ export default function RegisterPaper() {
         const fetchData = async () => {
             try {
                 const [membersRes, topicsRes, labsRes] = await Promise.all([
-                    getLabMembersRequest(),
+                    getLabMembersRequest(selectedLab?.id),
                     getTopicsRequest(),
                     getLabsRequest(),
                 ]);
                 setAvailableUsers(membersRes.users);
                 setTopicsList(topicsRes);
-                // Exclude the coordinator's own lab from the collaborating labs list
-                const myLabIds = new Set((user.labs || []).map((l: any) => l.id));
-                setAvailableLabs(labsRes.filter(l => !myLabIds.has(l.id)));
+                const contextLabIds = new Set(
+                    selectedLab ? [selectedLab.id] : (user.labs || []).map((l: any) => l.id)
+                );
+                setAvailableLabs(labsRes.filter(l => !contextLabIds.has(l.id)));
 
                 // Automatically add current user to authors if not already there
-                if (user?.id && !selectedAuthors.includes(user.id)) {
-                    setSelectedAuthors([user.id]);
+                if (user?.id) {
+                    setSelectedAuthors(current => current.includes(user.id) ? current : [user.id, ...current]);
                 }
             } catch (err) {
                 console.error('Failed to fetch form data', err);
             }
         };
         fetchData();
-    }, [user?.id, selectedAuthors]);
+    }, [selectedLab?.id, user?.id, user.labs]);
 
     if (!user.id) {
         return (
@@ -128,6 +131,12 @@ export default function RegisterPaper() {
         e.preventDefault();
         setIsSubmitting(true);
 
+        if (selectedLab && selectedLab.status !== 'Active') {
+            alert('This lab context is read-only. Select an active lab before registering a paper.');
+            setIsSubmitting(false);
+            return;
+        }
+
         try {
             await registerPaperRequest({
                 title,
@@ -135,6 +144,7 @@ export default function RegisterPaper() {
                 overleafLink,
                 authors: selectedAuthors,
                 topics: selectedTopics,
+                labId: selectedLab?.id,
                 collaboratingLabIds: selectedCollabLabs,
             });
             router.push(user.isCoordinator ? '/papers' : '/papers?filter=authored');

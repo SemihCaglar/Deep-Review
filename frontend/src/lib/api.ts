@@ -412,6 +412,7 @@ export type RegisterPaperPayload = {
   topics: string[];
   authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
+  labId?: string;
   collaboratingLabIds?: string[];
 };
 
