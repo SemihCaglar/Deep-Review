@@ -94,17 +94,22 @@ export class PdfAgentService {
     }
   }
 
-  async runAnnotatedReview(fileId: string): Promise<AgentReviewResult> {
+
+  async runAnnotatedReview(fileId: string, venueName: string = "the conference"): Promise<AgentReviewResult> {
     const thread = await this.client.threads.create();
 
-    const reviewPrompt = `Review this attached PDF using the EASE Industry Track review guidelines.
-Focus on:
-1. Practicality and industry relevance.
-2. Clarity of the problem statement.
-3. Soundness of the proposed solution.
-4. Quality of the empirical evaluation.
+    const reviewPrompt = `You are a critical academic peer reviewer for ${venueName}.
 
-Provide constructive feedback for the authors.`;
+Review the attached PDF paper. Start with the paper title, then provide a structured peer review with:
+1. Overall decision (Strong Accept / Accept / Weak Accept / Weak Reject / Reject)
+2. Summary of contribution (2-3 sentences)
+3. Critical review with attack points (Methodology & Validity, Industrial Relevance, Clarity & Presentation)
+4. Prioritized improvements (High/Medium/Low priority)
+5. Scope analysis (Underemphasized and Overemphasized areas)
+
+Be tough but fair.
+
+After writing the review, create an annotated version of the PDF highlighting the key issues and save it as output.`;
 
     await this.client.messages.create(thread.id, "user", reviewPrompt, {
       attachments: [{ fileId, tools: [{ type: "code_interpreter" }] }],
