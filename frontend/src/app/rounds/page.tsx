@@ -1331,8 +1331,8 @@ function RoundCard({
                               </button>
 
                               {expandedReviewId === review.id && (
-                                <div className="px-2 py-2 border-t border-slate-700/50 bg-slate-800/20 space-y-2">
-                                  <div className="text-xs text-slate-300 leading-relaxed markdown-content">
+                                <div className="px-2 py-2 border-t border-slate-700/50 bg-slate-800/20 space-y-2 max-h-96 overflow-y-auto">
+                                  <div className="text-xs text-slate-300 leading-relaxed markdown-content whitespace-pre-wrap">
                                     <ReactMarkdown
                                       components={{
                                         h1: ({node, ...props}) => <h1 className="text-sm font-bold text-slate-100 mt-3 mb-2" {...props} />,
@@ -1451,9 +1451,18 @@ function RoundCard({
                       </div>
 
                       {finalizedChecklist ? (
-                        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                          <p className="text-xs text-emerald-300 font-medium">✓ Checklist confirmed</p>
-                          <p className="text-[10px] text-emerald-300/70 mt-1">{finalizedChecklist.selectedStandards.length} standards selected</p>
+                        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-emerald-300 font-medium">✓ Checklist confirmed</p>
+                            <p className="text-[10px] text-emerald-300/70 mt-1">{finalizedChecklist.selectedStandards.length} standards selected</p>
+                          </div>
+                          <button
+                            onClick={() => setFinalizedChecklist(null)}
+                            className="px-2 py-1 text-xs rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 transition-colors"
+                            title="Update checklist selection"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
                         </div>
                       ) : (
                         <div className="space-y-2">
