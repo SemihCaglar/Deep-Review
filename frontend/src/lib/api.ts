@@ -178,7 +178,7 @@ export function updateProfileRequest(name: string, email: string, currentPositio
     body: {
       name,
       email,
-      ...(currentPosition !== undefined ? { currentPosition } : {}),
+      ...(currentPosition !== undefined ? { currentPosition: currentPosition ?? '' } : {}),
     },
   });
 }
@@ -243,6 +243,7 @@ export type Paper = {
   authors?: PaperAuthor[];
   coordinators?: LabMember[];
   topics?: TopicOption[];
+  labs?: { id: string; name: string }[];
   history?: unknown[];
 };
 
@@ -346,7 +347,20 @@ export type RegisterPaperPayload = {
   topics: string[];
   authors: string[]; // Ordered UUIDs of the authors
   overleafLink?: string;
+  collaboratingLabIds?: string[];
+};
 
+export type LabCollaborationInvitation = {
+  id: string;
+  status: 'Pending' | 'Accepted' | 'Rejected' | 'Cancelled';
+  createdAt: string;
+  respondedAt: string | null;
+  invitingLab: { id: string; name: string };
+  invitedLab: { id: string; name: string };
+};
+
+export type PendingCollaborationInvitation = LabCollaborationInvitation & {
+  paper: { id: string; title: string; status: string };
 };
 
 export function registerPaperRequest(payload: RegisterPaperPayload) {
@@ -419,11 +433,12 @@ export type AuthorRound = {
   completedAt: string | null;
   proposedReviewers: { id: string; name: string; email: string }[];
   aiReviewReport?: AIReviewReport | null;
+  aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
   annotatedPdfUrl?: string | null;
   artifacts?: {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
-    aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
+    aiReviewReports: AIReviewReportHistory[];
   };
 };
 
@@ -881,4 +896,50 @@ function getErrorMessage(payload: unknown, fallback: string) {
 
 export function createUserRequest(data: { name: string; email: string; role: string; password?: string }) {
   return apiRequest('/admin/users', { method: 'POST', body: data });
+}
+
+// ==== COLLABORATION INVITATION API FUNCTIONS ====
+
+export type SentInvitation = {
+  id: string;
+  invitedLabId: string;
+  invitedLabName: string;
+  status: 'Pending' | 'Accepted' | 'Rejected' | 'Cancelled';
+  createdAt: string;
+};
+
+export function sendCollaborationInvitationsRequest(paperId: string, labIds: string[]) {
+  return apiRequest<{ invited: SentInvitation[]; errors: { labId: string; reason: string }[] }>(
+    `/papers/${paperId}/collaboration-invitations`,
+    { method: 'POST', body: { labIds } },
+  );
+}
+
+export function getPaperInvitationsRequest(paperId: string) {
+  return apiRequest<LabCollaborationInvitation[]>(`/papers/${paperId}/collaboration-invitations`);
+}
+
+export function getPendingCollaborationInvitationsRequest() {
+  return apiRequest<PendingCollaborationInvitation[]>('/collaboration-invitations/pending');
+}
+
+export function acceptCollaborationInvitationRequest(invitationId: string) {
+  return apiRequest<{ message: string; id: string; status: string }>(
+    `/collaboration-invitations/${invitationId}/accept`,
+    { method: 'PATCH' },
+  );
+}
+
+export function rejectCollaborationInvitationRequest(invitationId: string) {
+  return apiRequest<{ message: string; id: string; status: string }>(
+    `/collaboration-invitations/${invitationId}/reject`,
+    { method: 'PATCH' },
+  );
+}
+
+export function cancelCollaborationInvitationRequest(invitationId: string) {
+  return apiRequest<{ message: string; id: string; status: string }>(
+    `/collaboration-invitations/${invitationId}/cancel`,
+    { method: 'PATCH' },
+  );
 }

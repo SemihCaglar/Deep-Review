@@ -22,6 +22,9 @@ export { Extension } from './Extension';
 // Reviewer availability
 export { BlackoutPeriod } from './BlackoutPeriod';
 
+// Collaboration
+export { LabCollaborationInvitation, CollaborationInvitationStatus } from './LabCollaborationInvitation';
+
 // Notifications
 export { EmailNotification, EmailStatus } from './EmailNotification';
 export { PasswordResetToken } from './PasswordResetToken';

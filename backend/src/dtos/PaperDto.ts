@@ -6,6 +6,7 @@ export interface RegisterPaperDto {
     overleafLink: string;
 
     parentPaperIds?: string[]; // IDs of any parent papers
+    collaboratingLabIds?: string[]; // Lab IDs to invite for cross-lab collaboration
 }
 
 export interface UpdatePaperDto {

@@ -7,6 +7,8 @@ import { In } from 'typeorm';
 
 import { Coordinator } from '../entities/Coordinator';
 import { Lab } from '../entities/Lab';
+import { LabCollaborationInvitation, CollaborationInvitationStatus } from '../entities/LabCollaborationInvitation';
+import { sendEmail } from './emailService';
 
 export class PaperService {
   static async getPaperById(id: string): Promise<Paper | null> {
@@ -96,12 +98,14 @@ export class PaperService {
     const labRepo = AppDataSource.getRepository(Lab);
     // Check if creator is a Coordinator
     const coordinator = await coordinatorRepo.findOne({ where: { id: creator.id } });
+    let coordinatorLab: Lab | null = null;
     if (coordinator) {
       paper.coordinators = [coordinator];
       // Automatically map this paper to the Coordinator's Lab
       const mappedLab = await labRepo.findOne({ where: { coordinator: { id: coordinator.id } } });
       if (mappedLab) {
         paper.labs = [mappedLab];
+        coordinatorLab = mappedLab;
       } else {
         paper.labs = [];
       }
@@ -136,9 +140,33 @@ export class PaperService {
     // Save and return
     const savedPaper = await paperRepo.save(paper);
 
-    // TypeORM appears to automatically persist these relations on save.
-    // If we manually insert them with QueryBuilder, it causes a UNIQUE constraint error.
+    // Send collaboration invitations if requested
+    if (dto.collaboratingLabIds && dto.collaboratingLabIds.length > 0 && coordinator && coordinatorLab) {
+      const invitationRepo = AppDataSource.getRepository(LabCollaborationInvitation);
+      const targetLabIds = dto.collaboratingLabIds.filter(id => id !== coordinatorLab!.id);
+      const invitedLabs = await labRepo.find({ where: { id: In(targetLabIds) }, relations: ['coordinator'] });
 
+      const invitations = invitedLabs.map(invitedLab =>
+        invitationRepo.create({
+          paper: savedPaper,
+          invitingLab: coordinatorLab!,
+          invitedLab,
+          status: CollaborationInvitationStatus.Pending,
+          respondedAt: null,
+        })
+      );
+      await invitationRepo.save(invitations);
+
+      for (const invitedLab of invitedLabs) {
+        if (invitedLab.coordinator) {
+          sendEmail(
+            invitedLab.coordinator,
+            `Collaboration invitation: ${savedPaper.title}`,
+            `You have been invited by the coordinator of "${coordinatorLab!.name}" to collaborate on the paper "${savedPaper.title}".\n\nPlease log in to the system to accept or reject this invitation.`,
+          ).catch(err => console.error('[PaperService] Failed to send invitation email:', err));
+        }
+      }
+    }
 
     const fullyHydrated = await this.getPaperById(savedPaper.id);
     return fullyHydrated!;

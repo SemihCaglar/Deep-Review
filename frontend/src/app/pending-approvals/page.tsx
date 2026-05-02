@@ -2,16 +2,25 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCcw, UserCheck, UserX } from 'lucide-react';
+import { RefreshCcw, UserCheck, UserX, FlaskConical, CheckCircle, XCircle } from 'lucide-react';
 import {
   ApiError,
   approveSignupRequest,
   getPendingSignupsRequest,
   getReviewedSignupsRequest,
   rejectSignupRequest,
+  getPendingCollaborationInvitationsRequest,
+  acceptCollaborationInvitationRequest,
+  rejectCollaborationInvitationRequest,
   type PendingSignup,
+  type PendingCollaborationInvitation,
 } from '@/lib/api';
 import { useUser } from '@/components/context/UserContext';
+
+type PendingConfirmation = {
+  action: 'approve' | 'reject';
+  signup: PendingSignup;
+};
 
 export default function PendingApprovalsPage() {
   const router = useRouter();
@@ -24,6 +33,46 @@ export default function PendingApprovalsPage() {
   const [historyError, setHistoryError] = React.useState('');
   const [actionMessage, setActionMessage] = React.useState('');
   const [activeSignupId, setActiveSignupId] = React.useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = React.useState<PendingConfirmation | null>(null);
+
+  const [collabInvitations, setCollabInvitations] = React.useState<PendingCollaborationInvitation[]>([]);
+  const [isLoadingCollabs, setIsLoadingCollabs] = React.useState(false);
+  const [collabError, setCollabError] = React.useState('');
+  const [activeCollabId, setActiveCollabId] = React.useState<string | null>(null);
+
+  const loadCollabInvitations = React.useCallback(async () => {
+    if (!user.isCoordinator) return;
+    setIsLoadingCollabs(true);
+    setCollabError('');
+    try {
+      const data = await getPendingCollaborationInvitationsRequest();
+      setCollabInvitations(data);
+    } catch (err) {
+      setCollabError(err instanceof ApiError ? err.message : 'Failed to load collaboration invitations.');
+    } finally {
+      setIsLoadingCollabs(false);
+    }
+  }, [user.isCoordinator]);
+
+  const handleCollabAction = async (invitationId: string, action: 'accept' | 'reject') => {
+    setActiveCollabId(invitationId);
+    setCollabError('');
+    setActionMessage('');
+    try {
+      if (action === 'accept') {
+        await acceptCollaborationInvitationRequest(invitationId);
+        setActionMessage('Collaboration invitation accepted.');
+      } else {
+        await rejectCollaborationInvitationRequest(invitationId);
+        setActionMessage('Collaboration invitation declined.');
+      }
+      setCollabInvitations(prev => prev.filter(inv => inv.id !== invitationId));
+    } catch (err) {
+      setCollabError(err instanceof ApiError ? err.message : 'Failed to update invitation.');
+    } finally {
+      setActiveCollabId(null);
+    }
+  };
 
   const loadPendingSignups = React.useCallback(async () => {
     if (!user.isCoordinator) {
@@ -73,7 +122,8 @@ export default function PendingApprovalsPage() {
 
     loadPendingSignups();
     loadReviewedSignups();
-  }, [loadPendingSignups, loadReviewedSignups, router, user.id, user.isCoordinator]);
+    loadCollabInvitations();
+  }, [loadPendingSignups, loadReviewedSignups, loadCollabInvitations, router, user.id, user.isCoordinator]);
 
   const handlePendingAction = async (signupId: string, action: 'approve' | 'reject') => {
     setActiveSignupId(signupId);
@@ -98,6 +148,30 @@ export default function PendingApprovalsPage() {
     }
   };
 
+  const openConfirmation = (signup: PendingSignup, action: 'approve' | 'reject') => {
+    setActionMessage('');
+    setError('');
+    setPendingConfirmation({ signup, action });
+  };
+
+  const closeConfirmation = () => {
+    if (activeSignupId) {
+      return;
+    }
+
+    setPendingConfirmation(null);
+  };
+
+  const confirmPendingAction = async () => {
+    if (!pendingConfirmation) {
+      return;
+    }
+
+    const { action, signup } = pendingConfirmation;
+    await handlePendingAction(signup.id, action);
+    setPendingConfirmation(null);
+  };
+
   if (!user.isCoordinator) {
     return null;
   }
@@ -114,6 +188,7 @@ export default function PendingApprovalsPage() {
           onClick={() => {
             loadPendingSignups();
             loadReviewedSignups();
+            loadCollabInvitations();
           }}
           className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/10 transition-colors"
           disabled={isLoading}
@@ -135,6 +210,66 @@ export default function PendingApprovalsPage() {
         </div>
       ) : null}
 
+      {/* Collaboration Invitations */}
+      <section className="glass rounded-2xl border border-white/5 p-8">
+        <div className="flex items-center gap-2 mb-6">
+          <FlaskConical className="w-5 h-5 text-indigo-400" />
+          <h2 className="text-xl font-semibold text-white">Collaboration Invitations</h2>
+          {collabInvitations.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              {collabInvitations.length}
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-slate-400 mb-6">Other labs have invited your lab to collaborate on the following papers.</p>
+
+        {collabError && (
+          <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300 mb-4">
+            {collabError}
+          </div>
+        )}
+
+        {isLoadingCollabs ? (
+          <p className="text-sm text-slate-400">Loading collaboration invitations...</p>
+        ) : collabInvitations.length ? (
+          <div className="space-y-4">
+            {collabInvitations.map(inv => (
+              <div key={inv.id} className="rounded-2xl border border-white/10 bg-background/60 p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <p className="text-lg font-semibold text-white">{inv.paper.title}</p>
+                  <p className="text-sm text-slate-300">Invited by: <span className="text-indigo-300 font-medium">{inv.invitingLab.name}</span></p>
+                  <p className="text-xs uppercase tracking-wider text-slate-500">
+                    Received {new Date(inv.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleCollabAction(inv.id, 'accept')}
+                    disabled={activeCollabId === inv.id}
+                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCollabAction(inv.id, 'reject')}
+                    disabled={activeCollabId === inv.id}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-red-200 transition-colors"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">No pending collaboration invitations.</p>
+        )}
+      </section>
+
       <section className="glass rounded-2xl border border-white/5 p-8">
         {isLoading ? (
           <p className="text-sm text-slate-400">Loading pending approvals...</p>
@@ -152,7 +287,7 @@ export default function PendingApprovalsPage() {
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => handlePendingAction(signup.id, 'approve')}
+                    onClick={() => openConfirmation(signup, 'approve')}
                     disabled={activeSignupId === signup.id}
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/60 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
                   >
@@ -161,7 +296,7 @@ export default function PendingApprovalsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handlePendingAction(signup.id, 'reject')}
+                    onClick={() => openConfirmation(signup, 'reject')}
                     disabled={activeSignupId === signup.id}
                     className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-red-200 transition-colors"
                   >
@@ -232,6 +367,60 @@ export default function PendingApprovalsPage() {
           <p className="text-sm text-slate-400">No reviewed signup requests yet.</p>
         )}
       </section>
+
+      {pendingConfirmation ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm"
+          onClick={event => {
+            if (event.target === event.currentTarget) {
+              closeConfirmation();
+            }
+          }}
+        >
+          <div className="glass w-full max-w-md rounded-2xl border border-white/10 p-6 shadow-2xl">
+            <div className="mb-5 space-y-2">
+              <h2 className="text-xl font-semibold text-white">
+                {pendingConfirmation.action === 'approve' ? 'Approve Account' : 'Reject Account'}
+              </h2>
+              <p className="text-sm text-slate-300">
+                {pendingConfirmation.action === 'approve'
+                  ? 'You are approving this account. Are you sure?'
+                  : 'You are rejecting this account. Are you sure?'}
+              </p>
+              <p className="break-words text-sm text-slate-500">
+                {pendingConfirmation.signup.name} · {pendingConfirmation.signup.email}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeConfirmation}
+                disabled={activeSignupId === pendingConfirmation.signup.id}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmPendingAction}
+                disabled={activeSignupId === pendingConfirmation.signup.id}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  pendingConfirmation.action === 'approve'
+                    ? 'bg-emerald-600 hover:bg-emerald-500'
+                    : 'bg-red-600 hover:bg-red-500'
+                }`}
+              >
+                {activeSignupId === pendingConfirmation.signup.id
+                  ? 'Working...'
+                  : pendingConfirmation.action === 'approve'
+                    ? 'Confirm Approve'
+                    : 'Confirm Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

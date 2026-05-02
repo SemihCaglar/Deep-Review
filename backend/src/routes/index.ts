@@ -4,6 +4,7 @@ import { AccountController } from '../controllers/AccountController';
 import { AdminController } from '../controllers/AdminController';
 import { AssignmentController } from '../controllers/AssignmentController';
 import { CoordinatorController } from '../controllers/CoordinatorController';
+import { LabCollaborationController } from '../controllers/LabCollaborationController';
 import { PaperController } from '../controllers/PaperController';
 import { RatingAnalyticsController } from '../controllers/RatingAnalyticsController';
 import { ReviewerResponseController } from '../controllers/ReviewerResponseController';
@@ -120,6 +121,14 @@ router.put('/papers/:id/status', authenticateRequest, PaperController.updatePape
 router.post('/papers/:id/manuscript', authenticateRequest, PaperController.uploadManuscript);
 router.post('/papers/:id/parents', authenticateRequest, PaperController.linkParentPapers);
 
+// ==== COLLABORATION ROUTES ====
+router.get('/collaboration-invitations/pending', authenticateRequest, LabCollaborationController.getPendingInvitations);
+router.patch('/collaboration-invitations/:id/accept', authenticateRequest, LabCollaborationController.acceptInvitation);
+router.patch('/collaboration-invitations/:id/reject', authenticateRequest, LabCollaborationController.rejectInvitation);
+router.patch('/collaboration-invitations/:id/cancel', authenticateRequest, LabCollaborationController.cancelInvitation);
+router.post('/papers/:id/collaboration-invitations', authenticateRequest, LabCollaborationController.sendInvitations);
+router.get('/papers/:id/collaboration-invitations', authenticateRequest, LabCollaborationController.getInvitationsForPaper);
+
 // ==== RATING ANALYTICS ROUTES ====
 router.post('/ratings', authenticateRequest, RatingAnalyticsController.rateReviewer);
 router.get('/ratings/overall', authenticateRequest, requireCoordinator, RatingAnalyticsController.getOverallAnalytics);
@@ -174,7 +183,7 @@ router.get('/search/papers/venue', SearchController.searchPapersByVenue);
 router.get('/search/papers/author/:id', SearchController.searchPapersByAuthor);
 router.get('/search/papers/topic/:id', SearchController.searchPapersByTopic);
 router.get('/search/papers/date', SearchController.searchPapersByDateRange);
-router.get('/search/papers/closed', SearchController.searchPapersByClosed);
+router.get('/search/papers/completed', SearchController.searchPapersByCompleted);
 router.get('/search/papers/archived', SearchController.searchPapersByArchived);
 router.get('/search/reviews/paper/:id', SearchController.searchReviewsByPaper);
 router.get('/search/reviews/author/:id', SearchController.searchReviewsByAuthor);

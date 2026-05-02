@@ -90,6 +90,9 @@ export class Round {
   @Column({ type: 'simple-json', nullable: true })
   complianceReport: any;
 
+  @Column({ type: 'simple-json', nullable: true })
+  complianceReportsByUser: Record<string, { report: any; createdAt: string }> | null;
+
   @Column({ nullable: true })
   annotatedPdfUrl: string;
 

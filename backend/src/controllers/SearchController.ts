@@ -21,7 +21,7 @@ export class SearchController {
   static async searchPapersByDateRange(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
-  static async searchPapersByClosed(req: Request, res: Response) {
+  static async searchPapersByCompleted(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
   static async searchPapersByArchived(req: Request, res: Response) {

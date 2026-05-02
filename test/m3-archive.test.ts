@@ -102,16 +102,30 @@ test('paper cannot be archived before a future submission deadline', async () =>
   expect(res.body.message).toMatch(/submission deadline/i);
 });
 
-test('paper cannot be archived during human or AI review', async () => {
-  const paperRepo = AppDataSource.getRepository(Paper);
-  const paper = await makePaper(PaperStatus.HumanReview);
+test('paper cannot be archived without a submission deadline', async () => {
+  const paper = await makePaper(PaperStatus.Completed);
 
-  const human = await api(coordToken).put(`/api/papers/${paper.id}/status`, { status: PaperStatus.Archived });
-  expect(human.status).toBe(400);
-  expect(human.body.message).toMatch(/review/i);
+  const res = await api(coordToken).put(`/api/papers/${paper.id}/status`, { status: PaperStatus.Archived });
+  expect(res.status).toBe(400);
+  expect(res.body.message).toMatch(/submission deadline/i);
+});
 
-  await paperRepo.update(paper.id, { status: PaperStatus.AIReview });
-  const ai = await api(coordToken).put(`/api/papers/${paper.id}/status`, { status: PaperStatus.Archived });
-  expect(ai.status).toBe(400);
-  expect(ai.body.message).toMatch(/review/i);
+test('paper can be archived after the submission deadline has passed', async () => {
+  const paper = await makePaper(PaperStatus.Completed);
+  const roundRepo = AppDataSource.getRepository(Round);
+  await roundRepo.save(roundRepo.create({
+    paper,
+    roundNumber: 1,
+    status: RoundStatus.Completed,
+    targetVenue: 'PastConf',
+    venueCategory: VenueCategory.Conference,
+    submissionDeadline: future(-1),
+    deadline: future(-2),
+    startedAt: future(-3),
+    completedAt: future(-2),
+  }));
+
+  const res = await api(coordToken).put(`/api/papers/${paper.id}/status`, { status: PaperStatus.Archived });
+  expect(res.status).toBe(200);
+  expect(res.body.status).toBe(PaperStatus.Archived);
 });

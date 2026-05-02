@@ -418,7 +418,8 @@ export class AccountController {
     });
   }
   static async updateProfile(req: AuthenticatedRequest, res: Response) {
-    const { name, email, currentPosition } = req.body ?? {};
+    const { name, email } = req.body ?? {};
+    const rawCurrentPosition = req.body?.currentPosition;
     const authenticatedUser = req.user;
 
     if (!authenticatedUser) {
@@ -433,11 +434,15 @@ export class AccountController {
       return res.status(400).json({ message: 'email is required' });
     }
 
-    if (currentPosition !== undefined && typeof currentPosition !== 'string') {
+    if (
+      rawCurrentPosition !== undefined &&
+      rawCurrentPosition !== null &&
+      typeof rawCurrentPosition !== 'string'
+    ) {
       return res.status(400).json({ message: 'currentPosition must be a string' });
     }
 
-    if (typeof currentPosition === 'string' && currentPosition.trim().length > 255) {
+    if (typeof rawCurrentPosition === 'string' && rawCurrentPosition.trim().length > 255) {
       return res.status(400).json({ message: 'currentPosition must be 255 characters or fewer' });
     }
 
@@ -459,8 +464,8 @@ export class AccountController {
 
     user.name = name.trim();
     user.email = normalizedEmail;
-    if (currentPosition !== undefined) {
-      user.currentPosition = currentPosition.trim() || null;
+    if (typeof rawCurrentPosition === 'string') {
+      user.currentPosition = rawCurrentPosition.trim() || null;
     }
 
     try {

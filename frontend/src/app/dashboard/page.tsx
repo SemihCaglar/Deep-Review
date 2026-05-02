@@ -25,9 +25,11 @@ import {
   getPaperRoundsRequest,
   getPendingSignupsRequest,
   getOverallAnalyticsRequest,
+  getPendingCollaborationInvitationsRequest,
   type OverallAnalyticsResponse,
   type MyAssignment,
   type ReviewerRanking,
+  type PendingCollaborationInvitation,
 } from '@/lib/api';
 import { useUser } from '@/components/context/UserContext';
 import { LabTopicManager } from '@/components/LabTopicManager';
@@ -192,6 +194,9 @@ export default function DashboardPage() {
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc');
   const [leaderboardSearch, setLeaderboardSearch] = React.useState('');
 
+  // Coordinator State (Collaboration Invitations)
+  const [collabInvitationCount, setCollabInvitationCount] = React.useState(0);
+
   // Reviewer State (Request Decisions/Notifications)
   const [myReviewAssignments, setMyReviewAssignments] = React.useState<MyAssignment[]>([]);
   const [isLoadingMyReviews, setIsLoadingMyReviews] = React.useState(false);
@@ -213,6 +218,16 @@ export default function DashboardPage() {
       setPendingError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load pending approvals.');
     } finally {
       setIsLoadingPending(false);
+    }
+  }, [user.isCoordinator]);
+
+  const loadCollabInvitationCount = React.useCallback(async () => {
+    if (!user.isCoordinator) return;
+    try {
+      const data = await getPendingCollaborationInvitationsRequest();
+      setCollabInvitationCount(data.length);
+    } catch {
+      // silently ignore
     }
   }, [user.isCoordinator]);
 
@@ -350,10 +365,11 @@ export default function DashboardPage() {
     if (user.isCoordinator) {
       loadReviewerRequests();
       loadAnalytics();
+      loadCollabInvitationCount();
     } else if (!user.isAdmin && !user.isFrozen) {
       loadRequestDecisions();
     }
-  }, [user.isCoordinator, user.isAdmin, loadPendingSignups, loadReviewerRequests, loadAnalytics, loadRequestDecisions]);
+  }, [user.isCoordinator, user.isAdmin, loadPendingSignups, loadReviewerRequests, loadAnalytics, loadRequestDecisions, loadCollabInvitationCount]);
 
   // --- Actions ---
 
@@ -427,6 +443,7 @@ export default function DashboardPage() {
     ? [
         { label: 'Pending Approvals', value: isLoadingPending ? '...' : pendingCount, icon: UserCheck, color: 'text-blue-400', bg: 'bg-blue-500/10', href: '/pending-approvals' },
         { label: 'Round Requests', value: roundStartRequests.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '/rounds' },
+        { label: 'Collaboration Invitations', value: collabInvitationCount, icon: FileText, color: 'text-indigo-400', bg: 'bg-indigo-500/10', href: '/pending-approvals' },
       ]
     : user.isFrozen
     ? [
@@ -640,6 +657,21 @@ export default function DashboardPage() {
               )}
             </section>
           </section>
+
+        {collabInvitationCount > 0 && (
+          <section className="glass rounded-2xl border border-indigo-500/20 p-6">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />
+                {collabInvitationCount} pending collaboration invitation{collabInvitationCount !== 1 ? 's' : ''}
+              </h3>
+              <Link href="/pending-approvals" className="text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors">
+                Review invitations
+              </Link>
+            </div>
+            <p className="text-sm text-slate-400">Other labs have invited your lab to collaborate on papers. Visit Pending Approvals to accept or decline.</p>
+          </section>
+        )}
         </div>
       )}
 
