@@ -153,6 +153,8 @@ router.get('/rounds/:id/status', authenticateRequest, RoundController.trackRevie
 router.post('/rounds/:id/close', RoundController.closeRound);
 router.post('/rounds/next', authenticateRequest, RoundController.createReviewRound);
 router.post('/rounds/:id/ai', authenticateRequest, handlePdfUpload, RoundController.startAIReview);
+router.post('/rounds/:id/ai-review', authenticateRequest, handlePdfUpload, RoundController.startAIReviewEndpoint);
+router.post('/rounds/:id/ai-checklist', authenticateRequest, handlePdfUpload, RoundController.startAIChecklist);
 router.get('/rounds/:id/venue-rules', authenticateRequest, RoundController.getVenueRules);
 router.post('/rounds/:id/compliance', authenticateRequest, handlePdfUpload, RoundController.runComplianceCheck);
 router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
