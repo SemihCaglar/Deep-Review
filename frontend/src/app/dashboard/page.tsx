@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
   AlertCircle, 
   CheckCircle, 
@@ -159,6 +160,18 @@ function assignmentStatusClass(status: string) {
 
 export default function DashboardPage() {
   const { user } = useUser();
+  const router = useRouter();
+
+  // Admins don't use this page — redirect them to the admin dashboard
+  React.useEffect(() => {
+    if (user.isAdmin) {
+      router.replace('/admin');
+    }
+  }, [user.isAdmin, router]);
+
+  if (user.isAdmin) {
+    return null;
+  }
 
   // Common State
   const [pendingCount, setPendingCount] = React.useState(0);

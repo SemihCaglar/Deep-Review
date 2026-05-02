@@ -22,7 +22,6 @@ export default function Sidebar() {
     const getNavItems = () => {
             if (user.isAdmin) {
             return [
-                { name: 'My Dashboard', href: '/dashboard', icon: Home },
                 { name: 'Admin Dashboard', href: '/admin', icon: Shield },
             ];
         }
