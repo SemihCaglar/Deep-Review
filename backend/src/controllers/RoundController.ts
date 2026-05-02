@@ -564,7 +564,9 @@ export class RoundController {
         annotatedPdfUrl: r.annotatedPdfUrl,
         artifacts: {
           checklistItems: (r.checklistItems ?? []).map(ci => ({ id: ci.id, description: ci.description, isChecked: ci.isChecked })),
-          aiReviewReports: (r.aiReviewReports ?? []).map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
+          aiReviewReports: (r.aiReviewReports ?? [])
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
         }
       })));
     } catch (err) {
@@ -621,13 +623,15 @@ export class RoundController {
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
-        aiReviewReports: (round.aiReviewReports ?? []).map(ar => ({
-          id: ar.id,
-          reviewText: ar.reviewText,
-          annotatedPdfUrl: ar.annotatedPdfUrl,
-          venue: ar.venue,
-          createdAt: ar.createdAt,
-        })),
+        aiReviewReports: (round.aiReviewReports ?? [])
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .map(ar => ({
+            id: ar.id,
+            reviewText: ar.reviewText,
+            annotatedPdfUrl: ar.annotatedPdfUrl,
+            venue: ar.venue,
+            createdAt: ar.createdAt,
+          })),
         assignments: (round.assignments ?? []).map(a => ({
           id: a.id,
           status: a.status,

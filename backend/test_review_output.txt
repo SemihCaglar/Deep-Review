@@ -1,39 +1,43 @@
 ## Paper Title
-SERSEM: Selective Entropy-Weighted Scoring for Membership Inference in Code Language Models
+SERSEM: Selective Entropy-Weighted Scoring for Membership
 
 ## Overall Decision
-Weak Accept
+Accept
 
 ## Summary of Contribution
-The paper introduces SERSEM, a novel selective entropy-weighted scoring method for membership inference attacks on code language models. It aims to improve the accuracy and reliability of detecting whether a data sample was part of a model’s training set, specifically in the context of code generation models.
+The paper introduces SERSEM, a novel white-box Membership Inference Attack (MIA) framework tailored for Large Language Models (LLMs) trained on code. SERSEM leverages selective entropy-weighted scoring to suppress uninformative syntactic boilerplate and amplify memorization signals, addressing the challenge of detecting data contamination in LLMs trained on massive, often non-permissively licensed datasets.
 
 ## Critical Review
 ### Methodology & Validity
-The methodology centers on entropy-weighted scoring, but the paper lacks sufficient detail on experimental setup, dataset selection, and baseline comparisons. The validity of the results is difficult to fully assess due to limited reporting of statistical significance and ablation studies. The approach appears promising, but more rigorous evaluation is needed to confirm its effectiveness over existing methods.
+The methodology is innovative, combining a dual-signal approach that utilizes both continuous character-level entropy and selective weighting to focus on informative code regions. However, the paper lacks detailed experimental results and comparative baselines, making it difficult to fully assess the robustness and generalizability of SERSEM. The absence of a thorough ablation study or statistical significance analysis further limits the evaluation of the proposed method's validity.
 
 ### Industrial Relevance
-Membership inference attacks are highly relevant for privacy and intellectual property concerns in deployed code language models. The proposed method could be valuable for practitioners seeking to audit or defend against such attacks, but the paper does not provide concrete case studies or deployment scenarios to demonstrate real-world impact.
+The work addresses a highly relevant problem in the deployment of code LLMs, especially regarding legal and ethical risks associated with memorization of proprietary or non-permissively licensed code. SERSEM’s approach could be valuable for organizations seeking to audit or mitigate data contamination in their models. However, practical deployment considerations, such as computational overhead and integration into existing pipelines, are not discussed.
 
 ### Clarity & Presentation
-The writing suffers from formatting issues and inconsistent sectioning, making it challenging to follow the argument and experimental results. Key terms and concepts are not always clearly defined, and the structure does not guide the reader through the contributions and findings effectively.
+The paper is generally well-written, with a clear motivation and structured presentation. The abstract and introduction effectively communicate the problem and the proposed solution. However, the lack of detailed experimental sections and visualizations (e.g., figures or tables) reduces the clarity of the empirical validation.
 
 ## Prioritized Improvements
 ### High Priority
-- Provide a clear, structured experimental section with detailed methodology, datasets, and baseline comparisons.
-- Improve the clarity and consistency of writing, including section headings and definitions of key terms.
+- Provide comprehensive experimental results, including quantitative comparisons with existing MIA methods.
+- Include an ablation study to isolate the contributions of each component of SERSEM.
 
 ### Medium Priority
-- Include statistical analysis and ablation studies to strengthen claims of effectiveness.
-- Add real-world scenarios or case studies to illustrate industrial relevance.
+- Discuss computational costs and practical deployment scenarios.
+- Add visualizations (e.g., figures, tables) to illustrate key findings and results.
 
 ### Low Priority
-- Address formatting issues and typographical errors throughout the paper.
-- Enhance figures and tables for better readability.
+- Expand on related work to better position SERSEM within the broader MIA literature.
+- Improve sectioning for easier navigation (e.g., explicit "Methods" and "Results" sections).
 
 ## Scope Analysis
 ### Underemphasized Areas
-- Real-world deployment considerations and defenses against membership inference attacks.
-- Detailed comparison with state-of-the-art methods in both code and natural language domains.
+- Practical considerations for integrating SERSEM into real-world LLM auditing workflows.
+- Limitations and potential failure cases of the proposed approach.
 
 ### Overemphasized Areas
-- Theoretical motivation for entropy-weighted scoring receives more attention than empirical validation and practical implications.
+- Theoretical motivation and background, relative to the limited empirical validation provided.
+
+You can download the annotated PDF with review highlights and comments here:
+
+[Download annotated_output.pdf](sandbox:/mnt/data/annotated_output.pdf)
