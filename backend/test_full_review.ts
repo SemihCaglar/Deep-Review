@@ -16,7 +16,7 @@ async function test() {
     console.log(`✅ File ID: ${fileId}\n`);
 
     console.log('2️⃣  Running annotated review...');
-    const result = await agent.runAnnotatedReview(fileId, 'EASE 2026');
+    const result = await agent.runAnnotatedReview(fileId);
     
     console.log('✅ Review completed!');
     console.log(`\nReview Text (first 500 chars):\n${result.summaryText.substring(0, 500)}\n`);

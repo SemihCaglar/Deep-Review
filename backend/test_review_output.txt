@@ -1,75 +1,42 @@
-Certainly. I will first read and analyze the paper, then provide a structured, critical review as requested. Afterward, I will annotate the PDF with highlights and comments on key issues and provide the annotated file.
+## Paper Title
+SERSEM: Sele ctive Entropy-Weighte d Scoring for Memb ership
 
-Let's begin by extracting the title and reviewing the content.
+## Overall Decision
+Reject
 
-**Paper Title:**  
-SERSEM: Selective Entropy-Weighted Scoring for Membership Inference in Code Language Models
+## Summary of Contribution
+The paper proposes SERSEM, a selective entropy-weighted scoring method for membership inference attacks. It aims to improve the detection of whether a data point was part of a model’s training set by leveraging entropy-based weighting. The approach is evaluated in the context of membership inference, but details are sparse.
 
----
+## Critical Review
+### Methodology & Validity
+The methodology is unclear due to missing or placeholder sections (e.g., "TODO", "FIXME"). There is insufficient detail on experimental setup, datasets, baselines, or statistical rigor. The lack of concrete results and methodological transparency undermines the validity of the claims.
 
-### 1. Overall Decision
-**Weak Reject**
+### Industrial Relevance
+Potential industrial relevance exists in privacy auditing for machine learning models, but the paper does not provide practical scenarios, deployment considerations, or real-world datasets. The incomplete content prevents assessment of true applicability.
 
----
+### Clarity & Presentation
+The paper is incomplete, with major sections labeled as "TODO" and "FIXME". The title itself contains typographical errors and spacing issues. The writing is fragmented, and the structure is not coherent enough for peer review.
 
-### 2. Summary of Contribution
-This paper introduces SERSEM, a novel white-box Membership Inference Attack (MIA) framework for code language models, leveraging selective entropy-weighted scoring to improve the detection of data contamination. The authors evaluate SERSEM on several code LLMs and claim improved accuracy over existing MIA baselines, highlighting the risks of training on non-permissively licensed code.
+## Prioritized Improvements
+### High Priority
+- Complete all sections with substantive content, including methodology, experiments, and results.
+- Correct the title and section headings for clarity and professionalism.
+- Provide detailed experimental evaluation and comparisons to baselines.
 
----
+### Medium Priority
+- Improve the writing quality and logical flow.
+- Add industrial use cases or deployment scenarios.
+- Include a clear abstract and conclusion.
 
-### 3. Critical Review with Attack Points
+### Low Priority
+- Proofread for typographical and formatting errors.
+- Add references to related work.
+- Enhance figures and tables for clarity.
 
-#### Methodology & Validity
-- The paper proposes a new scoring method for MIAs, but the technical novelty is incremental: it combines entropy weighting with selective token scoring, which is not a fundamentally new approach but rather a refinement of existing techniques.
-- The experimental setup lacks sufficient detail for reproducibility. Key parameters, dataset splits, and model configurations are not described with enough precision.
-- The evaluation is limited to a small set of models and datasets, raising concerns about the generalizability of the results.
-- There is no ablation study to isolate the impact of entropy weighting versus token selection, making it unclear which component drives the reported improvements.
-- Statistical significance of the results is not discussed, and confidence intervals or variance measures are missing.
+## Scope Analysis
+### Underemphasized Areas
+- Experimental validation and real-world applicability.
+- Discussion of limitations and potential attacks against SERSEM.
 
-#### Industrial Relevance
-- The paper addresses an important problem for industry—detecting data contamination in code LLMs trained on potentially non-compliant data.
-- However, the practical deployment implications of SERSEM are underexplored. There is no discussion of computational cost, scalability, or integration into real-world pipelines.
-- The threat model assumes white-box access, which is often unrealistic in industrial settings.
-
-#### Clarity & Presentation
-- The paper is generally well-written, but some sections (especially methodology and experimental setup) are vague and lack necessary detail.
-- Figures and tables are not always clearly labeled or referenced in the text, reducing their utility.
-- The related work section is superficial and does not adequately position SERSEM relative to the latest MIA techniques in code and NLP.
-
----
-
-### 4. Prioritized Improvements
-
-- **High Priority**
-  - Provide a more detailed and reproducible experimental setup, including dataset splits, model hyperparameters, and code availability.
-  - Add ablation studies to disentangle the contributions of entropy weighting and selective scoring.
-  - Discuss the statistical significance of results and include error bars or confidence intervals.
-- **Medium Priority**
-  - Expand the evaluation to more models and datasets to demonstrate generalizability.
-  - Deepen the related work section to better contextualize the contribution.
-- **Low Priority**
-  - Improve figure/table clarity and referencing.
-  - Discuss practical deployment considerations and limitations.
-
----
-
-### 5. Scope Analysis
-
-- **Underemphasized Areas**
-  - Practical deployment challenges and computational overhead of SERSEM.
-  - Comparison with black-box MIA approaches, which are more relevant for many industrial scenarios.
-  - Broader ethical and legal implications of MIA research in code LLMs.
-
-- **Overemphasized Areas**
-  - The novelty of the scoring method is overstated; the technique is more of an incremental improvement than a fundamentally new approach.
-  - The focus on white-box attacks, which limits industrial applicability.
-
----
-
-Next, I will annotate the PDF with highlights and comments on these key issues and provide the annotated file.
-
-The review is complete. You can download the annotated PDF with highlighted key issues and comments here:
-
-[Download annotated_output.pdf](sandbox:/mnt/data/annotated_output.pdf)
-
-If you need further breakdown or additional annotations, let me know!
+### Overemphasized Areas
+- None; the paper is incomplete and lacks substantive content in all areas.
