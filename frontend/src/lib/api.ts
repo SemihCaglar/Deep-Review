@@ -433,11 +433,12 @@ export type AuthorRound = {
   completedAt: string | null;
   proposedReviewers: { id: string; name: string; email: string }[];
   aiReviewReport?: AIReviewReport | null;
+  aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
   annotatedPdfUrl?: string | null;
   artifacts?: {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
-    aiReviewReports: { id: string; generatedReportUrl?: string; annotatedPdfUrl?: string }[];
+    aiReviewReports: AIReviewReportHistory[];
   };
 };
 

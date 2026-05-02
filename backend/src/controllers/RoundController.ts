@@ -551,7 +551,7 @@ export class RoundController {
 
       const rounds = await roundRepo.find({
         where: { paper: { id: paperId } },
-        relations: ['proposedReviewers'],
+        relations: ['proposedReviewers', 'checklistItems', 'aiReviewReports', 'aiReviewReports.requestedBy'],
         order: { roundNumber: 'DESC' },
       });
 
@@ -568,11 +568,16 @@ export class RoundController {
         completedAt: r.completedAt,
         proposedReviewers: (r.proposedReviewers ?? []).map(u => ({ id: u.id, name: u.name, email: u.email })),
         aiReviewReport: r.aiReviewReport,
-        complianceReport: r.complianceReport,
+        complianceReport: r.complianceReportsByUser?.[user.id]?.report ?? (r.complianceReportsByUser ? null : r.complianceReport),
         annotatedPdfUrl: r.annotatedPdfUrl,
+        aiReviewReports: (r.aiReviewReports ?? [])
+          .filter(ar => !ar.requestedBy || ar.requestedBy.id === user.id)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt })),
         artifacts: {
           checklistItems: (r.checklistItems ?? []).map(ci => ({ id: ci.id, description: ci.description, isChecked: ci.isChecked })),
           aiReviewReports: (r.aiReviewReports ?? [])
+            .filter(ar => !ar.requestedBy || ar.requestedBy.id === user.id)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
         }
@@ -613,6 +618,7 @@ export class RoundController {
         where: { paper: { id: paperId } },
         relations: [
           'aiReviewReports',
+          'aiReviewReports.requestedBy',
           'assignments',
           'assignments.reviewer',
           'assignments.declineRequests',
@@ -635,11 +641,12 @@ export class RoundController {
         completedAt: round.completedAt,
         aiReviewReport: round.aiReviewReport ?? null,
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
-        complianceReport: round.complianceReport ?? null,
+        complianceReport: round.complianceReportsByUser?.[coordinator.id]?.report ?? (round.complianceReportsByUser ? null : round.complianceReport ?? null),
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
         aiReviewReports: (round.aiReviewReports ?? [])
+          .filter(ar => !ar.requestedBy || ar.requestedBy.id === coordinator.id)
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .map(ar => ({
             id: ar.id,
@@ -904,6 +911,7 @@ export class RoundController {
       aiReviewReport.annotatedPdfUrl = annotatedPdfUrl;
       aiReviewReport.venue = venueName;
       aiReviewReport.round = round;
+      aiReviewReport.requestedBy = user as any;
 
       const aiReviewReportRepo = AppDataSource.getRepository(AIReviewReport);
       await aiReviewReportRepo.save(aiReviewReport);
@@ -1119,8 +1127,14 @@ export class RoundController {
         venueRules
       );
 
-      // Persist results
-      round.complianceReport = complianceReport;
+      // Persist results per requesting user so authors/coordinators do not overwrite each other's reports.
+      round.complianceReportsByUser = {
+        ...(round.complianceReportsByUser ?? {}),
+        [user.id]: {
+          report: complianceReport,
+          createdAt: new Date().toISOString(),
+        },
+      };
       await roundRepo.save(round);
 
       return res.status(200).json({

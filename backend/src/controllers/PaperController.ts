@@ -260,6 +260,7 @@ export class PaperController {
           'rounds.assignments.rating',
           'rounds.checklistItems',
           'rounds.aiReviewReports',
+          'rounds.aiReviewReports.requestedBy',
           'labs',
           'labs.coordinator',
         ],
@@ -326,7 +327,7 @@ export class PaperController {
               })),
           })),
           aiReviewReport: round.aiReviewReport,
-          complianceReport: round.complianceReport,
+          complianceReport: round.complianceReportsByUser?.[userId]?.report ?? (round.complianceReportsByUser ? null : round.complianceReport),
           annotatedPdfUrl: round.annotatedPdfUrl,
           artifacts: {
             checklistItems: (round.checklistItems ?? []).map(item => ({
@@ -334,13 +335,15 @@ export class PaperController {
               description: item.description,
               isChecked: item.isChecked,
             })),
-            aiReviewReports: (round.aiReviewReports ?? []).map(report => ({
-              id: report.id,
-              reviewText: report.reviewText,
-              annotatedPdfUrl: report.annotatedPdfUrl,
-              venue: report.venue,
-              createdAt: report.createdAt,
-            })),
+            aiReviewReports: (round.aiReviewReports ?? [])
+              .filter(report => !report.requestedBy || report.requestedBy.id === userId)
+              .map(report => ({
+                id: report.id,
+                reviewText: report.reviewText,
+                annotatedPdfUrl: report.annotatedPdfUrl,
+                venue: report.venue,
+                createdAt: report.createdAt,
+              })),
           },
         }));
 
