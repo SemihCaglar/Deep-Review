@@ -3,6 +3,7 @@ import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { Lab } from '../entities/Lab';
 import { User, UserRole } from '../entities/User';
 import { RoundStatus } from '../entities/Round';
+import { LabMembership, LabMembershipStatus } from '../entities/LabMembership';
 
 export interface UserLabStats {
   userId: string;
@@ -93,15 +94,26 @@ export async function computeUserLabStats(user: User, labId: string): Promise<Us
 }
 
 export async function computeLabRankings(labId: string): Promise<LabRankingsResult> {
-  const labRepo = AppDataSource.getRepository(Lab);
-
-  const lab = await labRepo.findOne({ where: { id: labId }, relations: ['members'] });
+  const lab = await AppDataSource.getRepository(Lab).findOne({
+    where: { id: labId },
+    select: ['id'],
+  });
   if (!lab) {
     throw new Error(`Lab not found: ${labId}`);
   }
 
+  const memberships = await AppDataSource.getRepository(LabMembership).find({
+    where: {
+      labId,
+      status: LabMembershipStatus.Active,
+    },
+    relations: ['user'],
+  });
+
   // Only LabMembers can be reviewers — Coordinators and Admins are excluded
-  const reviewers = lab.members.filter(m => m.role === UserRole.LabMember);
+  const reviewers = memberships
+    .map(membership => membership.user)
+    .filter((member): member is User => Boolean(member) && member.role === UserRole.LabMember);
 
   const allStats = await Promise.all(reviewers.map(m => computeUserLabStats(m, labId)));
 

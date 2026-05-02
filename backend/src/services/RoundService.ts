@@ -178,7 +178,7 @@ export class RoundService {
         where: { id: roundId },
         relations: [
           'paper', 'paper.coordinators', 'paper.authors', 'paper.labs',
-          'proposedReviewers', 'proposedReviewers.labs',
+          'proposedReviewers', 'proposedReviewers.memberships', 'proposedReviewers.memberships.lab',
           'assignments', 'assignments.reviewer',
         ],
       });

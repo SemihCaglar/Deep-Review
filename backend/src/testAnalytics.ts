@@ -12,7 +12,6 @@
 import 'reflect-metadata';
 import { AppDataSource } from './data-source';
 import { Coordinator } from './entities/Coordinator';
-import { Lab } from './entities/Lab';
 import { User, UserRole } from './entities/User';
 import { RatingAnalyticsController } from './controllers/RatingAnalyticsController';
 import type { AuthenticatedRequest } from './types/auth';
@@ -54,7 +53,6 @@ async function run() {
 
   const coordRepo = AppDataSource.getRepository(Coordinator);
   const userRepo  = AppDataSource.getRepository(User);
-  const labRepo   = AppDataSource.getRepository(Lab);
 
   // Load coordinator (created by main seed)
   const coordinator = await coordRepo.findOne({
@@ -76,10 +74,6 @@ async function run() {
     await AppDataSource.destroy();
     return;
   }
-
-  // Load a user from a different lab (or just any user not in the coordinator's lab)
-  // We use a freshly checked user to test the cross-lab 403
-  const lab = await labRepo.findOne({ where: { id: coordinator.lab?.id }, relations: ['members'] });
 
   console.log('\n══════════════════════════════════════════════');
   console.log('  Issue #42 — Analytics Endpoint Tests');

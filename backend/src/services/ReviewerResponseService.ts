@@ -194,7 +194,7 @@ export class ReviewerResponseService {
     const assignmentRepository = AppDataSource.getRepository(Assignment);
     const assignment = await assignmentRepository.findOne({
       where: { id: normalizedId },
-      relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
+      relations: ['reviewer', 'reviewer.memberships', 'reviewer.memberships.lab', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
     });
 
     if (assignment) {
@@ -207,7 +207,8 @@ export class ReviewerResponseService {
       relations: [
         'assignment',
         'assignment.reviewer',
-        'assignment.reviewer.labs',
+        'assignment.reviewer.memberships',
+        'assignment.reviewer.memberships.lab',
         'assignment.round',
         'assignment.round.paper',
         'assignment.round.paper.labs',
@@ -310,7 +311,7 @@ export class ReviewerResponseService {
     const assignmentRepository = AppDataSource.getRepository(Assignment);
     const assignment = await assignmentRepository.findOne({
       where: { id },
-      relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
+      relations: ['reviewer', 'reviewer.memberships', 'reviewer.memberships.lab', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
     });
 
     if (!assignment) {
@@ -326,7 +327,7 @@ export class ReviewerResponseService {
   ): Promise<Assignment> {
     const assignment = await manager.getRepository(Assignment).findOne({
       where: { id },
-      relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
+      relations: ['reviewer', 'reviewer.memberships', 'reviewer.memberships.lab', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
     });
 
     if (!assignment) {

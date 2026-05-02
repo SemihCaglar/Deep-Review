@@ -134,7 +134,10 @@ export class PaperService {
         paper.coordinators = selectedMembership.lab.coordinator ? [selectedMembership.lab.coordinator] : [];
       } else {
         // Try to find lab from creator
-        const creatorWithLabs = await userRepo.findOne({ where: { id: creator.id }, relations: ['labs'] });
+        const creatorWithLabs = await userRepo.findOne({
+          where: { id: creator.id },
+          relations: ['memberships', 'memberships.lab'],
+        });
         if (creatorWithLabs && creatorWithLabs.labs && creatorWithLabs.labs.length > 0) {
           paper.labs = creatorWithLabs.labs;
           // Also add labs' coordinators

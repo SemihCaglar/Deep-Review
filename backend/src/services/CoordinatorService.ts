@@ -265,7 +265,7 @@ export class CoordinatorService {
 
       const newReviewer = await manager.getRepository(User).findOne({
         where: { id: normalizedNewReviewerId },
-        relations: ['labs'],
+        relations: ['memberships', 'memberships.lab'],
       });
       if (!newReviewer) throw new CoordinatorServiceError(404, 'New reviewer not found');
       if (newReviewer.role === UserRole.Coordinator || newReviewer.role === UserRole.Admin) {
@@ -332,7 +332,7 @@ export class CoordinatorService {
     const assignmentRepository = manager.getRepository(Assignment);
     const assignment = await assignmentRepository.findOne({
       where: { id },
-      relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'round.paper.authors', 'response', 'extensions', 'declineRequests'],
+      relations: ['reviewer', 'reviewer.memberships', 'reviewer.memberships.lab', 'round', 'round.paper', 'round.paper.labs', 'round.paper.authors', 'response', 'extensions', 'declineRequests'],
     });
 
     if (assignment) {
@@ -345,7 +345,8 @@ export class CoordinatorService {
       relations: [
         'assignment',
         'assignment.reviewer',
-        'assignment.reviewer.labs',
+        'assignment.reviewer.memberships',
+        'assignment.reviewer.memberships.lab',
         'assignment.round',
         'assignment.round.paper',
         'assignment.round.paper.labs',
@@ -441,7 +442,7 @@ export class CoordinatorService {
   private static async loadAssignment(manager: EntityManager, id: string): Promise<Assignment> {
     const assignment = await manager.getRepository(Assignment).findOne({
       where: { id },
-      relations: ['reviewer', 'reviewer.labs', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
+      relations: ['reviewer', 'reviewer.memberships', 'reviewer.memberships.lab', 'round', 'round.paper', 'round.paper.labs', 'response', 'extensions'],
     });
 
     if (!assignment) {

@@ -15,7 +15,8 @@ async function testAgent() {
   try {
     console.log("Starting Agent Test...");
     const pdfBuffer = fs.readFileSync(inputPath);
-    const result = await service.runAnnotatedReview(pdfBuffer, "test_input.pdf");
+    const fileId = await service.uploadPdf(pdfBuffer, "test_input.pdf");
+    const result = await service.runAnnotatedReview(fileId);
     if (result.annotatedPdfBuffer) {
       fs.writeFileSync(outputPath, result.annotatedPdfBuffer);
       console.log(`Success! Annotated PDF saved to: ${outputPath}`);

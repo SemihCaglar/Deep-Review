@@ -13,10 +13,12 @@ import {
 } from '@/lib/api';
 import { useLabContext } from '@/components/context/LabContext';
 import { getStoredUser, getToken } from '@/lib/auth';
+import { useUser } from '@/components/context/UserContext';
 
 export default function LabSelectPage() {
   const router = useRouter();
-  const { selectLab: setSelectedLab } = useLabContext();
+  const { logout } = useUser();
+  const { clearSelectedLab, selectLab: setSelectedLab } = useLabContext();
   const [memberships, setMemberships] = React.useState<LabMembership[]>([]);
   const [availableLabs, setAvailableLabs] = React.useState<Lab[]>([]);
   const [selectedLabId, setSelectedLabId] = React.useState('');
@@ -95,6 +97,12 @@ export default function LabSelectPage() {
     router.push('/dashboard');
   };
 
+  const handleLogout = () => {
+    clearSelectedLab();
+    logout();
+    router.push('/');
+  };
+
   const submitJoinRequest = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -122,13 +130,22 @@ export default function LabSelectPage() {
   const joinableLabs = availableLabs.filter(lab => !existingLabIds.has(lab.id));
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6">
-      <div>
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-blue-300/80">Lab Access</p>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Choose a lab</h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-400">
-          Select an active lab to continue, or request access to another lab.
-        </p>
+    <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-5xl flex-col justify-center space-y-6 py-8 md:min-h-[calc(100vh-5rem)]">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-blue-300/80">Lab Access</p>
+          <h1 className="text-3xl font-bold tracking-tight text-white">Choose a lab</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-400">
+            Select an active lab to continue, or request access to another lab.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-slate-300 transition-colors hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-200"
+        >
+          Log out
+        </button>
       </div>
 
       {isLoading ? (

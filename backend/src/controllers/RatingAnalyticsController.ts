@@ -4,6 +4,7 @@ import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { Coordinator } from '../entities/Coordinator';
 import { Rating } from '../entities/Rating';
 import { User } from '../entities/User';
+import { LabMembershipStatus } from '../entities/LabMembership';
 import { computeLabRankings } from '../services/reviewerStatsService';
 import type { AuthenticatedRequest } from '../types/auth';
 
@@ -95,14 +96,16 @@ export class RatingAnalyticsController {
       const coordinatorRepo = AppDataSource.getRepository(Coordinator);
       const coordinator = await coordinatorRepo.findOne({
         where: { id: req.user!.id },
-        relations: ['lab', 'lab.members'],
+        relations: ['lab', 'lab.memberships', 'lab.memberships.user'],
       });
 
       if (!coordinator?.lab) {
         return res.status(404).json({ message: 'No lab associated with this coordinator' });
       }
 
-      const isMember = coordinator.lab.members.some(m => m.id === targetUserId);
+      const isMember = (coordinator.lab.memberships ?? []).some(
+        membership => membership.user?.id === targetUserId && membership.status === LabMembershipStatus.Active,
+      );
       if (!isMember) {
         return res.status(403).json({ message: 'User is not a member of your lab' });
       }

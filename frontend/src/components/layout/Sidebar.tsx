@@ -97,7 +97,7 @@ export default function Sidebar() {
                     >
                         <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-slate-500">
                             <Building2 className="h-3.5 w-3.5" />
-                            Selected Lab
+                            Switch Lab
                         </div>
                         <p className="truncate text-sm font-semibold text-slate-100">{selectedLab.name}</p>
                         <p className={`mt-1 text-xs ${selectedLab.status === 'Alumni' ? 'text-sky-300' : 'text-blue-300'}`}>

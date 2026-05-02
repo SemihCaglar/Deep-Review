@@ -22,6 +22,7 @@ import { Round, RoundStatus, VenueCategory } from './entities/Round';
 import { Assignment, AssignmentStatus } from './entities/Assignment';
 import { Rating } from './entities/Rating';
 import { ApprovalStatus, User } from './entities/User';
+import { LabMembership, LabMembershipStatus } from './entities/LabMembership';
 import { hashPassword } from './services/accountSecurity';
 
 const REVIEWER_DATA = [
@@ -58,7 +59,7 @@ async function run() {
   // Find the lab via the coordinator's relation (robust to lab name changes)
   const labWithCoord = await coordRepo.findOne({
     where: { email: 'coordinator@mock.test' },
-    relations: ['lab', 'lab.members'],
+    relations: ['lab', 'lab.memberships', 'lab.memberships.user'],
   });
   const lab = labWithCoord?.lab ?? null;
   if (!lab) {
@@ -135,10 +136,19 @@ async function run() {
     }
 
     // Add to lab
-    const freshLab = await labRepo.findOne({ where: { id: lab.id }, relations: ['members'] });
-    if (freshLab && !freshLab.members.find(m => m.id === reviewer!.id)) {
-      freshLab.members.push(reviewer!);
-      await labRepo.save(freshLab);
+    const membershipRepo = AppDataSource.getRepository(LabMembership);
+    const existingMembership = await membershipRepo.findOne({
+      where: { userId: reviewer!.id, labId: lab.id },
+    });
+    if (!existingMembership) {
+      await membershipRepo.save(membershipRepo.create({
+        user: reviewer!,
+        userId: reviewer!.id,
+        lab,
+        labId: lab.id,
+        status: LabMembershipStatus.Active,
+        statusChangedAt: new Date(),
+      }));
       console.log(`   → Added to lab`);
     }
 

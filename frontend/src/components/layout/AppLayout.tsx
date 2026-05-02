@@ -38,6 +38,14 @@ function LoggedInLayout({ children }: { children: React.ReactNode }) {
         }
     }, [pathname, router, selectedLab, user.id, user.isAdmin, user.isCoordinator]);
 
+    if (pathname === '/lab-select') {
+        return (
+            <main className="min-h-screen overflow-y-auto bg-background p-6 text-foreground md:p-10">
+                {children}
+            </main>
+        );
+    }
+
     return (
         <div className="flex h-screen overflow-hidden bg-background text-foreground">
             <Sidebar />

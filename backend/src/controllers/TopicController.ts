@@ -4,6 +4,7 @@ import { AppDataSource } from '../data-source';
 import { Topic } from '../entities/Topic';
 import { Lab } from '../entities/Lab';
 import { UserRole, User } from '../entities/User';
+import { LabMembership, LabMembershipStatus } from '../entities/LabMembership';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class TopicController {
@@ -128,18 +129,26 @@ export class TopicController {
   private static async checkLabAccess(userId: string, labId: string, role: string): Promise<boolean> {
     if (role === UserRole.Admin) return true;
 
-    // Check if user is member/coordinator of this lab
     const labRepo = AppDataSource.getRepository(Lab);
     const lab = await labRepo.findOne({
       where: { id: labId },
-      relations: ['members', 'coordinator'],
+      relations: ['coordinator'],
     });
 
     if (!lab) return false;
 
-    const isMember = lab.members.some(m => m.id === userId);
     const isCoord = lab.coordinator?.id === userId;
+    if (isCoord) return true;
 
-    return isMember || isCoord;
+    const membership = await AppDataSource.getRepository(LabMembership).findOne({
+      where: {
+        userId,
+        labId,
+        status: LabMembershipStatus.Active,
+      },
+      select: ['id'],
+    });
+
+    return Boolean(membership);
   }
 }
