@@ -31,6 +31,7 @@ import {
   type ReviewerRanking,
   type PendingCollaborationInvitation,
 } from '@/lib/api';
+import { useLabContext } from '@/components/context/LabContext';
 import { useUser } from '@/components/context/UserContext';
 import { LabTopicManager } from '@/components/LabTopicManager';
 
@@ -163,6 +164,7 @@ function assignmentStatusClass(status: string) {
 
 export default function DashboardPage() {
   const { user } = useUser();
+  const { selectedLab } = useLabContext();
   const router = useRouter();
 
   // Admins don't use this page — redirect them to the admin dashboard
@@ -314,7 +316,10 @@ export default function DashboardPage() {
     setRequestDecisionsError('');
     try {
       const assignments = await getMyAssignmentsRequest();
-      const activeAssignments = assignments
+      const scopedAssignments = selectedLab
+        ? assignments.filter(assignment => assignment.paper.labs?.some(lab => lab.id === selectedLab.id))
+        : assignments;
+      const activeAssignments = scopedAssignments
         .filter(assignment => ACTIVE_REVIEW_STATUSES.includes(assignment.status))
         .sort((a, b) => {
           const left = a.deadline ? new Date(a.deadline).getTime() : Number.MAX_SAFE_INTEGER;
@@ -323,7 +328,7 @@ export default function DashboardPage() {
         });
       setMyReviewAssignments(activeAssignments);
 
-      const decisions = assignments.flatMap(assignment => {
+      const decisions = scopedAssignments.flatMap(assignment => {
         const declineDecisions = assignment.resolvedDeclineRequests.map(request => ({
           id: request.id,
           type: 'Decline' as const,
@@ -356,7 +361,7 @@ export default function DashboardPage() {
     } finally {
       setIsLoadingMyReviews(false);
     }
-  }, [user.isCoordinator, user.isAdmin]);
+  }, [selectedLab?.id, user.isCoordinator, user.isAdmin, user.isFrozen]);
 
   // --- Effects ---
 
@@ -459,6 +464,9 @@ export default function DashboardPage() {
   const visibleRequestDecisions = requestDecisions.slice(0, 5);
   const allVisibleDecisionsSelected = visibleRequestDecisions.length > 0
     && visibleRequestDecisions.every(decision => selectedDecisionIds.has(decision.id));
+  const visibleLabs = selectedLab
+    ? (user.labs ?? []).filter(lab => lab.id === selectedLab.id)
+    : (user.labs ?? []);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
@@ -800,14 +808,14 @@ export default function DashboardPage() {
       )}
 
       {/* Lab Management for Coordinators and Members */}
-      {user.labs && user.labs.length > 0 && (
+      {visibleLabs.length > 0 && (
         <div className="space-y-6">
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <CheckCircle className="w-5 h-5 text-blue-400" />
             Lab Management
           </h2>
           <div className="grid gap-6">
-            {user.labs.map(lab => (
+            {visibleLabs.map(lab => (
               <LabTopicManager key={lab.id} labId={lab.id} labName={lab.name} />
             ))}
           </div>

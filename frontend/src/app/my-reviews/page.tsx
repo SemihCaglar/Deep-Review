@@ -11,6 +11,7 @@ import {
   requestDeclineForAssignmentRequest,
   completeReviewRequest,
 } from '@/lib/api';
+import { useLabContext } from '@/components/context/LabContext';
 import { useUser } from '@/components/context/UserContext';
 import { confirmCancel } from '@/lib/confirmAction';
 import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Users } from 'lucide-react';
@@ -471,6 +472,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
 
 export default function MyReviewsPage() {
   const { user } = useUser();
+  const { selectedLab } = useLabContext();
   const router = useRouter();
   const [assignments, setAssignments] = useState<MyAssignment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -493,8 +495,11 @@ export default function MyReviewsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const active = assignments.filter(a => ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));
-  const past = assignments.filter(a => !ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));
+  const scopedAssignments = selectedLab
+    ? assignments.filter(assignment => assignment.paper.labs?.some(lab => lab.id === selectedLab.id))
+    : assignments;
+  const active = scopedAssignments.filter(a => ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));
+  const past = scopedAssignments.filter(a => !ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));
 
   return (
     <div className="max-w-3xl mx-auto py-6 space-y-8 animate-in fade-in duration-500 mb-20">
@@ -513,7 +518,7 @@ export default function MyReviewsPage() {
         </div>
       ) : error ? (
         <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
-      ) : assignments.length === 0 ? (
+      ) : scopedAssignments.length === 0 ? (
         <div className="glass rounded-2xl border border-white/5 p-12 text-center">
           <CheckCircle className="w-10 h-10 text-slate-600 mx-auto mb-3" />
           <p className="text-slate-400 text-sm">No review assignments yet.</p>

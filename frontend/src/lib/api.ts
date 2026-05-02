@@ -591,6 +591,7 @@ export type MyAssignment = {
     overleafLink: string | null;
 
     authors: PaperAuthor[];
+    labs?: { id: string; name: string }[];
   };
   pendingDeclineRequest: PendingDeclineRequest | null;
   pendingExtensionRequest: PendingExtensionRequest | null;

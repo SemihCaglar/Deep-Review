@@ -175,7 +175,7 @@ export class AssignmentController {
           reviewer: { id: user.id },
           status: Not(AssignmentStatus.Cancelled),
         },
-        relations: ['round', 'round.paper', 'round.paper.authors', 'declineRequests', 'extensions'],
+        relations: ['round', 'round.paper', 'round.paper.authors', 'round.paper.labs', 'declineRequests', 'extensions'],
         order: { invitedAt: 'DESC' },
       });
 
@@ -240,6 +240,10 @@ export class AssignmentController {
               id: author.id,
               name: author.name,
               email: author.email,
+            })),
+            labs: (a.round.paper.labs ?? []).map(lab => ({
+              id: lab.id,
+              name: lab.name,
             })),
           },
           pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
