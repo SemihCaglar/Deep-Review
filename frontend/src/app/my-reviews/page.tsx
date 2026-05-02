@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   MyAssignment,
   ApiError,
@@ -10,6 +11,7 @@ import {
   requestDeclineForAssignmentRequest,
   completeReviewRequest,
 } from '@/lib/api';
+import { useUser } from '@/components/context/UserContext';
 import { confirmCancel } from '@/lib/confirmAction';
 import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Users } from 'lucide-react';
 
@@ -468,9 +470,17 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
 }
 
 export default function MyReviewsPage() {
+  const { user } = useUser();
+  const router = useRouter();
   const [assignments, setAssignments] = useState<MyAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (user.isFrozen) {
+      router.replace('/dashboard');
+    }
+  }, [user.isFrozen, router]);
 
   const load = useCallback(() => {
     setLoading(true);

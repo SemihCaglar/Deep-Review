@@ -91,6 +91,12 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          {storedUser.frozenAt ? (
+            <div className="mb-4 rounded-xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+              ❄️ Your account is currently frozen (Alumni). You can still update your profile.
+            </div>
+          ) : null}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-background/60 p-4">
               <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Full Name</p>
@@ -100,6 +106,14 @@ export default function ProfilePage() {
               <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Email</p>
               <p className="text-slate-100 font-medium">{storedUser.email}</p>
             </div>
+            {storedUser.frozenAt ? (
+              <div className="rounded-xl border border-white/10 bg-background/60 p-4 sm:col-span-2">
+                <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Current Position</p>
+                <p className="text-slate-100 font-medium">
+                  {storedUser.currentPosition || <span className="text-slate-500 italic">Not set — add in profile edit</span>}
+                </p>
+              </div>
+            ) : null}
           </div>
         </section>
 

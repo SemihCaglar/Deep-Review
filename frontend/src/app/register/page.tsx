@@ -28,6 +28,13 @@ export default function RegisterPaper() {
     const [topicSearch, setTopicSearch] = useState('');
 
     useEffect(() => {
+        if (user.isFrozen) {
+            router.replace('/dashboard');
+            return;
+        }
+    }, [user.isFrozen, router]);
+
+    useEffect(() => {
         const fetchData = async () => {
             try {
                 const [membersRes, topicsRes] = await Promise.all([

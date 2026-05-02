@@ -19,6 +19,8 @@ export type StoredAuthUser = {
   interests?: StoredTopic[];
   otherInterests?: string[];
   labs?: { id: string; name: string }[];
+  frozenAt?: string | null;
+  currentPosition?: string | null;
 };
 
 function canUseStorage() {
@@ -82,6 +84,7 @@ export function mapStoredUserToLegacyUser(user: StoredAuthUser) {
     email: user.email,
     isCoordinator: user.role === 'Coordinator',
     isAdmin: user.role === 'Admin',
+    isFrozen: !!user.frozenAt,
     labs: user.labs || [],
   };
 }

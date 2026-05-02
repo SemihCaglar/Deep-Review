@@ -11,7 +11,7 @@ interface UserContextType {
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
-const EMPTY_USER: User = { id: '', name: '', isCoordinator: false, email: '' };
+const EMPTY_USER: User = { id: '', name: '', isCoordinator: false, isFrozen: false, email: '' };
 const AUTH_USER_KEY = 'bilsen_auth_user';
 const LEGACY_USER_KEY = 'bilsen_user';
 
@@ -80,6 +80,7 @@ function readAuthUserFromStorage(): User | null {
             email: parsedUser.email,
             isCoordinator: parsedUser.role === 'Coordinator',
             isAdmin: parsedUser.role === 'Admin',
+            isFrozen: !!parsedUser.frozenAt,
             labs: parsedUser.labs || [],
         };
     } catch (e) {
