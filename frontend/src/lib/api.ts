@@ -836,6 +836,27 @@ export async function startAIReviewRequest(roundId: string, pdfFile: File): Prom
   return payload as { message: string; data: any };
 }
 
+export async function runComplianceCheckRequest(roundId: string, pdfFile: File, venueRules?: unknown): Promise<{ message: string; data: ComplianceReport }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('pdf', pdfFile);
+  if (venueRules !== undefined) {
+    formData.append('venueRules', JSON.stringify(venueRules));
+  }
+
+  const response = await fetch(buildUrl(`/rounds/${roundId}/compliance`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const payload = await parseResponseBody(response);
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
+  return payload as { message: string; data: ComplianceReport };
+}
+
 export function getVenueRulesRequest(roundId: string) {
   return apiRequest<any>(`/rounds/${roundId}/venue-rules`, {
     method: 'GET'

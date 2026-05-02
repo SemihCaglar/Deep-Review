@@ -13,6 +13,7 @@ import {
   SuggestedReviewer,
   ApiError,
   startAIReviewRequest,
+  runComplianceCheckRequest,
   getMyCoordinatedPapersRequest,
   getPaperByIdRequest,
   getPaperRoundsRequest,
@@ -706,6 +707,10 @@ function RoundCard({
   const [aiError, setAiError] = useState('');
   const [aiStatus, setAiStatus] = useState('');
   const [localAiResult, setLocalAiResult] = useState<any>(null);
+  const complianceFileRef = useRef<HTMLInputElement>(null);
+  const [runningCompliance, setRunningCompliance] = useState(false);
+  const [complianceError, setComplianceError] = useState('');
+  const [localComplianceResult, setLocalComplianceResult] = useState<any>(null);
   const [confirmedStandards, setConfirmedStandards] = useState<Set<string>>(new Set());
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['General', 'Qualitative', 'Quantitative', 'Literature Review', 'Other']));
   const [finalizedChecklist, setFinalizedChecklist] = useState<any>(null);
@@ -792,6 +797,24 @@ function RoundCard({
     } finally {
       clearInterval(ticker);
       setRunningAI(false);
+    }
+  };
+
+  const handleComplianceFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setRunningCompliance(true);
+    setComplianceError('');
+
+    try {
+      const res = await runComplianceCheckRequest(round.id, file);
+      setLocalComplianceResult(res.data);
+      onRefresh();
+    } catch (err: any) {
+      setComplianceError(err.message || 'Compliance check failed');
+    } finally {
+      setRunningCompliance(false);
     }
   };
 
