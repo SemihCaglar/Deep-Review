@@ -556,7 +556,7 @@ export class RoundController {
         annotatedPdfUrl: r.annotatedPdfUrl,
         artifacts: {
           checklistItems: (r.checklistItems ?? []).map(ci => ({ id: ci.id, description: ci.description, isChecked: ci.isChecked })),
-          aiReviewReports: (r.aiReviewReports ?? []).map(ar => ({ id: ar.id, generatedReportUrl: ar.generatedReportUrl, annotatedPdfUrl: ar.annotatedPdfUrl }))
+          aiReviewReports: (r.aiReviewReports ?? []).map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
         }
       })));
     } catch (err) {
@@ -586,6 +586,7 @@ export class RoundController {
       const rounds = await roundRepo.find({
         where: { paper: { id: paperId } },
         relations: [
+          'aiReviewReports',
           'assignments',
           'assignments.reviewer',
           'assignments.declineRequests',
@@ -612,6 +613,13 @@ export class RoundController {
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
+        aiReviewReports: (round.aiReviewReports ?? []).map(ar => ({
+          id: ar.id,
+          reviewText: ar.reviewText,
+          annotatedPdfUrl: ar.annotatedPdfUrl,
+          venue: ar.venue,
+          createdAt: ar.createdAt,
+        })),
         assignments: (round.assignments ?? []).map(a => ({
           id: a.id,
           status: a.status,
@@ -828,6 +836,7 @@ export class RoundController {
 
       // Execute Peer Review Pipeline
       const { PdfAgentService } = require('../ai_content/services/PdfAgentService');
+      const { AIReviewReport } = require('../entities/AIReviewReport');
 
       const agentService = new PdfAgentService();
       const inputFilename = `paper_${round.paper.id}_round_${round.id}.pdf`;
@@ -852,12 +861,25 @@ export class RoundController {
         console.log(`[RoundController] Review annotated PDF saved to ${annotatedPdfUrl}`);
       }
 
+      // Persist review to AIReviewReport collection
+      const aiReviewReport = new AIReviewReport();
+      aiReviewReport.reviewText = reviewResult.summaryText;
+      aiReviewReport.annotatedPdfUrl = annotatedPdfUrl;
+      aiReviewReport.venue = venueName;
+      aiReviewReport.round = round;
+
+      const aiReviewReportRepo = AppDataSource.getRepository(AIReviewReport);
+      await aiReviewReportRepo.save(aiReviewReport);
+
+      console.log(`[RoundController] Review saved to AIReviewReport collection`);
+
       return res.status(200).json({
         message: 'Peer review completed',
         data: {
           reviewText: reviewResult.summaryText,
           annotatedPdfUrl,
           venue: venueName,
+          reviewId: aiReviewReport.id,
         }
       });
 
