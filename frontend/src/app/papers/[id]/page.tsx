@@ -22,8 +22,14 @@ import {
 } from '@/lib/api';
 
 
+function toLocalDateInput(date: Date | string | null | undefined): string {
+    if (!date) return '';
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function todayInputValue() {
-    return new Date().toISOString().split('T')[0];
+    return toLocalDateInput(new Date());
 }
 
 function dateInputToUtcIso(value: string) {
@@ -1323,7 +1329,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                     {(isAuthor || user.isCoordinator) && (
                         <div className="glass p-6 rounded-2xl border border-white/5 space-y-4">
                             <div className="flex items-center justify-between flex-wrap gap-2">
-                                <h2 className="text-xl font-semibold text-white">Review Round Proposals</h2>
+                                <h2 className="text-xl font-semibold text-white">Active Round</h2>
                                 <div className="flex items-center gap-2 flex-wrap">
                                     {user.isCoordinator && (
                                         <Link
@@ -1431,7 +1437,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     {round.roundNumber}
                                                 </div>
                                                 <div className="text-left">
-                                                    <p className="text-sm font-medium text-white">Round {round.roundNumber} — {round.targetVenue}</p>
+                                                    <p className="text-sm font-medium text-white">{round.targetVenue || `Round ${round.roundNumber}`}</p>
                                                     <p className="text-xs text-slate-500">{round.venueCategory} · Deadline: {round.deadline ? new Date(round.deadline).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p>
                                                 </div>
                                             </div>
@@ -1443,15 +1449,22 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
                                         {isExpanded && (
                                             <div className="border-t border-white/5 px-4 py-3 space-y-3 bg-white/[0.01]">
+                                                {/* Venue link */}
+                                                {round.targetVenueUrl && (
+                                                    <div className="flex items-center gap-1.5 text-xs">
+                                                        <span className="text-slate-500">Venue:</span>
+                                                        <a href={round.targetVenueUrl} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 underline truncate">{round.targetVenueUrl}</a>
+                                                    </div>
+                                                )}
                                                 {/* Config */}
                                                 <div className="grid grid-cols-2 gap-3 text-sm">
                                                     {round.venueCategory === 'Conference' && (
                                                         <div>
                                                             <p className="text-xs text-slate-500 mb-0.5">Submission Deadline</p>
-                                                            {round.status === 'Draft' && editingSubmissionDeadline === round.id ? (
+                                                            {editingSubmissionDeadline === round.id ? (
                                                                 <div className="flex items-center gap-2">
-                                                                    <input type="date" value={submissionDeadlineDraft} onChange={e => setSubmissionDeadlineDraft(e.target.value)}
-                                                                        min={maxDateInputValue(todayInputValue(), round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : undefined)}
+                                                                    <input type="date" value={submissionDeadlineDraft} onChange={e => { setSubmissionDeadlineDraft(e.target.value); setRoundErrors(prev => ({ ...prev, [round.id]: '' })); }}
+                                                                        min={maxDateInputValue(todayInputValue(), round.deadline ? toLocalDateInput(round.deadline) : undefined)}
                                                                         className="bg-background border border-white/10 rounded px-2 py-0.5 text-xs text-white" />
                                                                     <button onClick={() => handleSaveSubmissionDeadline(round.id)} disabled={!submissionDeadlineDraft} className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-0.5 rounded text-white disabled:opacity-50">Save</button>
                                                                     <button onClick={async () => { if (await confirmCancel()) setEditingSubmissionDeadline(null); }} className="text-xs text-slate-400 hover:text-white">Cancel</button>
@@ -1459,8 +1472,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                             ) : (
                                                                 <div className="flex items-center gap-2">
                                                                     <p className="text-white">{round.submissionDeadline ? new Date(round.submissionDeadline).toLocaleDateString() : '—'}</p>
-                                                                    {round.status === 'Draft' && (
-                                                                        <button onClick={() => { setEditingSubmissionDeadline(round.id); setSubmissionDeadlineDraft(round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : ''); }}
+                                                                    {round.status !== 'Completed' && (
+                                                                        <button onClick={() => { setEditingSubmissionDeadline(round.id); setSubmissionDeadlineDraft(round.submissionDeadline ? toLocalDateInput(round.submissionDeadline) : ''); }}
                                                                             className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-1.5 py-0.5 rounded">
                                                                             Edit
                                                                         </button>
@@ -1471,11 +1484,11 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     )}
                                                     <div>
                                                         <p className="text-xs text-slate-500 mb-0.5">Round Deadline</p>
-                                                        {round.status === 'Draft' && editingRoundDeadline === round.id ? (
+                                                        {round.status !== 'Completed' && editingRoundDeadline === round.id ? (
                                                             <div className="flex items-center gap-2">
-                                                                <input type="date" value={roundDeadlineDraft} onChange={e => setRoundDeadlineDraft(e.target.value)}
+                                                                <input type="date" value={roundDeadlineDraft} onChange={e => { setRoundDeadlineDraft(e.target.value); setRoundErrors(prev => ({ ...prev, [round.id]: '' })); }}
                                                                     min={todayInputValue()}
-                                                                    max={round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : undefined}
+                                                                    max={round.submissionDeadline ? toLocalDateInput(round.submissionDeadline) : undefined}
                                                                     className="bg-background border border-white/10 rounded px-2 py-0.5 text-xs text-white" />
                                                                 <button onClick={() => handleSaveRoundDeadline(round.id)} className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-0.5 rounded text-white">Save</button>
                                                                 <button onClick={async () => { if (await confirmCancel()) setEditingRoundDeadline(null); }} className="text-xs text-slate-400 hover:text-white">Cancel</button>
@@ -1483,8 +1496,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                         ) : (
                                                             <div className="flex items-center gap-2">
                                                                 <p className="text-white">{round.deadline ? new Date(round.deadline).toLocaleDateString() : '—'}</p>
-                                                                {round.status === 'Draft' && (
-                                                                    <button onClick={() => { setEditingRoundDeadline(round.id); setRoundDeadlineDraft(round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : ''); }}
+                                                                {round.status !== 'Completed' && (
+                                                                    <button onClick={() => { setEditingRoundDeadline(round.id); setRoundDeadlineDraft(round.deadline ? toLocalDateInput(round.deadline) : ''); }}
                                                                         className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-1.5 py-0.5 rounded">
                                                                         Edit
                                                                     </button>
