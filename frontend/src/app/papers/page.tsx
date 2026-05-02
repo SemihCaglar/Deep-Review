@@ -3,12 +3,14 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useLabContext } from '@/components/context/LabContext';
 import { useUser } from '@/components/context/UserContext';
 import { ChevronRight, FileText, Search, Loader2, Clock, CheckCircle2, X } from 'lucide-react';
 import { AuthoredPaper, getAllPapersRequest, getMyWrittenPapersRequest, PaperAuthor, TopicOption, Paper } from '@/lib/api';
 
 export default function PapersList() {
     const { user } = useUser();
+    const { selectedLab } = useLabContext();
     const searchParams = useSearchParams();
     const router = useRouter();
     const filter = searchParams.get('filter');
@@ -75,11 +77,15 @@ export default function PapersList() {
         paper.abstractText || paper.abstract || '';
 
     const getPapers = () => {
+        const scopedPapers = selectedLab
+            ? allPapers.filter(paper => paper.labs?.some(lab => lab.id === selectedLab.id))
+            : allPapers;
+
         if (filter === 'authored') {
-            return allPapers.filter(isAuthoredByCurrentUser);
+            return scopedPapers.filter(isAuthoredByCurrentUser);
         }
         // Default system view (only accessible via sidebar if Coordinator)
-        return allPapers;
+        return scopedPapers;
     };
 
     const getTitle = () => {

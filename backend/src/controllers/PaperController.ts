@@ -386,7 +386,7 @@ export class PaperController {
 
       const papers = await paperRepo.find({
         where: { id: In(authoredPaperIds.map(p => p.id)) },
-        relations: ['authors', 'topics', 'coordinators', 'rounds', 'rounds.assignments'],
+        relations: ['authors', 'topics', 'coordinators', 'labs', 'rounds', 'rounds.assignments'],
       });
 
       const result = papers.map(p => {
@@ -405,6 +405,7 @@ export class PaperController {
           topics: (p.topics ?? []).map(t => ({ id: t.id, name: t.name })),
           authors: getOrderedPaperAuthors(p),
           coordinators: (p.coordinators ?? []).map(c => ({ id: c.id, name: c.name, email: c.email })),
+          labs: (p.labs ?? []).map(l => ({ id: l.id, name: l.name })),
           coordinatorId: p.coordinators?.[0]?.id ?? null,
           latestRoundNumber: latestRound?.roundNumber ?? null,
           latestRoundStatus: latestRound?.status ?? null,
