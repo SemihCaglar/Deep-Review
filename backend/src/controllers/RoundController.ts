@@ -3,11 +3,13 @@ import { AppDataSource } from '../data-source';
 import { Round, RoundStatus, VenueCategory } from '../entities/Round';
 import { Paper } from '../entities/Paper';
 import { User, UserRole } from '../entities/User';
-import { AssignmentStatus } from '../entities/Assignment';
+import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { DeclineRequestStatus } from '../entities/DeclineRequest';
 import { ExtensionStatus } from '../entities/Extension';
 import { SubmissionRuleSet } from '../entities/SubmissionRuleSet';
+import { AIReviewReport } from '../entities/AIReviewReport';
 import { RoundService, RoundServiceError } from '../services/RoundService';
+import { sendEmail } from '../services/emailService';
 import { ComplianceCheckAgentService } from '../ai_content/services/ComplianceCheckAgentService';
 import type { AuthenticatedRequest } from '../types/auth';
 
@@ -170,8 +172,8 @@ export class RoundController {
         return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
       }
 
-      if (round.status !== RoundStatus.Draft) {
-        return res.status(400).json({ message: `Cannot update deadline: the round is currently '${round.status}'. Deadline changes are only allowed while the round is in Draft status.` });
+      if (round.status === RoundStatus.Completed) {
+        return res.status(400).json({ message: `Cannot update deadline: the round is already completed.` });
       }
 
       if (round.submissionDeadline && newDeadline.getTime() > round.submissionDeadline.getTime()) {
@@ -181,6 +183,35 @@ export class RoundController {
 
       round.deadline = newDeadline;
       await roundRepo.save(round);
+
+      if (round.status === RoundStatus.Open) {
+        const assignmentRepo = AppDataSource.getRepository(Assignment);
+        const activeStatuses = [
+          AssignmentStatus.Invited,
+          AssignmentStatus.Accepted,
+          AssignmentStatus.PendingExtension,
+          AssignmentStatus.PendingDecline,
+          AssignmentStatus.Overdue,
+        ];
+        const assignments = await assignmentRepo.find({
+          where: { round: { id: round.id } },
+          relations: ['reviewer'],
+        });
+        const toUpdate = assignments.filter(a => activeStatuses.includes(a.status));
+        if (toUpdate.length > 0) {
+          for (const a of toUpdate) a.deadline = newDeadline;
+          await assignmentRepo.save(toUpdate);
+
+          const formattedDeadline = newDeadline.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+          await Promise.allSettled(toUpdate.map(a =>
+            sendEmail(
+              a.reviewer,
+              `Review deadline updated — ${round.paper.title}`,
+              `Hello ${a.reviewer.name},\n\nThe review deadline for the paper "${round.paper.title}" (${round.targetVenue}) has been updated.\n\nNew deadline: ${formattedDeadline}\n\nPlease log in to check your assignment.`,
+            )
+          ));
+        }
+      }
 
       return res.status(200).json(round);
     } catch (err) {
@@ -233,8 +264,14 @@ export class RoundController {
         return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
       }
 
-      if (round.status !== RoundStatus.Draft) {
-        return res.status(400).json({ message: `Cannot update round details: the round is currently '${round.status}'. Details can only be changed while the round is in Draft status.` });
+      if (round.status === RoundStatus.Completed) {
+        return res.status(400).json({ message: `Cannot update round details: the round is already completed.` });
+      }
+
+      const isOpen = round.status === RoundStatus.Open;
+      const hasNonDeadlineChanges = targetVenue !== undefined || targetVenueUrl !== undefined || venueCategory !== undefined;
+      if (isOpen && hasNonDeadlineChanges) {
+        return res.status(400).json({ message: `Cannot update venue details while the round is Open. Only the submission deadline can be changed.` });
       }
 
       let urlUpdated = false;
@@ -255,6 +292,22 @@ export class RoundController {
       }
 
       await roundRepo.save(round);
+
+      if (submissionDeadline !== undefined && newSubDeadline) {
+        const formattedDeadline = newSubDeadline.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        const recipients = [
+          ...(round.paper.authors ?? []),
+          ...(round.paper.coordinators ?? []),
+        ].filter((u, idx, arr) => u.id !== user.id && arr.findIndex(x => x.id === u.id) === idx);
+
+        await Promise.allSettled(recipients.map(recipient =>
+          sendEmail(
+            recipient,
+            `Submission deadline updated — ${round.paper.title}`,
+            `Hello ${recipient.name},\n\nThe conference submission deadline for the paper "${round.paper.title}" (${round.targetVenue}) has been updated.\n\nNew submission deadline: ${formattedDeadline}\n\nPlease log in to review the updated timeline.`,
+          )
+        ));
+      }
 
       // Extract submission rules if URL was updated (async, non-blocking)
       if (urlUpdated && round.targetVenueUrl) {
@@ -1277,18 +1330,37 @@ export class RoundController {
       console.log(`[RoundController] Checklist: ${aiReviewResult.checklistJson?.selectedStandards?.length || 0} standards selected`);
       console.log(`[RoundController] =========================================\n`);
 
-      // STEP 3: Save results to round
+      // STEP 3: Save results to database
       console.log(`[RoundController] Saving results to database...`);
-      round.complianceReport = complianceReport;
+
+      // Create new AIReviewReport record for this run
+      const aiReviewReportRepo = AppDataSource.getRepository(AIReviewReport);
+      const aiReviewReport = new AIReviewReport();
+      aiReviewReport.reviewText = aiReviewResult.summaryReport;
+      aiReviewReport.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+      aiReviewReport.complianceReport = complianceReport;
+      aiReviewReport.venue = round.targetVenue;
+      aiReviewReport.round = round;
+      aiReviewReport.requestedBy = user as any;
+
+      await aiReviewReportRepo.save(aiReviewReport);
+      console.log(`[RoundController] ✓ AIReviewReport saved with ID: ${aiReviewReport.id}`);
+
+      // Update round with latest data (for backwards compatibility)
       round.aiReviewReport = aiReviewResult.summaryReport;
-      if (aiReviewResult.annotatedPdfUrl) {
-        round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+      round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+
+      // Only set checklist if it's the first time (not already set)
+      if (!round.checklistJson && aiReviewResult.checklistJson) {
+        round.checklistJson = aiReviewResult.checklistJson;
+        round.checklistUrl = aiReviewResult.checklistUrl;
+        console.log(`[RoundController] ✓ Checklist prefilled (first time)`);
+      } else if (round.checklistJson) {
+        console.log(`[RoundController] ⚪ Checklist already exists, not overwriting`);
       }
-      round.checklistJson = aiReviewResult.checklistJson;
-      round.checklistUrl = aiReviewResult.checklistUrl;
 
       await roundRepo.save(round);
-      console.log(`[RoundController] ✓ Results saved to round`);
+      console.log(`[RoundController] ✓ Round updated`);
 
       // STEP 4: Return combined results
       return res.status(200).json({

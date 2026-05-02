@@ -39,7 +39,7 @@ import {
   confirmChecklistSelectionRequest,
 } from '@/lib/api';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download, ShieldCheck } from 'lucide-react';
+import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download } from 'lucide-react';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
@@ -77,8 +77,14 @@ function formatDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function toLocalDateInput(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function todayInputValue() {
-  return new Date().toISOString().split('T')[0];
+  return toLocalDateInput(new Date());
 }
 
 function dateInputToUtcIso(value: string) {
@@ -241,7 +247,7 @@ function AssignmentRow({
             <button
               onClick={() => {
                 if (!showDeadlineInput) {
-                  setNewDeadline(assignment.deadline ? new Date(assignment.deadline).toISOString().split('T')[0] : '');
+                  setNewDeadline(assignment.deadline ? toLocalDateInput(assignment.deadline) : '');
                 }
                 setShowDeadlineInput(v => !v);
                 setError('');
@@ -280,7 +286,7 @@ function AssignmentRow({
             value={newDeadline}
             onChange={e => setNewDeadline(e.target.value)}
             min={todayInputValue()}
-            max={roundDeadline ? new Date(roundDeadline).toISOString().split('T')[0] : undefined}
+            max={roundDeadline ? toLocalDateInput(roundDeadline) : undefined}
             className="bg-background border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
           />
           <button
@@ -346,7 +352,7 @@ function AssignmentRow({
                 <button
                   onClick={() => {
                     const requested = assignment.pendingExtensionRequest!.requestedDeadline;
-                    setApprovedDeadline(requested ? new Date(requested).toISOString().split('T')[0] : '');
+                    setApprovedDeadline(requested ? toLocalDateInput(requested) : '');
                     setShowExtApprove(true);
                   }}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
@@ -360,7 +366,7 @@ function AssignmentRow({
                     value={approvedDeadline}
                     onChange={e => setApprovedDeadline(e.target.value)}
                     min={todayInputValue()}
-                    max={roundDeadline ? new Date(roundDeadline).toISOString().split('T')[0] : undefined}
+                    max={roundDeadline ? toLocalDateInput(roundDeadline) : undefined}
                     className="bg-background border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
                   />
                   <button
@@ -598,12 +604,12 @@ function RoundCard({
   };
 
   const [editingDeadline, setEditingDeadline] = useState(false);
-  const [draftDeadline, setDraftDeadline] = useState(round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : '');
+  const [draftDeadline, setDraftDeadline] = useState(round.deadline ? toLocalDateInput(round.deadline) : '');
   const [savingDeadline, setSavingDeadline] = useState(false);
   const [deadlineError, setDeadlineError] = useState('');
 
   const [editingSubmissionDeadline, setEditingSubmissionDeadline] = useState(false);
-  const [draftSubmissionDeadline, setDraftSubmissionDeadline] = useState(round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : '');
+  const [draftSubmissionDeadline, setDraftSubmissionDeadline] = useState(round.submissionDeadline ? toLocalDateInput(round.submissionDeadline) : '');
   const [savingSubmissionDeadline, setSavingSubmissionDeadline] = useState(false);
   const [submissionDeadlineError, setSubmissionDeadlineError] = useState('');
 
@@ -768,9 +774,19 @@ function RoundCard({
 
     try {
       const res = await startAIReviewRequest(round.id, file);
-      setLocalAiResult(res.data);
-      if (res.data?.checklistJson?.selectedStandards) {
-        const standards = new Set<string>(res.data.checklistJson.selectedStandards.map((s: any) => s.label));
+      const aiReviewData = res.data?.aiReview;
+
+      // Normalize the response format for local display
+      setLocalAiResult({
+        reviewText: aiReviewData?.summaryReport,
+        annotatedPdfUrl: aiReviewData?.annotatedPdfUrl,
+        checklistJson: aiReviewData?.checklist,
+        checklistUrl: aiReviewData?.checklistUrl,
+        suggestedCitations: aiReviewData?.suggestedCitations
+      });
+
+      if (aiReviewData?.checklist?.selectedStandards) {
+        const standards = new Set<string>(aiReviewData.checklist.selectedStandards.map((s: any) => s.label));
         setConfirmedStandards(standards);
       }
       setAiStatus('');
@@ -810,8 +826,8 @@ function RoundCard({
       return;
     }
 
-    // Otherwise, pre-select AI-selected standards
-    if ((localAiResult?.checklistJson || round.checklistJson) && confirmedStandards.size === 0) {
+    // Otherwise, pre-select AI-selected standards from local result or round data
+    if (confirmedStandards.size === 0) {
       const checklist = localAiResult?.checklistJson || round.checklistJson;
       if (checklist?.selectedStandards) {
         const standards = new Set<string>(checklist.selectedStandards.map((s: any) => s.label));
@@ -837,7 +853,7 @@ function RoundCard({
             {round.roundNumber}
           </div>
           <div>
-            <p className="text-white font-semibold">Round {round.roundNumber}</p>
+            <p className="text-white font-semibold">{round.targetVenue || `Round ${round.roundNumber}`}</p>
             <p className="text-xs text-slate-500 mt-0.5">
               Deadline: {formatDate(round.deadline)} · {round.assignments.length} reviewer(s)
               {pendingCount > 0 && (
@@ -937,47 +953,6 @@ function RoundCard({
                 </div>
                 )}
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                {round.venueCategory === 'Conference' && (
-                  <div>
-                    <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Submission Deadline</p>
-                    {!editingSubmissionDeadline ? (
-                      <div className="flex items-center gap-2">
-                        <p className="text-white font-medium">{formatDate(round.submissionDeadline)}</p>
-                        <button onClick={() => { setDraftSubmissionDeadline(round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : ''); setEditingSubmissionDeadline(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <input type="date" value={draftSubmissionDeadline} onChange={(e) => { setDraftSubmissionDeadline(e.target.value); setSubmissionDeadlineError(''); }} min={maxDateInputValue(todayInputValue(), draftDeadline || (round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : undefined))} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
-                          <button onClick={handleEditSubmissionDeadline} disabled={savingSubmissionDeadline || !draftSubmissionDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white disabled:opacity-50">Save</button>
-                          <button onClick={async () => { if (await confirmCancel()) { setEditingSubmissionDeadline(false); setSubmissionDeadlineError(''); } }} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
-                        </div>
-                        {submissionDeadlineError && <p className="text-xs text-red-400">{submissionDeadlineError}</p>}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div>
-                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Round Deadline</p>
-                  {!editingDeadline ? (
-                    <div className="flex items-center gap-2">
-                      <p className="text-white font-medium">{formatDate(round.deadline)}</p>
-                      <button onClick={() => { setDraftDeadline(round.deadline ? new Date(round.deadline).toISOString().split('T')[0] : ''); setEditingDeadline(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <input type="date" value={draftDeadline} onChange={(e) => { setDraftDeadline(e.target.value); setDeadlineError(''); }} min={todayInputValue()} max={round.submissionDeadline ? new Date(round.submissionDeadline).toISOString().split('T')[0] : undefined} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
-                        <button onClick={handleEditDeadline} disabled={savingDeadline || !draftDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white disabled:opacity-50">Save</button>
-                        <button onClick={async () => { if (await confirmCancel()) { setEditingDeadline(false); setDeadlineError(''); } }} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
-                      </div>
-                      {deadlineError && <p className="text-xs text-red-400">{deadlineError}</p>}
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {/* Proposed reviewers */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1053,6 +1028,50 @@ function RoundCard({
                       </div>
                     )}
                     <button onClick={() => setShowProposePanel(false)} className="text-xs text-slate-500 hover:text-slate-300">Close</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Deadline fields — editable for Draft and Open rounds */}
+          {round.status !== 'Completed' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              {round.venueCategory === 'Conference' && (
+                <div>
+                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Submission Deadline</p>
+                  {!editingSubmissionDeadline ? (
+                    <div className="flex items-center gap-2">
+                      <p className="text-white font-medium">{formatDate(round.submissionDeadline)}</p>
+                      <button onClick={() => { setDraftSubmissionDeadline(round.submissionDeadline ? toLocalDateInput(round.submissionDeadline) : ''); setEditingSubmissionDeadline(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <input type="date" value={draftSubmissionDeadline} onChange={(e) => { setDraftSubmissionDeadline(e.target.value); setSubmissionDeadlineError(''); }} min={maxDateInputValue(todayInputValue(), draftDeadline || (round.deadline ? toLocalDateInput(round.deadline) : undefined))} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
+                        <button onClick={handleEditSubmissionDeadline} disabled={savingSubmissionDeadline || !draftSubmissionDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white disabled:opacity-50">Save</button>
+                        <button onClick={async () => { if (await confirmCancel()) { setEditingSubmissionDeadline(false); setSubmissionDeadlineError(''); } }} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
+                      </div>
+                      {submissionDeadlineError && <p className="text-xs text-red-400">{submissionDeadlineError}</p>}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div>
+                <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">Round Deadline</p>
+                {!editingDeadline ? (
+                  <div className="flex items-center gap-2">
+                    <p className="text-white font-medium">{formatDate(round.deadline)}</p>
+                    <button onClick={() => { setDraftDeadline(round.deadline ? toLocalDateInput(round.deadline) : ''); setEditingDeadline(true); }} className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded">Edit</button>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <input type="date" value={draftDeadline} onChange={(e) => { setDraftDeadline(e.target.value); setDeadlineError(''); }} min={todayInputValue()} max={round.submissionDeadline ? toLocalDateInput(round.submissionDeadline) : undefined} className="bg-background border border-white/10 rounded px-2 py-1 text-xs text-white" />
+                      <button onClick={handleEditDeadline} disabled={savingDeadline || !draftDeadline} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs text-white disabled:opacity-50">Save</button>
+                      <button onClick={async () => { if (await confirmCancel()) { setEditingDeadline(false); setDeadlineError(''); } }} className="text-slate-400 hover:text-slate-300 text-xs">Cancel</button>
+                    </div>
+                    {deadlineError && <p className="text-xs text-red-400">{deadlineError}</p>}
                   </div>
                 )}
               </div>
@@ -1290,16 +1309,7 @@ function RoundCard({
                   {aiStatus && (
                     <span className="text-xs text-indigo-300 animate-pulse">{aiStatus}</span>
                   )}
-                  <button
-                    onClick={() => complianceFileRef.current?.click()}
-                    disabled={runningCompliance}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {runningCompliance ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-                    Compliance Check
-                  </button>
                   {aiError && <p className="text-xs text-red-400">{aiError}</p>}
-                  {complianceError && <p className="text-xs text-red-400">{complianceError}</p>}
                 </div>
 
                 {/* AI Review History */}
@@ -1389,9 +1399,14 @@ function RoundCard({
                                 em: ({node, ...props}) => <em className="italic text-slate-200" {...props} />,
                               }}
                             >
-                              {recentReport.summaryReport}
+                              {typeof recentReport === 'string' ? recentReport : (recentReport.reviewText || 'Review text not available')}
                             </ReactMarkdown>
                           </div>
+                          {recentReport?.annotatedPdfUrl && (
+                            <a href={recentReport.annotatedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
+                              <Download className="w-3 h-3" /> Download Annotated PDF
+                            </a>
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -1400,23 +1415,37 @@ function RoundCard({
 
                 {/* Compliance result */}
                 {(() => {
-                  const comp = localComplianceResult || round.complianceReport;
+                  const comp = round.complianceReport;
                   if (!comp) return null;
+
                   return (
                     <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
                       <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Compliance Check</p>
                       <div className="grid grid-cols-2 gap-2">
-                        {Object.entries(comp).map(([key, val]: [string, any]) => (
-                          <div key={key} className="flex items-start gap-1.5">
-                            {val.isCompliant
-                              ? <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />
-                              : <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />}
-                            <div>
-                              <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-                              <p className="text-[10px] text-slate-300">{val.details}</p>
+                        {Object.entries(comp).map(([key, val]: [string, any]) => {
+                          let icon;
+                          if (val.status === 'pass') {
+                            icon = <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />;
+                          } else if (val.status === 'fail') {
+                            icon = <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />;
+                          } else if (val.status === 'skipped') {
+                            icon = <AlertCircle className="w-3 h-3 text-slate-500 mt-0.5 shrink-0" />;
+                          } else {
+                            icon = <AlertCircle className="w-3 h-3 text-amber-400 mt-0.5 shrink-0" />;
+                          }
+
+                          return (
+                            <div key={key} className="flex items-start gap-1.5">
+                              {icon}
+                              <div>
+                                <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                                <p className="text-[10px] text-slate-300">
+                                  {val.status === 'skipped' ? 'Not applicable' : (val.details || val.status)}
+                                </p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -1576,7 +1605,6 @@ function RoundCard({
 
               {/* Hidden file inputs */}
               <input ref={aiFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
-              <input ref={complianceFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleComplianceFileSelected} />
             </>
           )}
         </div>
