@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const pkg = require\\('/home/semih/Dev/cs319/Team8/backend/node_modules/@azure/ai-projects/package.json'\\); console.log\\('Version:', pkg.version\\); console.log\\('Exports:', Object.keys\\(pkg.exports || {}\\)\\);\")",
+      "Bash(npx ts-node *)",
+      "Bash(tee run_output.txt)",
+      "Bash(npx tsc *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(npx -y typescript --noEmit)",
+      "Bash(gh pr *)",
+      "Bash(npm install *)"
+    ]
+  }
+}

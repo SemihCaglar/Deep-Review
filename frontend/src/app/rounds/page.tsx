@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import ReactMarkdown from 'react-markdown';
 import { useUser } from '@/components/context/UserContext';
 import {
   CoordinatedPaper,
@@ -35,6 +36,7 @@ import {
   removeProposedReviewerRequest,
   approveRoundRequest,
   getRoundStatusRequest,
+  confirmChecklistSelectionRequest,
 } from '@/lib/api';
 import { confirmCancel } from '@/lib/confirmAction';
 import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download, ShieldCheck } from 'lucide-react';
@@ -697,6 +699,42 @@ function RoundCard({
   const [aiError, setAiError] = useState('');
   const [aiStatus, setAiStatus] = useState('');
   const [localAiResult, setLocalAiResult] = useState<any>(null);
+  const [confirmedStandards, setConfirmedStandards] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['General', 'Qualitative', 'Quantitative', 'Literature Review', 'Other']));
+  const [finalizedChecklist, setFinalizedChecklist] = useState<any>(null);
+  const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null);
+
+  const STANDARDS_BY_CATEGORY = {
+    General: [
+      'Engineering Research',
+      'Multimethodology or mixed methods',
+    ],
+    Qualitative: [
+      'Action Research',
+      'Case Study',
+      'Grounded Theory',
+      'Qualitative Survey',
+    ],
+    Quantitative: [
+      'Benchmarking',
+      'Data Science',
+      'Experiment with human participants',
+      'Optimization Study',
+      'Quantitative Longitudinal Study',
+      'Quantitative Simulation',
+      'Questionnaire Survey',
+      'Repository Mining',
+    ],
+    'Literature Review': [
+      'Case Survey',
+      'Systematic Literature Review',
+    ],
+    Other: [
+      'Meta Science',
+      'Replication',
+      'Empirical Method Not Listed Above',
+    ],
+  } as Record<string, string[]>;
 
   const AI_PHASES = [
     { at: 0,  msg: 'Uploading PDF to agent…' },
@@ -725,6 +763,10 @@ function RoundCard({
     try {
       const res = await startAIReviewRequest(round.id, file);
       setLocalAiResult(res.data);
+      if (res.data?.checklistJson?.selectedStandards) {
+        const standards = new Set<string>(res.data.checklistJson.selectedStandards.map((s: any) => s.label));
+        setConfirmedStandards(standards);
+      }
       setAiStatus('');
       onRefresh();
     } catch (err: any) {
@@ -735,6 +777,24 @@ function RoundCard({
       setRunningAI(false);
     }
   };
+
+  // Initialize confirmed standards when round data loads
+  useEffect(() => {
+    // If already confirmed, show that state
+    if (round.confirmedChecklistJson?.selectedStandards) {
+      setFinalizedChecklist(round.confirmedChecklistJson);
+      return;
+    }
+
+    // Otherwise, pre-select AI-selected standards
+    if ((localAiResult?.checklistJson || round.checklistJson) && confirmedStandards.size === 0) {
+      const checklist = localAiResult?.checklistJson || round.checklistJson;
+      if (checklist?.selectedStandards) {
+        const standards = new Set<string>(checklist.selectedStandards.map((s: any) => s.label));
+        setConfirmedStandards(standards);
+      }
+    }
+  }, [round.checklistJson, round.confirmedChecklistJson, localAiResult]);
 
   // Compliance Check
   const complianceFileRef = useRef<HTMLInputElement>(null);
@@ -1241,27 +1301,70 @@ function RoundCard({
                   {complianceError && <p className="text-xs text-red-400">{complianceError}</p>}
                 </div>
 
-                {/* AI Review result */}
+                {/* AI Review History */}
                 {(() => {
-                  const report = localAiResult || round.aiReviewReport;
-                  const pdfUrl = localAiResult?.annotatedPdfUrl || round.annotatedPdfUrl;
-                  if (!report) return null;
+                  const reviews = round.aiReviewReports || [];
+                  const recentReport = localAiResult || round.aiReviewReport;
+
+                  if (reviews.length === 0 && !recentReport) return null;
+
                   return (
                     <div className="p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">AI Review</p>
-                          {report.paperType && (
-                            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{report.paperType}</span>
-                          )}
+                      <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">AI Review History</p>
+
+                      {reviews.length > 0 ? (
+                        <div className="space-y-2">
+                          {reviews.map((review, idx) => (
+                            <div key={review.id} className="rounded-lg bg-slate-800/30 overflow-hidden">
+                              <button
+                                onClick={() => setExpandedReviewId(expandedReviewId === review.id ? null : review.id)}
+                                className="w-full flex items-center justify-between px-2 py-1.5 hover:bg-slate-800/50 transition-colors"
+                              >
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <span className="text-xs text-slate-400">Review #{reviews.length - idx}</span>
+                                  <span className="text-[10px] text-slate-500">{new Date(review.createdAt).toLocaleString()}</span>
+                                  {review.venue && (
+                                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{review.venue}</span>
+                                  )}
+                                </div>
+                                <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${expandedReviewId === review.id ? 'rotate-180' : ''}`} />
+                              </button>
+
+                              {expandedReviewId === review.id && (
+                                <div className="px-2 py-2 border-t border-slate-700/50 bg-slate-800/20 space-y-2">
+                                  <div className="text-xs text-slate-300 leading-relaxed markdown-content">
+                                    <ReactMarkdown
+                                      components={{
+                                        h1: ({node, ...props}) => <h1 className="text-sm font-bold text-slate-100 mt-3 mb-2" {...props} />,
+                                        h2: ({node, ...props}) => <h2 className="text-xs font-bold text-slate-100 mt-2 mb-1" {...props} />,
+                                        h3: ({node, ...props}) => <h3 className="text-xs font-semibold text-slate-100 mt-2 mb-1" {...props} />,
+                                        h4: ({node, ...props}) => <h4 className="text-xs font-semibold text-slate-200 mt-1 mb-1" {...props} />,
+                                        p: ({node, ...props}) => <p className="text-xs text-slate-300 mb-1" {...props} />,
+                                        ul: ({node, ...props}) => <ul className="text-xs text-slate-300 list-disc list-inside mb-1" {...props} />,
+                                        ol: ({node, ...props}) => <ol className="text-xs text-slate-300 list-decimal list-inside mb-1" {...props} />,
+                                        li: ({node, ...props}) => <li className="text-xs text-slate-300 ml-2" {...props} />,
+                                        strong: ({node, ...props}) => <strong className="text-slate-100 font-semibold" {...props} />,
+                                        em: ({node, ...props}) => <em className="italic text-slate-200" {...props} />,
+                                      }}
+                                    >
+                                      {review.reviewText}
+                                    </ReactMarkdown>
+                                  </div>
+                                  {review.annotatedPdfUrl && (
+                                    <a href={review.annotatedPdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
+                                      <Download className="w-3 h-3" /> Download Annotated PDF
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                        {pdfUrl && (
-                          <a href={pdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
-                            <Download className="w-3 h-3" /> Annotated PDF
-                          </a>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-300 leading-relaxed line-clamp-5">{report.summaryReport}</p>
+                      ) : recentReport ? (
+                        <div className="p-2 rounded-lg bg-slate-800/30 space-y-2">
+                          <p className="text-xs text-slate-300 leading-relaxed line-clamp-5">{recentReport.summaryReport}</p>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })()}
@@ -1286,6 +1389,145 @@ function RoundCard({
                           </div>
                         ))}
                       </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Empirical Standards result */}
+                {(() => {
+                  const checklist = localAiResult?.checklistJson || round.checklistJson;
+                  if (!checklist?.selectedStandards?.length) return null;
+
+                  const aiSelectedMap = new Map<string, { label: string; confidence: string; evidence: string }>(
+                    checklist.selectedStandards.map((s: any) => [s.label, s])
+                  );
+
+                  const buildChecklistUrl = (standards: Set<string>) => {
+                    const base = "https://www2.sigsoft.org/EmpiricalStandards/form_generator/result.html";
+                    const params = new URLSearchParams();
+                    Array.from(standards).forEach(standard => params.append("standard", standard));
+                    params.append("role", "author");
+                    return `${base}?${params.toString()}`;
+                  };
+
+                  const handleConfirm = async () => {
+                    try {
+                      const selectedStandardsArray = Array.from(confirmedStandards);
+                      await confirmChecklistSelectionRequest(round.id, selectedStandardsArray);
+                      setFinalizedChecklist({
+                        selectedStandards: selectedStandardsArray,
+                        confirmedAt: new Date().toISOString(),
+                      });
+                      onRefresh();
+                    } catch (err) {
+                      console.error('Failed to confirm checklist:', err);
+                      alert('Failed to confirm checklist. Please try again.');
+                    }
+                  };
+
+                  return (
+                    <div className="p-3 rounded-xl border border-violet-500/20 bg-violet-500/5 space-y-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Empirical Standards</p>
+                        {!finalizedChecklist && (
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={buildChecklistUrl(confirmedStandards)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" /> Open Form
+                            </a>
+                            <button
+                              onClick={handleConfirm}
+                              disabled={confirmedStandards.size === 0}
+                              className="px-2 py-1 text-xs font-medium rounded-lg bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Confirm Checklist
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {finalizedChecklist ? (
+                        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                          <p className="text-xs text-emerald-300 font-medium">✓ Checklist confirmed</p>
+                          <p className="text-[10px] text-emerald-300/70 mt-1">{finalizedChecklist.selectedStandards.length} standards selected</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {(Object.entries(STANDARDS_BY_CATEGORY) as Array<[string, string[]]>).map(([category, standards]) => (
+                            <div key={category} className="rounded-lg bg-slate-800/30 overflow-hidden">
+                              <button
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedCategories);
+                                  if (newExpanded.has(category)) {
+                                    newExpanded.delete(category);
+                                  } else {
+                                    newExpanded.add(category);
+                                  }
+                                  setExpandedCategories(newExpanded);
+                                }}
+                                className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-slate-800/50 transition-colors"
+                              >
+                                <ChevronDown
+                                  className={`w-3 h-3 text-slate-400 transition-transform ${expandedCategories.has(category) ? '' : '-rotate-90'}`}
+                                />
+                                <p className="text-xs font-semibold text-slate-300">{category}</p>
+                                <span className="text-[10px] text-slate-500 ml-auto">
+                                  {standards.filter(s => confirmedStandards.has(s)).length}/{standards.length}
+                                </span>
+                              </button>
+
+                              {expandedCategories.has(category) && (
+                                <div className="px-2 py-1.5 space-y-1 border-t border-slate-700/50">
+                                  {standards.map((standard) => {
+                                    const aiData = aiSelectedMap.get(standard);
+                                    return (
+                                      <div key={standard} className="flex items-start gap-2 p-1.5 rounded bg-slate-900/50 hover:bg-slate-900/75 transition-colors">
+                                        <input
+                                          type="checkbox"
+                                          checked={confirmedStandards.has(standard)}
+                                          onChange={(e) => {
+                                            const newConfirmed = new Set<string>(confirmedStandards);
+                                            if (e.target.checked) {
+                                              newConfirmed.add(standard);
+                                            } else {
+                                              newConfirmed.delete(standard);
+                                            }
+                                            setConfirmedStandards(newConfirmed);
+                                          }}
+                                          className="mt-0.5 cursor-pointer"
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <p className="text-xs text-slate-200 font-medium">{standard}</p>
+                                            {aiData && (
+                                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${
+                                                aiData.confidence === 'high'
+                                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                                  : aiData.confidence === 'medium'
+                                                  ? 'bg-amber-500/20 text-amber-300'
+                                                  : 'bg-orange-500/20 text-orange-300'
+                                              }`}>
+                                                {aiData.confidence}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {aiData && (
+                                            <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{aiData.evidence}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}

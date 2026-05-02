@@ -287,17 +287,19 @@ export type PaperHistoryAssignment = {
   extensions: PaperHistoryExtension[];
 };
 
+export interface EmpiricalStandardsChecklist {
+  selectedStandards: Array<{
+    label: string;
+    confidence: 'high' | 'medium' | 'low';
+    evidence: string;
+  }>;
+}
+
 export interface AIReviewReport {
   summaryReport: string;
   annotatedPdfUrl?: string;
   annotations?: any[];
   suggestedCitations?: any[];
-  checklist?: Array<{
-    id: string;
-    description: string;
-    isChecked: boolean;
-  }>;
-  paperType?: string;
 }
 
 export interface ComplianceReport {
@@ -467,6 +469,14 @@ export type RoundAssignment = {
   reviewSummary: { text: string | null; submittedAt: string } | null;
 };
 
+export type AIReviewReportHistory = {
+  id: string;
+  reviewText: string;
+  annotatedPdfUrl: string | null;
+  venue: string | null;
+  createdAt: string;
+};
+
 export type RoundWithAssignments = {
   id: string;
   roundNumber: number;
@@ -480,8 +490,12 @@ export type RoundWithAssignments = {
   completedAt: string | null;
   assignments: RoundAssignment[];
   aiReviewReport?: AIReviewReport | null;
+  aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
   annotatedPdfUrl?: string | null;
+  checklistJson?: EmpiricalStandardsChecklist | null;
+  checklistUrl?: string | null;
+  confirmedChecklistJson?: { selectedStandards: string[]; confirmedAt: string; confirmedBy: string } | null;
 };
 
 export type MyAssignment = {
@@ -595,6 +609,13 @@ export function sendRemindersRequest(assignmentIds: string[]) {
   return apiRequest<{ message: string; sent: number; skipped: number }>('/assignments/remind', {
     method: 'POST',
     body: { assignmentIds },
+  });
+}
+
+export function confirmChecklistSelectionRequest(roundId: string, selectedStandards: string[]) {
+  return apiRequest<{ message: string; data: any }>(`/rounds/${roundId}/confirm-checklist`, {
+    method: 'POST',
+    body: { selectedStandards },
   });
 }
 

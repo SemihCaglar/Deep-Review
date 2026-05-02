@@ -564,7 +564,7 @@ export class RoundController {
         annotatedPdfUrl: r.annotatedPdfUrl,
         artifacts: {
           checklistItems: (r.checklistItems ?? []).map(ci => ({ id: ci.id, description: ci.description, isChecked: ci.isChecked })),
-          aiReviewReports: (r.aiReviewReports ?? []).map(ar => ({ id: ar.id, generatedReportUrl: ar.generatedReportUrl, annotatedPdfUrl: ar.annotatedPdfUrl }))
+          aiReviewReports: (r.aiReviewReports ?? []).map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
         }
       })));
     } catch (err) {
@@ -594,6 +594,7 @@ export class RoundController {
       const rounds = await roundRepo.find({
         where: { paper: { id: paperId } },
         relations: [
+          'aiReviewReports',
           'assignments',
           'assignments.reviewer',
           'assignments.declineRequests',
@@ -617,6 +618,16 @@ export class RoundController {
         aiReviewReport: round.aiReviewReport ?? null,
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
         complianceReport: round.complianceReport ?? null,
+        checklistJson: round.checklistJson ?? null,
+        checklistUrl: round.checklistUrl ?? null,
+        confirmedChecklistJson: round.confirmedChecklistJson ?? null,
+        aiReviewReports: (round.aiReviewReports ?? []).map(ar => ({
+          id: ar.id,
+          reviewText: ar.reviewText,
+          annotatedPdfUrl: ar.annotatedPdfUrl,
+          venue: ar.venue,
+          createdAt: ar.createdAt,
+        })),
         assignments: (round.assignments ?? []).map(a => ({
           id: a.id,
           status: a.status,
@@ -782,6 +793,8 @@ export class RoundController {
       // Persist results
       round.aiReviewReport = result;
       round.annotatedPdfUrl = result.annotatedPdfUrl;
+      round.checklistJson = result.checklistJson ?? null;
+      round.checklistUrl = result.checklistUrl ?? null;
       await roundRepo.save(round);
 
       return res.status(200).json({
@@ -794,6 +807,215 @@ export class RoundController {
       return res.status(500).json({ message: err.message || 'Internal server error' });
     }
   }
+
+  static async startAIReviewEndpoint(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.authors', 'paper.coordinators']
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+      if (round.status === RoundStatus.Draft) {
+        return res.status(400).json({ message: 'Peer review can only be run after the round has started.' });
+      }
+
+      // Authorization: Only Authors or Coordinators can trigger
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+
+      if (!isAuthor && !isCoordinator) {
+        return res.status(403).json({ message: 'Forbidden: You must be an author or coordinator of this paper.' });
+      }
+
+      // Get the uploaded PDF from multer
+      const file = (req as any).file;
+      if (!file || !file.buffer) {
+        return res.status(400).json({ message: 'No PDF file uploaded. Please attach a PDF to run peer review.' });
+      }
+
+      // Execute Peer Review Pipeline
+      const { PdfAgentService } = require('../ai_content/services/PdfAgentService');
+      const { AIReviewReport } = require('../entities/AIReviewReport');
+
+      const agentService = new PdfAgentService();
+      const inputFilename = `paper_${round.paper.id}_round_${round.id}.pdf`;
+
+      console.log(`[RoundController] Uploading PDF for peer review...`);
+      const fileId = await agentService.uploadPdf(file.buffer, inputFilename);
+
+      const venueName = round.targetVenue || 'the conference';
+      console.log(`[RoundController] Running peer review for venue: ${venueName}...`);
+      const reviewResult = await agentService.runAnnotatedReview(fileId, venueName);
+
+      // Save annotated PDF if present
+      let annotatedPdfUrl: string | null = null;
+      if (reviewResult.annotatedPdfBuffer) {
+        const fs = require('fs');
+        const path = require('path');
+        const outputFilename = `paper_${round.paper.id}_round_${round.id}_review.pdf`;
+        const downloadsDir = path.join(process.cwd(), 'downloads');
+        if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
+        fs.writeFileSync(path.join(downloadsDir, outputFilename), reviewResult.annotatedPdfBuffer);
+        annotatedPdfUrl = `/downloads/${outputFilename}`;
+        console.log(`[RoundController] Review annotated PDF saved to ${annotatedPdfUrl}`);
+      }
+
+      // Persist review to AIReviewReport collection
+      const aiReviewReport = new AIReviewReport();
+      aiReviewReport.reviewText = reviewResult.summaryText;
+      aiReviewReport.annotatedPdfUrl = annotatedPdfUrl;
+      aiReviewReport.venue = venueName;
+      aiReviewReport.round = round;
+
+      const aiReviewReportRepo = AppDataSource.getRepository(AIReviewReport);
+      await aiReviewReportRepo.save(aiReviewReport);
+
+      console.log(`[RoundController] Review saved to AIReviewReport collection`);
+
+      return res.status(200).json({
+        message: 'Peer review completed',
+        data: {
+          reviewText: reviewResult.summaryText,
+          annotatedPdfUrl,
+          venue: venueName,
+          reviewId: aiReviewReport.id,
+        }
+      });
+
+    } catch (err: any) {
+      console.error('[RoundController] Error in startAIReviewEndpoint:', err);
+      return res.status(500).json({ message: err.message || 'Internal server error' });
+    }
+  }
+
+  static async startAIChecklist(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.authors', 'paper.coordinators']
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+      if (round.status === RoundStatus.Draft) {
+        return res.status(400).json({ message: 'Checklist analysis can only be run after the round has started.' });
+      }
+
+      // Authorization: Only Authors or Coordinators can trigger
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+
+      if (!isAuthor && !isCoordinator) {
+        return res.status(403).json({ message: 'Forbidden: You must be an author or coordinator of this paper.' });
+      }
+
+      // Get the uploaded PDF from multer
+      const file = (req as any).file;
+      if (!file || !file.buffer) {
+        return res.status(400).json({ message: 'No PDF file uploaded. Please attach a PDF to run checklist analysis.' });
+      }
+
+      // Execute Checklist-only Pipeline
+      const { PdfAgentService } = require('../ai_content/services/PdfAgentService');
+      const { ChecklistService } = require('../ai_content/services/ChecklistService');
+
+      const agentService = new PdfAgentService();
+      const inputFilename = `paper_${round.paper.id}_round_${round.id}.pdf`;
+
+      console.log(`[RoundController] Uploading PDF for checklist analysis...`);
+      const fileId = await agentService.uploadPdf(file.buffer, inputFilename);
+
+      console.log(`[RoundController] Running checklist analysis...`);
+      const raw = await agentService.runChecklistAnalysis(fileId);
+      const filtered = ChecklistService.filterValidStandards(raw.selectedStandards);
+      const checklistJson = { selectedStandards: filtered };
+      const checklistUrl = ChecklistService.buildEmpiricalStandardsUrl(filtered.map((s: any) => s.label));
+
+      // Persist results
+      round.checklistJson = checklistJson;
+      round.checklistUrl = checklistUrl;
+      await roundRepo.save(round);
+
+      return res.status(200).json({
+        message: 'Checklist analysis completed',
+        data: {
+          checklistJson,
+          checklistUrl,
+        }
+      });
+
+    } catch (err: any) {
+      console.error('[RoundController] Error in startAIChecklist:', err);
+      return res.status(500).json({ message: err.message || 'Internal server error' });
+    }
+  }
+
+  static async confirmChecklistSelection(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { selectedStandards } = req.body;
+      const user = req.user;
+
+      if (!user) {
+        return res.status(401).json({ message: 'Unauthorized' });
+      }
+
+      if (!Array.isArray(selectedStandards)) {
+        return res.status(400).json({ message: 'selectedStandards must be an array of strings' });
+      }
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper', 'paper.authors', 'paper.coordinators']
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      // Authorization: Only Authors or Coordinators can confirm
+      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
+
+      if (!isAuthor && !isCoordinator) {
+        return res.status(403).json({ message: 'Forbidden: You must be an author or coordinator of this paper.' });
+      }
+
+      // Save confirmed checklist
+      round.confirmedChecklistJson = {
+        selectedStandards,
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: user.id,
+      };
+
+      await roundRepo.save(round);
+
+      return res.status(200).json({
+        message: 'Checklist selection confirmed',
+        data: round.confirmedChecklistJson
+      });
+
+    } catch (err: any) {
+      console.error('[RoundController] Error in confirmChecklistSelection:', err);
+      return res.status(500).json({ message: err.message || 'Internal server error' });
+    }
+  }
+
   static async getVenueRules(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;

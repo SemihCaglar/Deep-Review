@@ -6,11 +6,17 @@ export class AIReviewReport {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
-  generatedReportUrl: string;
+  @Column({ type: 'text' })
+  reviewText: string;
 
-  @Column()
+  @Column({ nullable: true })
   annotatedPdfUrl: string;
+
+  @Column({ nullable: true })
+  venue: string;
+
+  @Column({ type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
+  createdAt: Date;
 
   @ManyToOne(() => Round, round => round.aiReviewReports)
   round: Round;
