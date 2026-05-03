@@ -103,7 +103,7 @@ export default function RegisterPaper() {
             alert('You must be associated with at least one lab to create new topics.');
             return;
         }
-        
+
         setIsCreatingTopic(true);
         try {
             const newTopic = await addTopicToLabRequest(currentLabId, topicSearch.trim());
@@ -407,10 +407,7 @@ export default function RegisterPaper() {
                                 The paper will be created in the <strong>Draft</strong> state. {user.isCoordinator
                                     ? 'Once it is registered, you can initialize the first review round from the paper details page.'
                                     : 'Once it is registered, the first review round can be initialized by a Coordinator from the paper details page.'}
-                                <br /><br />
-                                {selectedAuthors.length > 0 && <span className="text-blue-400">{selectedAuthors.length} author(s) will be notified by the Email Service.</span>}
-                                <br />
-                                Topics: {selectedTopics.length > 0 ? topicsList.filter(t => selectedTopics.includes(t.id)).map(t => t.name).join(', ') : 'None'}
+
                             </p>
                         </div>
                     )}
