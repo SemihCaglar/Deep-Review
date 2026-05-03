@@ -113,10 +113,9 @@ async function fetchJson(urlString: string): Promise<any> {
 async function findAuthorId(member: ProgramCommitteeMember): Promise<string | null> {
   console.log(`[findAuthorId] Searching for: ${member.name}${member.affiliation ? ` (${member.affiliation})` : ''}`);
 
-  // Search by name + affiliation if available
-  const query = member.affiliation
-    ? `${member.name} ${member.affiliation}`
-    : member.name;
+  // Search by NAME ONLY - affiliation in search query breaks OpenAlex search!
+  // Instead, we'll match affiliation from the returned candidates
+  const query = member.name;
 
   const url = new URL('https://api.openalex.org/authors');
   url.searchParams.set('search', query);
