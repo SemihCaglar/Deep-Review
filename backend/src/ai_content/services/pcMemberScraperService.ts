@@ -67,7 +67,7 @@ function deduplicateMembers(members: ProgramCommitteeMember[]): ProgramCommittee
 function extractResearchrProfiles($: cheerio.CheerioAPI): ProgramCommitteeMember[] {
   const members: ProgramCommitteeMember[] = [];
 
-  $('a[href*="/profile/"]').each((_, el) => {
+  $('a[href*="/profile/"]').each((_: number, el: any) => {
     const body = $(el).find('.media-body');
     if (!body.length) return;
 
@@ -104,7 +104,7 @@ function extractFromSections($: cheerio.CheerioAPI): ProgramCommitteeMember[] {
   const members: ProgramCommitteeMember[] = [];
   const rawEntries: string[] = [];
 
-  $('h1, h2, h3').each((_, heading) => {
+  $('h1, h2, h3').each((_: number, heading: any) => {
     const headingText = $(heading).text().trim();
     if (!isPcSection(headingText)) return;
 
@@ -121,14 +121,14 @@ function extractFromSections($: cheerio.CheerioAPI): ProgramCommitteeMember[] {
     }
 
     // Lists
-    sectionEl.find('li').each((_, li) => {
+    sectionEl.find('li').each((_: number, li: any) => {
       const t = $(li).text().trim();
       if (t) rawEntries.push(t);
     });
 
     // Table rows
     if (rawEntries.length === 0) {
-      sectionEl.find('tr').each((_, row) => {
+      sectionEl.find('tr').each((_: number, row: any) => {
         const cells = $(row).find('td');
         if (cells.length > 0) {
           const name = $(cells[0]).text().trim();
