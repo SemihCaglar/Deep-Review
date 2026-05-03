@@ -67,9 +67,9 @@ export class AssignmentController {
 
         // Lab check:
         if (requester.role !== UserRole.Admin) {
-          const reviewerLabIds = reviewer.labs?.map(l => l.id) || [];
-          const requesterLabIds = requester.labs?.map(l => l.id) || [];
-          const sharesLab = reviewerLabIds.some(id => requesterLabIds.includes(id));
+          const reviewerLabIds = reviewer.labs?.map((l: any) => l.id) || [];
+          const requesterLabIds = requester.labs?.map((l: any) => l.id) || [];
+          const sharesLab = reviewerLabIds.some((id: any) => requesterLabIds.includes(id));
           if (!sharesLab) continue;
         }
 

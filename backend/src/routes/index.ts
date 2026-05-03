@@ -188,7 +188,7 @@ router.post('/rounds/:id/reference-verification', authenticateRequest, handlePdf
 router.post('/pc-related-work/recommendations', authenticateRequest, PCRelatedWorkController.getRecommendations);
 
 // ==== SEARCH ROUTES ====
-router.get('/topics', TopicController.getAllTopics);
+router.get('/topics', authenticateRequest, TopicController.getAllTopics);
 router.get('/search/papers/title', SearchController.searchPapersByTitle);
 router.get('/search/papers/status', SearchController.searchPapersByStatus);
 router.get('/search/papers/venue', SearchController.searchPapersByVenue);

@@ -747,6 +747,13 @@ export default function AuthorRoundOverview({ params }: { params: { id: string }
                                         {suggestion.hasPreviouslyCompletedReview && <PreviousReviewMark />}
                                       </div>
                                       <p className="truncate text-xs text-slate-500">{suggestion.user.email}</p>
+                                      {suggestion.reasons && suggestion.reasons.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {suggestion.reasons.map((reason, idx) => (
+                                            <span key={idx} className={`text-[10px] px-1.5 py-0.5 rounded ${reason.includes('Warning') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : reason.includes('Topic Match') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-slate-500/10 text-slate-400 border border-white/10'}`}>{reason}</span>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                     <button
                                       onClick={() => handleAddProposed(round.id, suggestion.user.id)}

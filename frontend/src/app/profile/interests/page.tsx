@@ -9,6 +9,7 @@ import {
   getCurrentProfileRequest,
   getTopicsRequest,
   updateInterestsRequest,
+  addTopicToLabRequest,
   type TopicOption,
 } from '@/lib/api';
 import { getStoredUser, mapStoredUserToLegacyUser, setStoredUser, type StoredAuthUser, type StoredTopic } from '@/lib/auth';
@@ -26,6 +27,9 @@ export default function EditInterestsPage() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [error, setError] = React.useState('');
   const [successMessage, setSuccessMessage] = React.useState('');
+  const [newTopicName, setNewTopicName] = React.useState('');
+  const [selectedLabId, setSelectedLabId] = React.useState('');
+  const [isAddingTopic, setIsAddingTopic] = React.useState(false);
 
   React.useEffect(() => {
     const cachedUser = getStoredUser();
@@ -42,6 +46,9 @@ export default function EditInterestsPage() {
         setTopics(fetchedTopics);
         setSelectedTopicIds(profileResponse.user.interests?.map(topic => topic.id) ?? []);
         setOtherInterestInputs(profileResponse.user.otherInterests?.length ? profileResponse.user.otherInterests : ['']);
+        if (profileResponse.user.labs && profileResponse.user.labs.length > 0) {
+          setSelectedLabId(profileResponse.user.labs[0].id);
+        }
         setIsLoading(false);
       })
       .catch(caughtError => {
@@ -80,6 +87,32 @@ export default function EditInterestsPage() {
     });
     setSuccessMessage('');
     setError('');
+  };
+
+  const handleAddTopic = async () => {
+    if (!newTopicName.trim() || !selectedLabId) return;
+
+    setIsAddingTopic(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      const newTopic = await addTopicToLabRequest(selectedLabId, newTopicName.trim());
+      setTopics(prev => {
+        if (prev.some(t => t.id === newTopic.id)) return prev;
+        return [...prev, newTopic];
+      });
+      setSelectedTopicIds(prev => {
+        if (prev.includes(newTopic.id)) return prev;
+        return [...prev, newTopic.id];
+      });
+      setNewTopicName('');
+      setSuccessMessage(`Topic "${newTopic.name}" added successfully.`);
+    } catch (caughtError) {
+      setError(caughtError instanceof ApiError ? caughtError.message : 'Failed to add topic.');
+    } finally {
+      setIsAddingTopic(false);
+    }
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -183,6 +216,40 @@ export default function EditInterestsPage() {
                     </button>
                   );
                 })}
+              </div>
+
+              <div className="pt-4 border-t border-white/5 space-y-3">
+                <p className="text-sm font-medium text-slate-300">Missing a topic? Add it to your lab:</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <input
+                    type="text"
+                    value={newTopicName}
+                    onChange={e => setNewTopicName(e.target.value)}
+                    placeholder="New topic name"
+                    className="bg-background border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all flex-1 min-w-[200px]"
+                    disabled={isAddingTopic || isSaving}
+                  />
+                  {storedUser.labs && storedUser.labs.length > 1 && (
+                    <select
+                      value={selectedLabId}
+                      onChange={e => setSelectedLabId(e.target.value)}
+                      className="bg-background border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                      disabled={isAddingTopic || isSaving}
+                    >
+                      {storedUser.labs.map(lab => (
+                        <option key={lab.id} value={lab.id}>{lab.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleAddTopic}
+                    disabled={isAddingTopic || isSaving || !newTopicName.trim() || !selectedLabId}
+                    className="shrink-0 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-medium text-white hover:bg-white/20 disabled:opacity-50 transition-colors"
+                  >
+                    {isAddingTopic ? 'Adding...' : 'Add Topic'}
+                  </button>
+                </div>
               </div>
 
               {isOtherSelected ? (
