@@ -13,6 +13,7 @@ import {
   confirmChecklistSelectionRequest,
   runEmpiricalChecklistAnsweringRequest,
   getPCRelatedWorkRecommendations,
+  getPaperByIdRequest,
   RoundWithAssignments,
   AuthorRound,
   ReferenceVerificationReport,
@@ -69,6 +70,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
   const [pcRelatedError, setPcRelatedError] = useState('');
   const [localPCRelatedResult, setLocalPCRelatedResult] = useState<PCRelatedWorkResponse | null>(null);
   const [pcRelatedExpanded, setPcRelatedExpanded] = useState(false);
+  const [paperData, setPaperData] = useState<{ title: string; abstractText: string | null } | null>(null);
 
   const STANDARDS_BY_CATEGORY = {
     General: ['Engineering Research', 'Multimethodology or mixed methods'],
@@ -106,6 +108,14 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     setPcRelatedError('');
     setLocalPCRelatedResult(null);
   }, [isOpen, round?.id]);
+
+  // Fetch paper data (title + abstract) for PC Related Work feature
+  useEffect(() => {
+    if (!isOpen || !paperId) return;
+    getPaperByIdRequest(paperId)
+      .then(paper => setPaperData({ title: paper.title, abstractText: paper.abstractText ?? null }))
+      .catch(() => {}); // Silent fail, paper data is optional
+  }, [isOpen, paperId]);
 
   const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -202,14 +212,19 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
       return;
     }
 
+    if (!paperData?.title) {
+      setPcRelatedError('Paper title is required');
+      return;
+    }
+
     setRunningPCRelated(true);
     setPcRelatedError('');
 
     try {
       const res = await getPCRelatedWorkRecommendations(
         venueUrl.trim(),
-        round.title || round.paperTitle || '',
-        round.abstract || round.paperAbstract || ''
+        paperData.title,
+        paperData.abstractText || ''
       ) as PCRelatedWorkResponse;
       setLocalPCRelatedResult(res);
       onRefresh();
@@ -221,13 +236,13 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
   };
 
   const handleDownloadPCRelatedCSV = async () => {
-    if (!venueUrl.trim()) return;
+    if (!venueUrl.trim() || !paperData?.title) return;
 
     try {
       const blob = await getPCRelatedWorkRecommendations(
         venueUrl.trim(),
-        round.title || round.paperTitle || '',
-        round.abstract || round.paperAbstract || '',
+        paperData.title,
+        paperData.abstractText || '',
         'csv'
       ) as Blob;
       const url = window.URL.createObjectURL(blob);
