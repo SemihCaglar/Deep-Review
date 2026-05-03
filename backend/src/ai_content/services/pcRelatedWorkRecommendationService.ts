@@ -26,7 +26,8 @@ const RELATIONSHIP_PRIORITY: Record<string, number> = {
   unrelated: 0,
 };
 
-const CONFIDENCE_PRIORITY: Record<string, number> = { high: 3, medium: 2, low: 1 };
+// Numeric scores for confidence (used in ranking calculation)
+const CONFIDENCE_SCORE: Record<string, number> = { high: 1.0, medium: 0.6, low: 0.3 };
 
 // In-memory caches
 const pcMembersCache = new Map<string, ProgramCommitteeMember[]>();
@@ -35,11 +36,21 @@ const recommendationsCache = new Map<string, PCRelatedWorkResponse>();
 
 function rankRecommendations(recs: RelatedWorkRecommendation[]): RelatedWorkRecommendation[] {
   return [...recs].sort((a, b) => {
-    const confDiff = (CONFIDENCE_PRIORITY[b.confidence] ?? 0) - (CONFIDENCE_PRIORITY[a.confidence] ?? 0);
-    if (confDiff !== 0) return confDiff;
-    const relDiff = (RELATIONSHIP_PRIORITY[b.relationshipType] ?? 0) - (RELATIONSHIP_PRIORITY[a.relationshipType] ?? 0);
-    if (relDiff !== 0) return relDiff;
-    return (b.year ?? 0) - (a.year ?? 0);
+    // Calculate composite score for each recommendation
+    // confidence (40%) + relationship (50%) + recency (10%)
+    const aConfScore = CONFIDENCE_SCORE[a.confidence] ?? 0;
+    const bConfScore = CONFIDENCE_SCORE[b.confidence] ?? 0;
+
+    const aRelScore = RELATIONSHIP_PRIORITY[a.relationshipType] ?? 0;
+    const bRelScore = RELATIONSHIP_PRIORITY[b.relationshipType] ?? 0;
+
+    const aRecency = Math.max(0, (a.year ?? 2000) - 2010) / 15; // older papers score lower
+    const bRecency = Math.max(0, (b.year ?? 2000) - 2010) / 15;
+
+    const aTotal = (aConfScore * 0.4) + (aRelScore / 6 * 0.5) + (aRecency * 0.1);
+    const bTotal = (bConfScore * 0.4) + (bRelScore / 6 * 0.5) + (bRecency * 0.1);
+
+    return bTotal - aTotal; // Higher score first
   });
 }
 
