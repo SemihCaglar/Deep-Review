@@ -29,52 +29,90 @@ function nameSimilarity(a: string, b: string): number {
 }
 
 async function fetchJson(urlString: string): Promise<any> {
-  for (let attempt = 0; attempt <= 3; attempt++) {
-    const result = await new Promise<{ data: any; status: number }>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('OpenAlex timeout')), TIMEOUT_MS);
-      https.get(urlString, { headers: { 'User-Agent': 'bilsen-pc-recommender/1.0' } }, (res) => {
-        clearTimeout(timer);
-        if (res.statusCode === 404 || res.statusCode === 400) {
-          res.resume();
-          resolve({ data: null, status: res.statusCode });
-          return;
-        }
-        if (res.statusCode === 429) {
-          res.resume();
-          resolve({ data: null, status: 429 });
-          return;
-        }
-        if (!res.statusCode || res.statusCode >= 500) {
-          res.resume();
-          reject(new Error(`OpenAlex HTTP ${res.statusCode}`));
-          return;
-        }
-        let body = '';
-        res.setEncoding('utf8');
-        res.on('data', c => (body += c));
-        res.on('end', () => {
-          try { resolve({ data: JSON.parse(body), status: res.statusCode! }); }
-          catch { reject(new Error('Invalid JSON from OpenAlex')); }
-        });
-      }).on('error', err => { clearTimeout(timer); reject(err); });
-    }).catch(err => ({ data: null, status: -1, error: err })) as any;
+  console.log(`[fetchJson] Requesting: ${urlString.substring(0, 100)}...`);
 
-    if (result.status === 429) {
-      const delay = Math.min(5000 * (attempt + 1), 30000);
-      console.warn(`[OpenAlexAuthorPaper] Rate limited, waiting ${delay / 1000}s...`);
-      await new Promise(r => setTimeout(r, delay));
-      continue;
+  for (let attempt = 0; attempt <= 3; attempt++) {
+    try {
+      const result = await new Promise<{ data: any; status: number }>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          console.error(`[fetchJson] Timeout after ${TIMEOUT_MS}ms`);
+          reject(new Error('OpenAlex timeout'));
+        }, TIMEOUT_MS);
+
+        https.get(urlString, { headers: { 'User-Agent': 'bilsen-pc-recommender/1.0' } }, (res) => {
+          clearTimeout(timer);
+          console.log(`[fetchJson] Status: ${res.statusCode}`);
+
+          if (res.statusCode === 404 || res.statusCode === 400) {
+            console.warn(`[fetchJson] HTTP ${res.statusCode} - No results`);
+            res.resume();
+            resolve({ data: null, status: res.statusCode });
+            return;
+          }
+          if (res.statusCode === 429) {
+            console.warn(`[fetchJson] HTTP 429 - Rate limited`);
+            res.resume();
+            resolve({ data: null, status: 429 });
+            return;
+          }
+          if (!res.statusCode || res.statusCode >= 500) {
+            console.error(`[fetchJson] HTTP ${res.statusCode} - Server error`);
+            res.resume();
+            reject(new Error(`OpenAlex HTTP ${res.statusCode}`));
+            return;
+          }
+
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', c => (body += c));
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(body);
+              console.log(`[fetchJson] ✓ Parsed JSON, results: ${parsed.results?.length ?? 0}`);
+              resolve({ data: parsed, status: res.statusCode! });
+            } catch (e) {
+              console.error(`[fetchJson] Failed to parse JSON:`, e);
+              reject(new Error('Invalid JSON from OpenAlex'));
+            }
+          });
+        }).on('error', err => {
+          clearTimeout(timer);
+          console.error(`[fetchJson] Network error:`, err.message);
+          reject(err);
+        });
+      }).catch(err => {
+        console.error(`[fetchJson] Promise error (attempt ${attempt + 1}/4):`, err.message);
+        return { data: null, status: -1, error: err };
+      }) as any;
+
+      if (result.status === 429) {
+        const delay = Math.min(5000 * (attempt + 1), 30000);
+        console.warn(`[fetchJson] Rate limited, waiting ${delay / 1000}s before retry...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      if (result.status === -1) {
+        if (attempt < 3) {
+          const waitTime = 1500 * (attempt + 1);
+          console.warn(`[fetchJson] Retrying in ${waitTime}ms... (attempt ${attempt + 2}/4)`);
+          await new Promise(r => setTimeout(r, waitTime));
+          continue;
+        }
+        console.error(`[fetchJson] All retries exhausted`);
+        return null;
+      }
+      return result.data;
+    } catch (err) {
+      console.error(`[fetchJson] Unexpected error in attempt ${attempt + 1}/4:`, err);
     }
-    if (result.status === -1) {
-      if (attempt < 3) { await new Promise(r => setTimeout(r, 1500 * (attempt + 1))); continue; }
-      return null;
-    }
-    return result.data;
   }
+  console.error(`[fetchJson] Failed after all attempts`);
   return null;
 }
 
 async function findAuthorId(member: ProgramCommitteeMember): Promise<string | null> {
+  console.log(`[findAuthorId] Searching for: ${member.name}${member.affiliation ? ` (${member.affiliation})` : ''}`);
+
   // Search by name + affiliation if available
   const query = member.affiliation
     ? `${member.name} ${member.affiliation}`
@@ -86,13 +124,15 @@ async function findAuthorId(member: ProgramCommitteeMember): Promise<string | nu
   url.searchParams.set('select', 'id,display_name,display_name_alternatives,last_known_institutions,affiliations');
   addMailto(url);
 
+  console.log(`[findAuthorId] Query: "${query}"`);
   const data = await fetchJson(url.toString());
+
   if (!data?.results?.length) {
-    console.log(`[OpenAlexAuthorPaper] No OpenAlex results for: ${member.name}`);
+    console.warn(`[findAuthorId] ✗ No OpenAlex results for: ${member.name}`);
     return null;
   }
 
-  console.log(`[OpenAlexAuthorPaper] Found ${data.results.length} candidates for: ${member.name}`);
+  console.log(`[findAuthorId] Found ${data.results.length} candidates for: ${member.name}`);
 
   // Score candidates by name similarity
   let best: string | null = null;
@@ -138,6 +178,8 @@ async function findAuthorId(member: ProgramCommitteeMember): Promise<string | nu
 
 async function fetchPapers(authorId: string, pcMemberName: string): Promise<PCMemberPaper[]> {
   const shortId = authorId.split('/').pop()!;
+  console.log(`[fetchPapers] Fetching papers for ${pcMemberName} (ID: ${shortId})...`);
+
   const url = new URL('https://api.openalex.org/works');
   url.searchParams.set('filter', `author.id:${shortId},from_publication_date:${MIN_YEAR}-01-01,has_abstract:true`);
   url.searchParams.set('sort', 'publication_year:desc');
@@ -146,12 +188,20 @@ async function fetchPapers(authorId: string, pcMemberName: string): Promise<PCMe
   addMailto(url);
 
   const data = await fetchJson(url.toString());
-  if (!data?.results) return [];
+  if (!data?.results) {
+    console.warn(`[fetchPapers] No papers found for ${pcMemberName}`);
+    return [];
+  }
+
+  console.log(`[fetchPapers] Found ${data.results.length} papers for ${pcMemberName}`);
 
   const papers: PCMemberPaper[] = [];
   for (const work of data.results) {
     const abstract = reconstructOpenAlexAbstract(work.abstract_inverted_index);
-    if (!abstract) continue; // skip papers without abstract
+    if (!abstract) {
+      console.warn(`[fetchPapers]   - Skipping "${work.title}" (no abstract)`);
+      continue; // skip papers without abstract
+    }
 
     const venue = work.primary_location?.source?.display_name ?? null;
     const doi = work.doi ? work.doi.replace('https://doi.org/', '') : null;
@@ -168,6 +218,8 @@ async function fetchPapers(authorId: string, pcMemberName: string): Promise<PCMe
       url: work.id ?? null,
     });
   }
+
+  console.log(`[fetchPapers] ✓ Collected ${papers.length} papers (with abstracts) for ${pcMemberName}`);
 
   return papers;
 }
