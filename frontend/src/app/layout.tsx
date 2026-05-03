@@ -7,7 +7,7 @@ import AppLayout from '@/components/layout/AppLayout';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'BILSEN Review System',
+  title: 'Deep Review',
   description: 'Manage paper reviews and coordinators workflow.',
 };
 
