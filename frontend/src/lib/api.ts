@@ -499,6 +499,7 @@ export type RoundAssignment = {
   pendingDeclineRequest: PendingDeclineRequest | null;
   pendingExtensionRequest: PendingExtensionRequest | null;
   reviewSummary: { text: string | null; submittedAt: string } | null;
+  hasRating?: boolean;
 };
 
 export type AIReviewReportHistory = {
