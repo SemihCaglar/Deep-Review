@@ -482,9 +482,6 @@ export default function DashboardPage() {
     ? [
         { label: 'Pending Approvals', value: isLoadingPending ? '...' : pendingCount, icon: UserCheck, color: 'text-blue-400', bg: 'bg-blue-500/10', href: '/pending-approvals' },
         { label: 'Round Requests', value: roundStartRequests.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '#round-requests' },
-        { label: 'Assigned Reviews', value: isLoadingAnalytics ? '...' : analytics?.summary.totalAssigned ?? 0, icon: FileText, color: 'text-sky-400', bg: 'bg-sky-500/10' },
-        { label: 'Completed Reviews', value: isLoadingAnalytics ? '...' : analytics?.summary.totalCompleted ?? 0, icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-        { label: 'Avg Reviewer Score', value: isLoadingAnalytics ? '...' : formatScore(analytics?.summary.avgReviewerScore ?? null), icon: BarChart2, color: 'text-purple-400', bg: 'bg-purple-500/10' },
         { label: 'Collaboration Invitations', value: collabInvitationCount, icon: FileText, color: 'text-indigo-400', bg: 'bg-indigo-500/10', href: '/pending-approvals' },
       ]
     : user.isFrozen
