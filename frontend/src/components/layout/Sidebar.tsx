@@ -121,7 +121,7 @@ export default function Sidebar() {
     return (
         <aside className="w-64 border-r border-[#ffffff1a] glass flex flex-col pt-6 pb-4">
             <div className="px-6 mb-8">
-                <h1 className="text-xl font-bold tracking-tight text-white">BILSEN</h1>
+                <h1 className="text-xl font-bold tracking-tight text-white">Deep Review</h1>
                 <p className="text-xs text-slate-400 mt-1 uppercase tracking-wider">Review System</p>
             </div>
 

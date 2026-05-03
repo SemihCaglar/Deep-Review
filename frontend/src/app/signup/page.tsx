@@ -72,7 +72,7 @@ export default function SignupPage() {
             <UserPlus className="w-8 h-8" />
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight mb-3 text-white">Sign Up</h1>
-          <p className="text-slate-400">Create your BILSEN account request for coordinator approval.</p>
+          <p className="text-slate-400">Create your Deep Review account request for coordinator approval.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="relative space-y-5">

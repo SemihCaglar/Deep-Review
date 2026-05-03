@@ -43,25 +43,25 @@ import {
   runEmpiricalChecklistAnsweringRequest,
   getEmpiricalChecklistAnswersRequest,
 } from '@/lib/api';
-import { confirmCancel } from '@/lib/confirmAction';
+import { confirmCancel, customConfirm } from '@/lib/confirmAction';
 import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download, Search } from 'lucide-react';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
 function statusColor(status: string) {
   switch (status) {
-    case 'Draft':      return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
-    case 'Open':       return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-    case 'Invited':    return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-    case 'Accepted':   return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    case 'Draft': return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+    case 'Open': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+    case 'Invited': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+    case 'Accepted': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
     case 'PendingDecline': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
     case 'PendingExtension': return 'bg-sky-500/10 text-sky-400 border-sky-500/20';
-    case 'Declined':   return 'bg-red-500/10 text-red-400 border-red-500/20';
-    case 'Completed':  return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
-    case 'Cancelled':  return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
-    case 'Overdue':    return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+    case 'Declined': return 'bg-red-500/10 text-red-400 border-red-500/20';
+    case 'Completed': return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+    case 'Cancelled': return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+    case 'Overdue': return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
     case 'Reassigned': return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
-    default:           return 'bg-white/10 text-slate-300 border-white/10';
+    default: return 'bg-white/10 text-slate-300 border-white/10';
   }
 }
 
@@ -149,7 +149,14 @@ function AssignmentRow({
   };
 
   const handleCancel = async () => {
-    if (!(await confirmCancel())) return;
+    const confirmed = await customConfirm({
+      title: 'Cancel Assignment?',
+      message: 'Are you sure you want to cancel this reviewer assignment? The reviewer will be notified.',
+      confirmText: 'Cancel Assignment',
+      cancelText: 'Go Back',
+      confirmButtonClass: 'rounded-xl bg-red-600/90 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/60'
+    });
+    if (!confirmed) return;
     act(() => cancelAssignmentRequest(assignment.id));
   };
 
@@ -270,11 +277,10 @@ function AssignmentRow({
               onClick={handleSendReminder}
               disabled={busy || reminderSent}
               title="Send manual reminder email to reviewer"
-              className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${
-                reminderSent
+              className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors disabled:opacity-50 ${reminderSent
                   ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
                   : 'border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
-              }`}
+                }`}
             >
               <Bell className="w-3.5 h-3.5" />
               {reminderSent ? 'Sent!' : 'Remind'}
@@ -446,7 +452,7 @@ function RoundCard({
   // Add Reviewer / Reassign panel
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [reassigningForId, setReassigningForId] = useState<string | null>(null);
-  
+
   const [suggestions, setSuggestions] = useState<SuggestedReviewer[]>([]);
   const [addSearchQuery, setAddSearchQuery] = useState('');
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -543,7 +549,7 @@ function RoundCard({
   // Load proposed reviewers on mount for Draft rounds
   React.useEffect(() => {
     if (round.status === 'Draft') loadProposed();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round.id, round.status]);
 
   const openProposePanel = async () => {
@@ -708,7 +714,7 @@ function RoundCard({
 
   React.useEffect(() => {
     if (round.status === 'Open') loadStatus();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round.id, round.status]);
 
   const pendingCount = round.assignments.filter(
@@ -841,13 +847,13 @@ function RoundCard({
                   </div>
                 </div>
                 {editingDetails && (
-                <div className="pt-2 border-t border-white/5 space-y-2">
-                  {detailsError && <p className="text-xs text-red-400">{detailsError}</p>}
-                  <div className="flex gap-2">
-                    <button onClick={handleSaveDetails} disabled={savingDetails || !draftVenueName.trim() || !draftVenueUrl.trim()} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50">{savingDetails ? 'Saving…' : 'Save'}</button>
-                    <button onClick={() => setEditingDetails(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancel</button>
+                  <div className="pt-2 border-t border-white/5 space-y-2">
+                    {detailsError && <p className="text-xs text-red-400">{detailsError}</p>}
+                    <div className="flex gap-2">
+                      <button onClick={handleSaveDetails} disabled={savingDetails || !draftVenueName.trim() || !draftVenueUrl.trim()} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded disabled:opacity-50">{savingDetails ? 'Saving…' : 'Save'}</button>
+                      <button onClick={() => setEditingDetails(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Cancel</button>
+                    </div>
                   </div>
-                </div>
                 )}
               </div>
               {/* Reviewers section */}
@@ -1184,11 +1190,10 @@ function RoundCard({
                       filteredSuggestions.map(s => (
                         <label
                           key={s.user.id}
-                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                            selectedIds.has(s.user.id)
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedIds.has(s.user.id)
                               ? 'border-blue-500/40 bg-blue-500/10'
                               : 'border-white/5 bg-white/[0.02] hover:bg-white/5'
-                          }`}
+                            }`}
                         >
                           <input
                             type={reassigningForId ? "radio" : "checkbox"}
@@ -1219,7 +1224,23 @@ function RoundCard({
                   {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
                   {reassigningForId ? 'Reassign' : `Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ''}`}
                 </button>
-                <button onClick={async () => { if (await confirmCancel()) setShowAddPanel(false); }} className="text-xs text-slate-500 hover:text-slate-300">
+                <button
+                  onClick={async () => {
+                    if (selectedIds.size === 0) {
+                      setShowAddPanel(false);
+                      return;
+                    }
+                    const confirmed = await customConfirm({
+                      title: 'Discard Selections?',
+                      message: 'You have selected reviewers but haven\'t assigned them yet. Are you sure you want to close this panel and discard your selections?',
+                      confirmText: 'Discard & Close',
+                      cancelText: 'Keep Selecting',
+                      confirmButtonClass: 'rounded-xl bg-slate-700 hover:bg-slate-600 px-4 py-2 text-sm font-semibold text-white transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500/50'
+                    });
+                    if (confirmed) setShowAddPanel(false);
+                  }}
+                  className="text-xs text-slate-500 hover:text-slate-300"
+                >
                   Cancel
                 </button>
                 {assignError && <p className="text-xs text-red-400">{assignError}</p>}
@@ -1465,7 +1486,7 @@ export default function RoundsPage() {
   }
 
   const selectedPaper = papers.find(p => p.id === selectedPaperId);
-  
+
   const latestRound = rounds.length > 0 ? rounds[0] : null;
   const canCreateNextRound = !latestRound || latestRound.status === 'Completed';
 
@@ -1496,60 +1517,59 @@ export default function RoundsPage() {
           <p className="text-sm text-slate-500">No papers assigned to you as coordinator.</p>
         ) : (
           <>
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search by paper title or author name…"
-              value={paperSearch}
-              onChange={e => setPaperSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/40 focus:bg-white/5 transition-colors"
-            />
-          </div>
-          {(() => {
-            const q = paperSearch.trim().toLowerCase();
-            const filtered = q
-              ? papers.filter(p =>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search by paper title or author name…"
+                value={paperSearch}
+                onChange={e => setPaperSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-sm bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/40 focus:bg-white/5 transition-colors"
+              />
+            </div>
+            {(() => {
+              const q = paperSearch.trim().toLowerCase();
+              const filtered = q
+                ? papers.filter(p =>
                   p.title.toLowerCase().includes(q) ||
                   (p.authors ?? []).some(a => a.name.toLowerCase().includes(q))
                 )
-              : papers;
-            return filtered.length === 0 ? (
-              <p className="text-sm text-slate-500">No papers match your search.</p>
-            ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filtered.map(paper => (
-              <button
-                key={paper.id}
-                onClick={() => handleSelectPaper(paper.id)}
-                className={`text-left p-4 rounded-xl border transition-all ${
-                  selectedPaperId === paper.id
-                    ? 'border-blue-500/40 bg-blue-500/10'
-                    : 'border-white/10 bg-white/[0.02] hover:bg-white/5 hover:border-white/20'
-                }`}
-              >
-                <p className="text-sm font-semibold text-white line-clamp-2 mb-2">{paper.title}</p>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-500 truncate">
-                    {paper.authors?.length
-                      ? paper.authors.map(a => a.name).join(', ')
-                      : (paper.overleafLink ? 'Overleaf linked' : 'No Overleaf link')}
-                  </span>
-                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs border ${statusColor(paper.status)}`}>
-                    {paper.status}
-                  </span>
+                : papers;
+              return filtered.length === 0 ? (
+                <p className="text-sm text-slate-500">No papers match your search.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filtered.map(paper => (
+                    <button
+                      key={paper.id}
+                      onClick={() => handleSelectPaper(paper.id)}
+                      className={`text-left p-4 rounded-xl border transition-all ${selectedPaperId === paper.id
+                          ? 'border-blue-500/40 bg-blue-500/10'
+                          : 'border-white/10 bg-white/[0.02] hover:bg-white/5 hover:border-white/20'
+                        }`}
+                    >
+                      <p className="text-sm font-semibold text-white line-clamp-2 mb-2">{paper.title}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs text-slate-500 truncate">
+                          {paper.authors?.length
+                            ? paper.authors.map(a => a.name).join(', ')
+                            : (paper.overleafLink ? 'Overleaf linked' : 'No Overleaf link')}
+                        </span>
+                        <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs border ${statusColor(paper.status)}`}>
+                          {paper.status}
+                        </span>
+                      </div>
+                      {(pendingRoundRequestsByPaper[paper.id]?.length ?? 0) > 0 && (
+                        <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-300">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          {pendingRoundRequestsByPaper[paper.id].length} round request pending
+                        </div>
+                      )}
+                    </button>
+                  ))}
                 </div>
-                {(pendingRoundRequestsByPaper[paper.id]?.length ?? 0) > 0 && (
-                  <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-300">
-                    <AlertCircle className="h-3.5 w-3.5" />
-                    {pendingRoundRequestsByPaper[paper.id].length} round request pending
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-            );
-          })()}
+              );
+            })()}
           </>
         )}
       </section>
@@ -1570,13 +1590,13 @@ export default function RoundsPage() {
                 Paper Overview
               </Link>
               {canCreateNextRound && !showCreateRound && (
-                 <button
-                    onClick={() => setShowCreateRound(true)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors"
-                 >
-                    <Plus className="w-4 h-4" />
-                    {rounds.length === 0 ? 'Create Initial Round' : 'Create Next Round'}
-                 </button>
+                <button
+                  onClick={() => setShowCreateRound(true)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  {rounds.length === 0 ? 'Create Initial Round' : 'Create Next Round'}
+                </button>
               )}
             </div>
           </div>
@@ -1596,81 +1616,81 @@ export default function RoundsPage() {
           </div>
 
           {showCreateRound && (
-             <div className="glass rounded-2xl border border-blue-500/30 p-6 space-y-4 bg-blue-500/5">
-               <h3 className="text-base font-semibold text-blue-400">Setup Draft Round</h3>
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                 <div className="space-y-1">
-                   <label className="text-xs text-slate-400 uppercase tracking-wider">Venue Category</label>
-                   <select
-                     value={newRoundVenueCat}
-                     onChange={(e) => setNewRoundVenueCat(e.target.value)}
-                     className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                   >
-                     <option value="Conference">Conference</option>
-                     <option value="Journal">Journal</option>
-                   </select>
-                 </div>
-                 <div className="space-y-1">
-                   <label className="text-xs text-slate-400 uppercase tracking-wider">Target Venue Name</label>
-                   <input
-                     type="text"
-                     value={newRoundTargetVenue}
-                     onChange={(e) => setNewRoundTargetVenue(e.target.value)}
-                     placeholder="e.g. NeurIPS 2026"
-                     className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                   />
-                 </div>
-                 <div className="space-y-1 sm:col-span-2">
-                   <label className="text-xs text-slate-400 uppercase tracking-wider">Venue URL</label>
-                   <input
-                     type="url"
-                     value={newRoundTargetVenueUrl}
-                     onChange={(e) => setNewRoundTargetVenueUrl(e.target.value)}
-                     placeholder="https://neurips.cc/Conferences/2026"
-                     className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                   />
-                 </div>
-                 {newRoundVenueCat === 'Conference' && (
-                    <div className="space-y-1">
-                      <label className="text-xs text-slate-400 uppercase tracking-wider">Submission Deadline</label>
-                      <input
-                        type="date"
-                        value={newRoundSubDeadline}
-                        onChange={(e) => setNewRoundSubDeadline(e.target.value)}
-                        min={todayInputValue()}
-                        className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                      />
-                    </div>
-                 )}
-                 <div className="space-y-1">
-                   <label className="text-xs text-slate-400 uppercase tracking-wider">Round Deadline</label>
-                   <input
-                     type="date"
-                     value={newRoundDeadline}
-                     onChange={(e) => setNewRoundDeadline(e.target.value)}
-                     min={todayInputValue()}
-                     max={newRoundVenueCat === 'Conference' && newRoundSubDeadline ? newRoundSubDeadline : undefined}
-                     className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
-                   />
-                 </div>
-               </div>
-               {createError && <p className="text-xs text-red-400">{createError}</p>}
-               <div className="flex gap-3 pt-2">
-                 <button
-                   onClick={handleCreateRound}
-                   disabled={creatingRound || !newRoundTargetVenue.trim() || !newRoundTargetVenueUrl.trim() || (newRoundVenueCat === 'Conference' && !newRoundSubDeadline)}
-                   className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors"
-                 >
-                   {creatingRound ? 'Saving...' : 'Create Draft'}
-                 </button>
-                 <button
-                   onClick={async () => { if (await confirmCancel()) setShowCreateRound(false); }}
-                   className="px-4 py-2 text-sm font-medium rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 transition-colors"
-                 >
-                   Cancel
-                 </button>
-               </div>
-             </div>
+            <div className="glass rounded-2xl border border-blue-500/30 p-6 space-y-4 bg-blue-500/5">
+              <h3 className="text-base font-semibold text-blue-400">Setup Draft Round</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-400 uppercase tracking-wider">Venue Category</label>
+                  <select
+                    value={newRoundVenueCat}
+                    onChange={(e) => setNewRoundVenueCat(e.target.value)}
+                    className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                  >
+                    <option value="Conference">Conference</option>
+                    <option value="Journal">Journal</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-400 uppercase tracking-wider">Target Venue Name</label>
+                  <input
+                    type="text"
+                    value={newRoundTargetVenue}
+                    onChange={(e) => setNewRoundTargetVenue(e.target.value)}
+                    placeholder="e.g. NeurIPS 2026"
+                    className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                  />
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="text-xs text-slate-400 uppercase tracking-wider">Venue URL</label>
+                  <input
+                    type="url"
+                    value={newRoundTargetVenueUrl}
+                    onChange={(e) => setNewRoundTargetVenueUrl(e.target.value)}
+                    placeholder="https://neurips.cc/Conferences/2026"
+                    className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                  />
+                </div>
+                {newRoundVenueCat === 'Conference' && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-slate-400 uppercase tracking-wider">Submission Deadline</label>
+                    <input
+                      type="date"
+                      value={newRoundSubDeadline}
+                      onChange={(e) => setNewRoundSubDeadline(e.target.value)}
+                      min={todayInputValue()}
+                      className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <label className="text-xs text-slate-400 uppercase tracking-wider">Round Deadline</label>
+                  <input
+                    type="date"
+                    value={newRoundDeadline}
+                    onChange={(e) => setNewRoundDeadline(e.target.value)}
+                    min={todayInputValue()}
+                    max={newRoundVenueCat === 'Conference' && newRoundSubDeadline ? newRoundSubDeadline : undefined}
+                    className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                  />
+                </div>
+              </div>
+              {createError && <p className="text-xs text-red-400">{createError}</p>}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={handleCreateRound}
+                  disabled={creatingRound || !newRoundTargetVenue.trim() || !newRoundTargetVenueUrl.trim() || (newRoundVenueCat === 'Conference' && !newRoundSubDeadline)}
+                  className="px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors"
+                >
+                  {creatingRound ? 'Saving...' : 'Create Draft'}
+                </button>
+                <button
+                  onClick={async () => { if (await confirmCancel()) setShowCreateRound(false); }}
+                  className="px-4 py-2 text-sm font-medium rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           )}
 
           {loadingRounds ? (

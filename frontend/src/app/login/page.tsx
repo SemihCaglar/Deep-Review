@@ -51,9 +51,9 @@ export default function LoginPage() {
         <div className="w-16 h-16 rounded-2xl bg-blue-500/15 text-blue-300 border border-blue-400/20 flex items-center justify-center mx-auto mb-5">
           <LockKeyhole className="w-8 h-8" />
         </div>
-        <p className="text-xs uppercase tracking-[0.3em] text-blue-300/80 mb-3">BILSEN Review System</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-blue-300/80 mb-3">Deep Review</p>
         <h1 className="text-4xl font-extrabold tracking-tight mb-3 text-white">Sign In</h1>
-        <p className="text-slate-400">Sign in with your BILSEN account to continue to the dashboard</p>
+        <p className="text-slate-400">Sign in with your Deep Review account to continue to the dashboard</p>
       </div>
 
       <div className="glass rounded-2xl border border-white/5 p-8 shadow-2xl relative overflow-hidden">

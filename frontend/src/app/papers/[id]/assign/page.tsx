@@ -25,6 +25,7 @@ export default function AssignReviewers({ params }: { params: { id: string } }) 
     const [deadline, setDeadline] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    if (!user.id) return null;
     if (!paper) return notFound();
 
     // Protect route
