@@ -3,9 +3,9 @@ import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { Round, RoundStatus } from '../entities/Round';
 
 const WEIGHT_OPEN_AUTHOR_ROUND = 40;
-const WEIGHT_ACTIVE_REVIEW = 25;
+const WEIGHT_ACTIVE_REVIEW = 30;
 const WEIGHT_DRAFT_AUTHOR_ROUND = 15;
-const WEIGHT_COMPLETED_LAST_MONTH = -5;
+const WEIGHT_COMPLETED_LAST_MONTH = 10;
 
 export interface WorkloadData {
   workloadPct: number;
