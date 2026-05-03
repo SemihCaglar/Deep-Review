@@ -31,27 +31,33 @@ export class PCRelatedWorkController {
       const user = req.user;
       if (!user) return res.status(401).json({ message: 'Unauthorized' });
 
-      const { venueUrl, paperTitle, paperAbstract, roundId } = req.body;
+      const { venueUrl, paperTitle, paperAbstract, roundId, committeeMembers } = req.body;
 
-      if (!venueUrl || typeof venueUrl !== 'string') {
-        return res.status(400).json({ message: 'venueUrl is required.' });
-      }
       if (!paperTitle || typeof paperTitle !== 'string') {
         return res.status(400).json({ message: 'paperTitle is required.' });
       }
       if (!paperAbstract || typeof paperAbstract !== 'string') {
         return res.status(400).json({ message: 'paperAbstract is required.' });
       }
-      if (!/^https?:\/\/.+/i.test(venueUrl.trim())) {
-        return res.status(400).json({ message: 'venueUrl must be a valid http/https URL.' });
+
+      // Either venueUrl or committeeMembers must be provided
+      if (!committeeMembers) {
+        if (!venueUrl || typeof venueUrl !== 'string') {
+          return res.status(400).json({ message: 'venueUrl or committeeMembers is required.' });
+        }
+        if (!/^https?:\/\/.+/i.test(venueUrl.trim())) {
+          return res.status(400).json({ message: 'venueUrl must be a valid http/https URL.' });
+        }
       }
 
-      console.log(`[PCRelatedWorkController] Request from user ${user.id}: ${venueUrl}`);
+      const source = committeeMembers ? 'manual input' : `venue: ${venueUrl}`;
+      console.log(`[PCRelatedWorkController] Request from user ${user.id} - ${source}`);
 
       const result = await PCRelatedWorkRecommendationService.recommend(
-        venueUrl.trim(),
+        venueUrl?.trim() || '',
         paperTitle.trim(),
-        paperAbstract.trim()
+        paperAbstract.trim(),
+        committeeMembers
       );
 
       // Save to database if roundId is provided

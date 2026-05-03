@@ -66,6 +66,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
 
   // --- PC Related Work State ---
   const [venueUrl, setVenueUrl] = useState('');
+  const [committeeMembers, setCommitteeMembers] = useState('');
   const [runningPCRelated, setRunningPCRelated] = useState(false);
   const [pcRelatedError, setPcRelatedError] = useState('');
   const [localPCRelatedResult, setLocalPCRelatedResult] = useState<PCRelatedWorkResponse | null>(null);
@@ -104,10 +105,11 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     setFinalizedChecklist(null);
     setConfirmedStandards(new Set());
     setExpandedChecklistStandards(new Set());
-    setVenueUrl('');
+    setVenueUrl(round.targetVenueUrl || '');
+    setCommitteeMembers('');
     setPcRelatedError('');
     setLocalPCRelatedResult(null);
-  }, [isOpen, round?.id]);
+  }, [isOpen, round?.id, round?.targetVenueUrl]);
 
   // Fetch paper data (title + abstract) for PC Related Work feature
   useEffect(() => {
@@ -230,7 +232,8 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
         venueUrl.trim(),
         paperData.title,
         paperData.abstractText || '',
-        round.id
+        round.id,
+        committeeMembers.trim() || undefined
       ) as PCRelatedWorkResponse;
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
@@ -266,6 +269,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
         paperData.title,
         paperData.abstractText || '',
         round.id,
+        committeeMembers.trim() || undefined,
         'csv'
       ) as Blob;
       const url = window.URL.createObjectURL(blob);
@@ -666,6 +670,21 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
                     </button>
                   </div>
                   {pcRelatedError && <p className="text-xs text-red-400">{pcRelatedError}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-slate-300">PC Committee Members (optional)</label>
+                    <span className="text-xs text-slate-500">one per line or comma-separated</span>
+                  </div>
+                  <textarea
+                    value={committeeMembers}
+                    onChange={(e) => setCommitteeMembers(e.target.value)}
+                    placeholder="e.g., John Smith&#10;Jane Doe&#10;Robert Johnson"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20 resize-none"
+                    rows={3}
+                  />
+                  <p className="text-xs text-slate-400">Leave empty to auto-scrape from venue website</p>
                 </div>
 
                 {pcRelated && (

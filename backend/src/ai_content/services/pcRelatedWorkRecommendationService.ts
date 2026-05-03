@@ -58,7 +58,8 @@ export class PCRelatedWorkRecommendationService {
   static async recommend(
     venueUrl: string,
     paperTitle: string,
-    paperAbstract: string
+    paperAbstract: string,
+    committeeMembers?: string
   ): Promise<PCRelatedWorkResponse> {
     const recKey = recommendationCacheKey(venueUrl, paperTitle, paperAbstract);
     if (recommendationsCache.has(recKey)) {
@@ -68,17 +69,37 @@ export class PCRelatedWorkRecommendationService {
 
     const issues: string[] = [];
 
-    // Step 1: Get PC members (cached by venueUrl)
-    const pcKey = pcMembersCacheKey(venueUrl);
+    // Step 1: Get PC members (from manual input or scrape from venue URL)
     let members: ProgramCommitteeMember[];
-    if (pcMembersCache.has(pcKey)) {
-      members = pcMembersCache.get(pcKey)!;
-      console.log(`[PCRelatedWork] PC members from cache: ${members.length}`);
+
+    let pcKey = '';
+    if (committeeMembers) {
+      // Parse manually entered committee members
+      console.log(`[PCRelatedWork] Using manually entered committee members`);
+      const names = committeeMembers
+        .split(/[\n,]+/)
+        .map(n => n.trim())
+        .filter(n => n.length > 0);
+      members = names.map((name, idx) => ({
+        id: `manual-${idx}`,
+        name,
+        affiliation: null,
+        role: null,
+        sourceUrl: 'manual-input',
+      }));
+      console.log(`[PCRelatedWork] Parsed ${members.length} committee members from manual input`);
     } else {
-      const scraped = await PCMemberScraperService.scrape(venueUrl);
-      if (scraped.issues.length) issues.push(...scraped.issues);
-      members = scraped.members;
-      pcMembersCache.set(pcKey, members);
+      // Scrape from venue URL
+      pcKey = pcMembersCacheKey(venueUrl);
+      if (pcMembersCache.has(pcKey)) {
+        members = pcMembersCache.get(pcKey)!;
+        console.log(`[PCRelatedWork] PC members from cache: ${members.length}`);
+      } else {
+        const scraped = await PCMemberScraperService.scrape(venueUrl);
+        if (scraped.issues.length) issues.push(...scraped.issues);
+        members = scraped.members;
+        pcMembersCache.set(pcKey, members);
+      }
     }
 
     if (members.length === 0) {
@@ -130,7 +151,7 @@ export class PCRelatedWorkRecommendationService {
       }
     }
 
-    if (!pcMembersCache.has(pcKey)) pcMembersCache.set(pcKey, members);
+    if (pcKey && !pcMembersCache.has(pcKey)) pcMembersCache.set(pcKey, members);
 
     // Recalculate matchedCount from cache hits
     if (matchedCount === 0 && allPapers.length > 0) matchedCount = members.length;

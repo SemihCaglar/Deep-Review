@@ -1108,6 +1108,7 @@ export async function getPCRelatedWorkRecommendations(
   paperTitle: string,
   paperAbstract: string,
   roundId?: string,
+  committeeMembers?: string,
   format?: 'json' | 'csv'
 ): Promise<PCRelatedWorkResponse | Blob> {
   const token = getToken();
@@ -1120,7 +1121,13 @@ export async function getPCRelatedWorkRecommendations(
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ venueUrl, paperTitle, paperAbstract, ...(roundId && { roundId }) }),
+    body: JSON.stringify({
+      venueUrl,
+      paperTitle,
+      paperAbstract,
+      ...(roundId && { roundId }),
+      ...(committeeMembers && { committeeMembers })
+    }),
   });
 
   if (format === 'csv') {
