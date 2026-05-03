@@ -42,7 +42,7 @@ export class AdminController {
   }
 
   static async createUser(req: AuthenticatedRequest, res: Response) {
-    let { name, email, password, role } = req.body ?? {};
+    let { name, email, password, role, labId } = req.body ?? {};
 
     if (!name || !email || !role) {
       return res.status(400).json({ message: 'name, email, and role are required' });
@@ -54,6 +54,16 @@ export class AdminController {
 
     if (!password) {
       return res.status(400).json({ message: 'password is required for this role' });
+    }
+
+    if (!labId) {
+      return res.status(400).json({ message: 'Lab cannot be null' });
+    }
+
+    const labRepo = AppDataSource.getRepository(Lab);
+    const lab = await labRepo.findOne({ where: { id: labId }, relations: ['members'] });
+    if (!lab) {
+      return res.status(404).json({ message: 'Lab not found' });
     }
 
     const userRepo = AppDataSource.getRepository<User>('User');
@@ -77,10 +87,11 @@ export class AdminController {
 
     await userRepo.save(user);
 
-    await AdminController.logAction(req, AuditAction.CREATE_USER, 'User', user.id, `Created ${role} user`);
+    lab.members.push(user);
+    await labRepo.save(lab);
 
-    // Don't leak generated password in response unless necessary.
-    // For admin UI, we can just return the user object.
+    await AdminController.logAction(req, AuditAction.CREATE_USER, 'User', user.id, `Created ${role} user in lab ${lab.name}`);
+
     return res.status(201).json(user);
   }
 

@@ -16,9 +16,7 @@ import {
   PlusSquare,
   CheckCircle,
   XCircle,
-  ArrowRight,
   Search,
-  ArrowUpDown,
   ArrowUp,
   ArrowDown,
   X,
@@ -154,9 +152,28 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [newLabId, setNewLabId] = useState('');
+  const [labs, setLabs] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const openModal = async () => {
+    setShowCreateModal(true);
+    try {
+      const result = await apiRequest<any[]>('/admin/labs');
+      setLabs(result);
+    } catch { setLabs([]); }
+  };
+
+  const closeModal = () => {
+    setShowCreateModal(false);
+    setNewName('');
+    setNewEmail('');
+    setNewPassword('');
+    setNewLabId('');
+    setErrorMsg('');
+  };
 
   const handleCreateUser = async () => {
     if (!newName.trim() || !newEmail.trim()) {
@@ -167,17 +184,18 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
       setErrorMsg('Password is required');
       return;
     }
+    if (!newLabId) {
+      setErrorMsg('Lab cannot be null');
+      return;
+    }
     setIsSubmitting(true);
     setErrorMsg('');
     try {
       await apiRequest('/admin/users', {
         method: 'POST',
-        body: { name: newName, email: newEmail, role: 'LabMember', password: newPassword }
+        body: { name: newName, email: newEmail, role: 'LabMember', password: newPassword, labId: newLabId }
       });
-      setShowCreateModal(false);
-      setNewName('');
-      setNewEmail('');
-      setNewPassword('');
+      closeModal();
       refresh();
     } catch (e: any) {
       setErrorMsg(e.message || 'Failed to create user');
@@ -214,7 +232,7 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl relative">
             <button
-              onClick={() => setShowCreateModal(false)}
+              onClick={closeModal}
               className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
             >
               <XCircle className="w-5 h-5" />
@@ -259,11 +277,25 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
                   placeholder="Enter a secure password"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Lab</label>
+                <select
+                  value={newLabId}
+                  onChange={(e) => setNewLabId(e.target.value)}
+                  style={{ colorScheme: 'dark' }}
+                  className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="" className="bg-slate-800 text-slate-400">Select a lab...</option>
+                  {labs.map((lab: any) => (
+                    <option key={lab.id} value={lab.id} className="bg-slate-800 text-white">{lab.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="mt-8 flex justify-end gap-3">
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={closeModal}
                 className="px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 transition-colors text-sm font-medium"
               >
                 Cancel
@@ -284,8 +316,8 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
         <div className="p-6 border-b border-white/5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">System Users</h2>
-          <button 
-            onClick={() => setShowCreateModal(true)}
+          <button
+            onClick={openModal}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors"
           >
             <PlusSquare className="w-4 h-4" />
