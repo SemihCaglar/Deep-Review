@@ -15,8 +15,8 @@ export class LabCollaborationController {
   // POST /papers/:id/collaboration-invitations   body: { labIds: string[] }
   static async sendInvitations(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
-    if (!user || user.role !== UserRole.Coordinator) {
-      return res.status(403).json({ message: 'Only coordinators can send collaboration invitations' });
+    if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
+      return res.status(403).json({ message: 'Action requires Coordinator or Admin role' });
     }
 
     const paperId = String(req.params.id);
@@ -133,8 +133,8 @@ export class LabCollaborationController {
   // GET /papers/:id/collaboration-invitations
   static async getInvitationsForPaper(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
-    if (!user || user.role !== UserRole.Coordinator) {
-      return res.status(403).json({ message: 'Only coordinators can view collaboration invitations' });
+    if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
+      return res.status(403).json({ message: 'Action requires Coordinator or Admin role' });
     }
 
     const paperId = String(req.params.id);
@@ -146,8 +146,9 @@ export class LabCollaborationController {
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
       const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
-      if (!isCoordinator) {
-        return res.status(403).json({ message: 'You are not a coordinator of this paper' });
+      const isAdmin = user.role === UserRole.Admin;
+      if (!isCoordinator && !isAdmin) {
+        return res.status(403).json({ message: 'You are not a coordinator or admin of this paper' });
       }
 
       const invitations = await AppDataSource.getRepository(LabCollaborationInvitation).find({
@@ -173,8 +174,8 @@ export class LabCollaborationController {
   // GET /collaboration-invitations/pending
   static async getPendingInvitations(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
-    if (!user || user.role !== UserRole.Coordinator) {
-      return res.status(403).json({ message: 'Only coordinators can view collaboration invitations' });
+    if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
+      return res.status(403).json({ message: 'Action requires Coordinator or Admin role' });
     }
 
     try {
@@ -211,8 +212,8 @@ export class LabCollaborationController {
   // PATCH /collaboration-invitations/:id/accept
   static async acceptInvitation(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
-    if (!user || user.role !== UserRole.Coordinator) {
-      return res.status(403).json({ message: 'Only coordinators can accept invitations' });
+    if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
+      return res.status(403).json({ message: 'Action requires Coordinator or Admin role' });
     }
 
     const invitationId = String(req.params.id);
@@ -298,8 +299,8 @@ export class LabCollaborationController {
   // PATCH /collaboration-invitations/:id/reject
   static async rejectInvitation(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
-    if (!user || user.role !== UserRole.Coordinator) {
-      return res.status(403).json({ message: 'Only coordinators can reject invitations' });
+    if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
+      return res.status(403).json({ message: 'Action requires Coordinator or Admin role' });
     }
 
     const invitationId = String(req.params.id);
@@ -340,8 +341,8 @@ export class LabCollaborationController {
   // PATCH /collaboration-invitations/:id/cancel
   static async cancelInvitation(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
-    if (!user || user.role !== UserRole.Coordinator) {
-      return res.status(403).json({ message: 'Only coordinators can cancel invitations' });
+    if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
+      return res.status(403).json({ message: 'Action requires Coordinator or Admin role' });
     }
 
     const invitationId = String(req.params.id);
@@ -364,8 +365,9 @@ export class LabCollaborationController {
 
       const isInvitingLabCoord = coordinator?.lab?.id === invitation.invitingLab?.id;
       const isPaperCoord = invitation.paper?.coordinators?.some(c => c.id === user.id);
-      if (!isInvitingLabCoord && !isPaperCoord) {
-        return res.status(403).json({ message: 'You can only cancel invitations you sent' });
+      const isAdmin = user.role === UserRole.Admin;
+      if (!isInvitingLabCoord && !isPaperCoord && !isAdmin) {
+        return res.status(403).json({ message: 'You do not have permission to cancel this invitation' });
       }
 
       invitation.status = CollaborationInvitationStatus.Cancelled;

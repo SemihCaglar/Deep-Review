@@ -107,7 +107,7 @@ export class ReviewerResponseController {
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
         where: { id: req.params.id as string },
-        relations: ['reviewer', 'round', 'round.paper', 'round.paper.coordinators'],
+        relations: ['reviewer', 'reviewer.labs', 'reviewer.labs.coordinator', 'round', 'round.paper', 'round.paper.coordinators'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
@@ -148,7 +148,16 @@ export class ReviewerResponseController {
 
       const paperTitle = assignment.round.paper.title;
       const roundNumber = assignment.round.roundNumber;
-      for (const coord of assignment.round.paper.coordinators ?? []) {
+      
+      const reviewerLabIds = assignment.reviewer.labs?.map(l => l.id) || [];
+      const paperCoords = assignment.round.paper.coordinators ?? [];
+      
+      // Notify only coordinators who own the reviewer's lab
+      const targetCoords = paperCoords.filter(coord => 
+        assignment.reviewer.labs?.some(lab => lab.coordinator && lab.coordinator.id === coord.id)
+      );
+
+      for (const coord of targetCoords) {
         sendTemplatedEmail(coord, TemplateName.DECLINE_REQUEST, {
           coordinatorName: coord.name,
           reviewerName: user.name,
@@ -192,7 +201,7 @@ export class ReviewerResponseController {
       const assignRepo = AppDataSource.getRepository(Assignment);
       const assignment = await assignRepo.findOne({
         where: { id: assignmentId },
-        relations: ['reviewer', 'round', 'round.paper', 'round.paper.coordinators'],
+        relations: ['reviewer', 'reviewer.labs', 'reviewer.labs.coordinator', 'round', 'round.paper', 'round.paper.coordinators'],
       });
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
@@ -257,12 +266,16 @@ export class ReviewerResponseController {
         // PendingDecline stays PendingDecline; PendingExtension stays PendingExtension
       }
 
-      const coordinators = assignment.round.paper.coordinators ?? [];
       const paperTitle = assignment.round.paper.title;
       const roundNumber = assignment.round.roundNumber;
       const currentDeadline = assignment.deadline?.toISOString() ?? 'N/A';
 
-      await Promise.all(coordinators.map(c =>
+      const paperCoords = assignment.round.paper.coordinators ?? [];
+      const targetCoords = paperCoords.filter(coord => 
+        assignment.reviewer.labs?.some(lab => lab.coordinator && lab.coordinator.id === coord.id)
+      );
+
+      await Promise.all(targetCoords.map(c =>
         sendTemplatedEmail(c, TemplateName.EXTENSION_REQUEST, {
           coordinatorName: c.name,
           reviewerName: user.name,
@@ -297,8 +310,8 @@ export class ReviewerResponseController {
   static async processDeclineRequest(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      if (!coordinator || (coordinator.role !== UserRole.Coordinator && coordinator.role !== UserRole.Admin)) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator or Admin role' });
       }
 
       const { declineRequestId, decision } = req.body;
@@ -312,15 +325,24 @@ export class ReviewerResponseController {
       const declineRepo = AppDataSource.getRepository(DeclineRequest);
       const declineRequest = await declineRepo.findOne({
         where: { id: declineRequestId },
-        relations: ['assignment', 'assignment.reviewer', 'assignment.round', 'assignment.round.paper', 'assignment.round.paper.coordinators'],
+        relations: ['assignment', 'assignment.reviewer', 'assignment.reviewer.labs', 'assignment.reviewer.labs.coordinator', 'assignment.round', 'assignment.round.paper', 'assignment.round.paper.coordinators'],
       });
       if (!declineRequest) return res.status(404).json({ message: 'Decline request not found' });
       if (declineRequest.status !== DeclineRequestStatus.Pending) {
         return res.status(400).json({ message: `Decline request has already been processed (${declineRequest.status}). No further action is possible.` });
       }
 
-      const isOwner = declineRequest.assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
-      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+      const isAdmin = coordinator.role === UserRole.Admin;
+      const isLabCoordinatorOfReviewer = declineRequest.assignment.reviewer.labs?.some(lab => lab.coordinator && lab.coordinator.id === coordinator.id);
+      
+      if (!isAdmin && !isLabCoordinatorOfReviewer) {
+        return res.status(403).json({ message: 'Forbidden: You can only process decline requests for members of your own lab.' });
+      }
+
+      const isPaperCoordinator = declineRequest.assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
+      if (!isAdmin && !isPaperCoordinator) {
+        return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper.' });
+      }
 
       const assignRepo = AppDataSource.getRepository(Assignment);
 
@@ -370,8 +392,8 @@ export class ReviewerResponseController {
   static async processExtensionRequest(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      if (!coordinator || (coordinator.role !== UserRole.Coordinator && coordinator.role !== UserRole.Admin)) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator or Admin role' });
       }
 
       const { extensionId, decision, approvedDeadline } = req.body;
@@ -389,15 +411,24 @@ export class ReviewerResponseController {
       const extensionRepo = AppDataSource.getRepository(Extension);
       const extension = await extensionRepo.findOne({
         where: { id: extensionId },
-        relations: ['assignment', 'assignment.reviewer', 'assignment.round', 'assignment.round.paper', 'assignment.round.paper.coordinators'],
+        relations: ['assignment', 'assignment.reviewer', 'assignment.reviewer.labs', 'assignment.reviewer.labs.coordinator', 'assignment.round', 'assignment.round.paper', 'assignment.round.paper.coordinators'],
       });
       if (!extension) return res.status(404).json({ message: 'Extension request not found' });
       if (extension.status !== ExtensionStatus.Pending) {
         return res.status(400).json({ message: `Extension request has already been processed (${extension.status}). No further action is possible.` });
       }
 
-      const isOwner = extension.assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
-      if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+      const isAdmin = coordinator.role === UserRole.Admin;
+      const isLabCoordinatorOfReviewer = extension.assignment.reviewer.labs?.some(lab => lab.coordinator && lab.coordinator.id === coordinator.id);
+
+      if (!isAdmin && !isLabCoordinatorOfReviewer) {
+        return res.status(403).json({ message: 'Forbidden: You can only process extension requests for members of your own lab.' });
+      }
+
+      const isPaperCoordinator = extension.assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
+      if (!isAdmin && !isPaperCoordinator) {
+        return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper.' });
+      }
 
       const assignRepo = AppDataSource.getRepository(Assignment);
 

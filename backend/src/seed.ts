@@ -61,6 +61,10 @@ export async function runSeed(options: { reset?: boolean } = {}) {
     password: 'admin123',
   });
 
+  // 6. System Policies & Templates
+  await ensureDefaultPolicies(policyRepo);
+  await ensureDefaultTemplates(templateRepo);
+
   console.log('\n🌱 Seed complete!');
   console.log('   Admin       — email: admin@bilsen.app                  password: admin123');
   await AppDataSource.destroy();

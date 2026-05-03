@@ -6,10 +6,10 @@ import { notFound, useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS } from '@/lib/mockData';
 import { confirmCancel, customConfirm } from '@/lib/confirmAction';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, AlertCircle } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, AlertCircle, PlusSquare } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
-  getLabTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
+  getLabTopicsRequest, addTopicToLabRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
   getLabMembersRequest, ApiError, LabMember, Lab,
   AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest, editSubmissionDeadlineRequest,
   getSuggestedReviewersRequest, SuggestedReviewer, ProposedReviewer,
@@ -119,6 +119,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [isEditingTopics, setIsEditingTopics] = useState(false);
     const [isEditingLinks, setIsEditingLinks] = useState(false);
     const [isEditingAuthors, setIsEditingAuthors] = useState(false);
+    const [isCreatingTopic, setIsCreatingTopic] = useState(false);
     const [localAuthors, setLocalAuthors] = useState<string[]>([]);
     const [availableUsers, setAvailableUsers] = useState<LabMember[]>([]);
 
@@ -476,6 +477,28 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
             setLocalTopics(localTopics.filter(t => t !== id));
         } else {
             setLocalTopics([...localTopics, id]);
+        }
+    };
+
+    const handleCreateTopic = async () => {
+        const topicLabId = paper?.labs?.[0]?.id ?? user.labs?.[0]?.id;
+        if (!topicSearch.trim() || isCreatingTopic) return;
+        if (!topicLabId) {
+            alert('You must be associated with at least one lab to create new topics.');
+            return;
+        }
+
+        setIsCreatingTopic(true);
+        try {
+            const newTopic = await addTopicToLabRequest(topicLabId, topicSearch.trim());
+            setAvailableTopics(prev => [...prev, newTopic]);
+            setLocalTopics(prev => [...prev, newTopic.id]);
+            setTopicSearch('');
+        } catch (err) {
+            console.error('Failed to create topic', err);
+            alert(err instanceof ApiError ? err.message : 'Failed to create topic');
+        } finally {
+            setIsCreatingTopic(false);
         }
     };
 
@@ -927,10 +950,13 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 {topic.name}
                             </span>
                         ))}
+                        {paper.topics?.length === 0 && (
+                            <span className="text-xs text-slate-500 italic">No topics assigned.</span>
+                        )}
                         {canEditAbstract && !isEditingTopics && (
                             <button
                                 onClick={() => setIsEditingTopics(true)}
-                                className="opacity-0 group-hover/topics:opacity-100 transition-opacity flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 ml-2"
+                                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-500/20 transition-all ml-2"
                             >
                                 <Edit className="w-3 h-3" /> Edit Topics
                             </button>
@@ -949,8 +975,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         className="w-full bg-white/5 border border-white/10 rounded-lg pl-6 pr-2 py-1.5 text-[10px] text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
                                     />
                                 </div>
-
-                                <div className="flex flex-wrap gap-2 mb-4 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
+                                 <div className="flex flex-wrap gap-2 mb-4 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
                                     {availableTopics
                                         .filter(t => t.name.toLowerCase().includes(topicSearch.toLowerCase()))
                                         .map(topic => (
@@ -963,6 +988,21 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             {topic.name}
                                         </button>
                                     ))}
+                                    {topicSearch.trim() && !availableTopics.some(t => t.name.toLowerCase() === topicSearch.trim().toLowerCase()) && (
+                                        <button
+                                            type="button"
+                                            onClick={handleCreateTopic}
+                                            disabled={isCreatingTopic}
+                                            className="px-3 py-1.5 rounded-full border border-dashed border-blue-500/50 bg-blue-500/5 text-blue-400 text-xs font-medium hover:bg-blue-500/10 transition-all flex items-center gap-1.5"
+                                        >
+                                            {isCreatingTopic ? (
+                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                            ) : (
+                                                <PlusSquare className="w-3 h-3" />
+                                            )}
+                                            Add "{topicSearch.trim()}"
+                                        </button>
+                                    )}
                                 </div>
                                 {topicsError && <p className="text-xs text-red-400">{topicsError}</p>}
                                 <div className="flex justify-end gap-2">

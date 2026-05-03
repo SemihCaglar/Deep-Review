@@ -6,7 +6,7 @@ import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest
 import { Extension, ExtensionStatus } from '../entities/Extension';
 import { Round, RoundStatus } from '../entities/Round';
 import { Paper, PaperStatus } from '../entities/Paper';
-import { UserRole } from '../entities/User';
+import { User, UserRole } from '../entities/User';
 import { sendTemplatedEmail } from '../services/emailService';
 import { TemplateName } from '../entities/Template';
 import { CoordinatorService, CoordinatorServiceError } from '../services/CoordinatorService';
@@ -16,9 +16,16 @@ import type { AuthenticatedRequest } from '../types/auth';
 export class AssignmentController {
   static async assignReviewers(req: AuthenticatedRequest, res: Response) {
     try {
-      const coordinator = req.user;
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      const requesterBase = req.user;
+      if (!requesterBase) return res.status(401).json({ message: 'Authentication required' });
+
+      // Explicitly load labs for the requester to ensure filtering works
+      const userRepo = AppDataSource.getRepository<User>('User');
+      const requester = await userRepo.findOne({ where: { id: requesterBase.id }, relations: ['labs'] });
+      if (!requester) return res.status(401).json({ message: 'Authentication required' });
+
+      if (requester.role !== UserRole.Coordinator && requester.role !== UserRole.Admin) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator or Admin role' });
       }
 
       const { roundId, reviewerIds, deadline: deadlineOverride } = req.body;
@@ -36,7 +43,7 @@ export class AssignmentController {
       });
       if (!round) return res.status(404).json({ message: 'Round not found' });
 
-      const isOwner = round.paper.coordinators?.some(c => c.id === coordinator.id);
+      const isOwner = round.paper.coordinators?.some(c => c.id === requester.id) || requester.role === UserRole.Admin;
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
       const now = new Date();
@@ -48,16 +55,23 @@ export class AssignmentController {
       }
 
       const authorIds = new Set(round.paper.authors?.map(a => a.id) ?? []);
-      const userRepo = AppDataSource.getRepository('User');
       const assignRepo = AppDataSource.getRepository(Assignment);
       const newAssignments: Assignment[] = [];
 
       for (const rId of reviewerIds) {
         if (authorIds.has(rId)) continue;
 
-        const reviewer = await userRepo.findOne({ where: { id: rId } });
+        const reviewer = await userRepo.findOne({ where: { id: rId }, relations: ['labs'] });
         if (!reviewer) continue;
         if (reviewer.role === UserRole.Coordinator || reviewer.role === UserRole.Admin) continue;
+
+        // Lab check:
+        if (requester.role !== UserRole.Admin) {
+          const reviewerLabIds = reviewer.labs?.map(l => l.id) || [];
+          const requesterLabIds = requester.labs?.map(l => l.id) || [];
+          const sharesLab = reviewerLabIds.some(id => requesterLabIds.includes(id));
+          if (!sharesLab) continue;
+        }
 
         // Skip if ANY assignment already exists for this reviewer on this round
         const activeExists = await assignRepo.findOne({

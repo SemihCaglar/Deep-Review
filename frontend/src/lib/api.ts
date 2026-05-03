@@ -166,6 +166,13 @@ export function getLabTopicsRequest(labId: string) {
   return apiRequest<TopicOption[]>(`/labs/${labId}/topics`);
 }
 
+export function addTopicToLabRequest(labId: string, name: string) {
+  return apiRequest<TopicOption>(`/labs/${labId}/topics`, {
+    method: 'POST',
+    body: { name },
+  });
+}
+
 export function updateInterestsRequest(topicIds: string[], otherInterests: string[] = []) {
   return apiRequest<AccountUserResponse>('/account/interests', {
     method: 'PUT',

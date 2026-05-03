@@ -181,18 +181,11 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap mb-2">
               <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${statusColor(assignment.status)}`}>
-                {assignment.status === 'PendingDecline'
-                  ? 'Decline Requested'
-                  : assignment.status === 'PendingExtension'
-                    ? 'Extension Requested'
-                    : assignment.status}
+                {assignment.status === 'PendingExtension'
+                  ? 'Extension Requested'
+                  : assignment.status}
               </span>
               <span className="text-xs text-slate-500">Round {assignment.round.roundNumber}</span>
-              {assignment.pendingDeclineRequest && (
-                <span className="px-2.5 py-1 rounded-full text-xs font-medium border bg-amber-500/10 text-amber-400 border-amber-500/20">
-                  Decline Pending Approval
-                </span>
-              )}
               {assignment.pendingExtensionRequest && (
                 <span className="px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-500/10 text-blue-400 border-blue-500/20">
                   Extension Pending Approval

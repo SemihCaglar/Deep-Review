@@ -182,7 +182,7 @@ export class AdminController {
 
     await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Lab', lab.id, `Created lab: ${name} with coordinator ${coordinator.email}`);
 
-    const loginUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const loginUrl = process.env.FRONTEND_URL || 'http://10.202.199.70:3000';
     await sendTemplatedEmail(coordinator, TemplateName.COORDINATOR_CREATED, {
       userName: coordinator.name,
       email: coordinator.email,
