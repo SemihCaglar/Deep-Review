@@ -159,8 +159,9 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
     base.setDate(base.getDate() + 5);
     return base.toISOString().split('T')[0];
   })();
-  const canWorkOnReview = ['Accepted', 'PendingExtension', 'PendingDecline', 'Overdue'].includes(assignment.status);
-  const canRequestExtension = ['Accepted', 'PendingExtension', 'Overdue'].includes(assignment.status) && !assignment.pendingDeclineRequest;
+  const isOverdue = assignment.status === 'Overdue';
+  const canWorkOnReview = ['Accepted', 'PendingExtension', 'PendingDecline'].includes(assignment.status);
+  const canRequestExtension = ['Accepted', 'PendingExtension'].includes(assignment.status) && !assignment.pendingDeclineRequest;
   const declinePendingNotice = assignment.pendingDeclineRequest ? (
     <div className="flex items-start gap-2 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
       <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
@@ -255,6 +256,17 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
       {/* Actions */}
       {ACTIVE_ASSIGNMENT_STATUSES.includes(assignment.status) && (
         <div className="border-t border-white/5 px-6 py-4 space-y-4">
+          {isOverdue && (
+            <div className="flex items-start gap-2 p-3 rounded-xl border border-red-500/20 bg-red-500/5">
+              <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-red-300">This assignment is overdue</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Extension requests, decline requests, and review submissions are no longer available for this assignment.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* ── Invited actions ── */}
           {assignment.status === 'Invited' && !assignment.pendingDeclineRequest && (

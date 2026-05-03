@@ -45,6 +45,7 @@ import {
 } from '@/lib/api';
 import { confirmCancel, customConfirm } from '@/lib/confirmAction';
 import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download, Search } from 'lucide-react';
+import WorkloadBar from '@/components/WorkloadBar';
 import AIToolsModal from '@/components/papers/AIToolsModal';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
@@ -199,7 +200,7 @@ function AssignmentRow({
   };
 
   const isCancelable = ['Invited', 'Accepted'].includes(assignment.status);
-  const isRemindable = ['Accepted', 'PendingExtension', 'PendingDecline', 'Overdue'].includes(assignment.status);
+  const isRemindable = ['Accepted', 'PendingExtension', 'PendingDecline'].includes(assignment.status);
   const showReassign = ['Declined', 'Cancelled'].includes(assignment.status);
   const isReassignable = roundStatus !== 'Completed' && assignment.status === 'Declined';
   const isCompleted = assignment.status === 'Completed';
@@ -266,8 +267,14 @@ function AssignmentRow({
                 setShowDeadlineInput(v => !v);
                 setError('');
               }}
-              disabled={busy || isCompleted}
-              title={isCompleted ? 'Cannot change deadline for a completed assignment' : undefined}
+              disabled={busy || isCompleted || assignment.status === 'Overdue'}
+              title={
+                isCompleted 
+                  ? 'Cannot change deadline for a completed assignment' 
+                  : assignment.status === 'Overdue' 
+                    ? 'Cannot change deadline for an overdue assignment' 
+                    : undefined
+              }
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Calendar className="w-3.5 h-3.5" /> Deadline
@@ -942,13 +949,22 @@ function RoundCard({
                             <p className="text-xs text-slate-500 p-2">No matching reviewers found.</p>
                           ) : (
                             filteredProposeSuggestions.map(s => (
-                              <div key={s.user.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
+                              <div key={s.user.id} className="flex items-start justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-1.5 min-w-0">
                                     <p className="text-sm text-white truncate">{s.user.name}</p>
                                     {s.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
                                   </div>
                                   <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
+                                  {s.workload && (
+                                    <WorkloadBar
+                                      workloadPct={s.workload.workloadPct}
+                                      openRounds={s.workload.openAuthorRounds}
+                                      activeReviews={s.workload.activeReviewAssignments}
+                                      draftRounds={s.workload.draftAuthorRounds}
+                                      completedLastMonth={s.workload.completedLastMonth}
+                                    />
+                                  )}
                                 </div>
                                 <button
                                   onClick={async () => {
@@ -1203,7 +1219,7 @@ function RoundCard({
                       filteredSuggestions.map(s => (
                         <label
                           key={s.user.id}
-                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedIds.has(s.user.id)
+                          className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedIds.has(s.user.id)
                               ? 'border-blue-500/40 bg-blue-500/10'
                               : 'border-white/5 bg-white/[0.02] hover:bg-white/5'
                             }`}
@@ -1213,7 +1229,7 @@ function RoundCard({
                             name="reviewerSelect"
                             checked={selectedIds.has(s.user.id)}
                             onChange={() => toggleSelect(s.user.id)}
-                            className="accent-blue-500 w-4 h-4 shrink-0"
+                            className="accent-blue-500 w-4 h-4 shrink-0 mt-0.5"
                           />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 min-w-0">
@@ -1221,6 +1237,15 @@ function RoundCard({
                               {s.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
                             </div>
                             <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
+                            {s.workload && (
+                              <WorkloadBar
+                                workloadPct={s.workload.workloadPct}
+                                openRounds={s.workload.openAuthorRounds}
+                                activeReviews={s.workload.activeReviewAssignments}
+                                draftRounds={s.workload.draftAuthorRounds}
+                                completedLastMonth={s.workload.completedLastMonth}
+                              />
+                            )}
                           </div>
                         </label>
                       ))

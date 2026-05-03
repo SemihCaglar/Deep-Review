@@ -455,6 +455,7 @@ export type AuthorRound = {
   aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
   referenceVerificationReport?: ReferenceVerificationReport | null;
+  pcRelatedWorkRecommendations?: PCRelatedWorkResponse | null;
   annotatedPdfUrl?: string | null;
   checklistJson?: EmpiricalStandardsChecklist | null;
   checklistUrl?: string | null;
@@ -567,6 +568,7 @@ export type RoundWithAssignments = {
   aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
   referenceVerificationReport?: ReferenceVerificationReport | null;
+  pcRelatedWorkRecommendations?: PCRelatedWorkResponse | null;
   annotatedPdfUrl?: string | null;
   checklistJson?: EmpiricalStandardsChecklist | null;
   checklistUrl?: string | null;
@@ -597,6 +599,13 @@ export type SuggestedReviewer = {
   user: { id: string; name: string; email: string; role: string };
   hasPreviouslyCompletedReview?: boolean;
   reasons: string[];
+  workload: {
+    workloadPct: number;
+    openAuthorRounds: number;
+    activeReviewAssignments: number;
+    draftAuthorRounds: number;
+    completedLastMonth: number;
+  };
 };
 
 // ==== ROUND MANAGEMENT API FUNCTIONS ====
@@ -841,14 +850,27 @@ export type ReviewerRanking = {
   avgQuantityScore: number | null;
   avgTimeScore: number | null;
   totalAssigned: number;
+  totalAccepted: number;
   totalCompleted: number;
   totalIncomplete: number;
   totalDeclined: number;
+  acceptanceRate: number | null;
+  rejectionRate: number | null;
+  onTimeCompleted: number;
+  delayedCompleted: number;
+  onTimeRate: number | null;
+  delayedRate: number | null;
   ratingCount: number;
 };
 
 export type OverallAnalyticsSummary = {
+  period: 'monthly' | 'yearly' | 'overall';
+  periodStart: string | null;
+  periodEnd: string | null;
   totalReviewers: number;
+  totalAssigned: number;
+  totalCompleted: number;
+  avgReviewerScore: number | null;
   avgAggregateScore: number | null;
   highestScore: number | null;
   lowestScore: number | null;
@@ -864,8 +886,11 @@ export type UserAnalyticsResponse = ReviewerRanking & {
   totalReviewers: number;
 };
 
-export function getOverallAnalyticsRequest() {
-  return apiRequest<OverallAnalyticsResponse>('/ratings/overall');
+export type AnalyticsPeriod = 'monthly' | 'yearly' | 'overall';
+
+export function getOverallAnalyticsRequest(period: AnalyticsPeriod = 'overall') {
+  const query = new URLSearchParams({ period }).toString();
+  return apiRequest<OverallAnalyticsResponse>(`/ratings/overall?${query}`);
 }
 
 export function submitRatingRequest(assignmentId: string, qualityScore: number, quantityScore: number, timeScore: number) {
@@ -1061,4 +1086,73 @@ export function cancelCollaborationInvitationRequest(invitationId: string) {
     `/collaboration-invitations/${invitationId}/cancel`,
     { method: 'PATCH' },
   );
+}
+
+// ==== PC RELATED WORK RECOMMENDATION API ====
+
+export type RelatedWorkRecommendation = {
+  pcMemberName: string;
+  paperTitle: string;
+  paperAbstract: string | null;
+  year: number | null;
+  venue: string | null;
+  doi: string | null;
+  url: string | null;
+  relevant: boolean;
+  confidence: 'high' | 'medium' | 'low';
+  relationshipType: 'same_problem' | 'same_method' | 'same_domain' | 'same_dataset' | 'background' | 'weakly_related' | 'unrelated';
+  recommendationReason: string;
+};
+
+export type PCRelatedWorkResponse = {
+  venueUrl: string;
+  paperTitle: string;
+  summary: {
+    pcMembersExtracted: number;
+    pcMembersMatchedInOpenAlex: number;
+    candidatePapersChecked: number;
+    recommendationsReturned: number;
+  };
+  recommendations: RelatedWorkRecommendation[];
+  issues: string[];
+};
+
+export async function getPCRelatedWorkRecommendations(
+  venueUrl: string,
+  paperTitle: string,
+  paperAbstract: string,
+  roundId?: string,
+  committeeMembers?: string,
+  format?: 'json' | 'csv'
+): Promise<PCRelatedWorkResponse | Blob> {
+  const token = getToken();
+  const url = new URL(`${API_BASE_URL}/pc-related-work/recommendations`);
+  if (format === 'csv') url.searchParams.set('format', 'csv');
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      venueUrl,
+      paperTitle,
+      paperAbstract,
+      ...(roundId && { roundId }),
+      ...(committeeMembers && { committeeMembers })
+    }),
+  });
+
+  if (format === 'csv') {
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({ message: 'Unknown error' }));
+      throw new ApiError(payload.message || 'Failed to get CSV', response.status);
+    }
+    return response.blob();
+  }
+
+  const payload = await response.json();
+  if (!response.ok) throw new ApiError(payload.message || 'Unknown error', response.status);
+  return payload as PCRelatedWorkResponse;
 }

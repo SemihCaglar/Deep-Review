@@ -402,7 +402,6 @@ export class AssignmentController {
         AssignmentStatus.Accepted,
         AssignmentStatus.PendingExtension,
         AssignmentStatus.PendingDecline,
-        AssignmentStatus.Overdue,
       ]);
 
       const assignRepo = AppDataSource.getRepository(Assignment);
@@ -469,7 +468,6 @@ export class AssignmentController {
         AssignmentStatus.Accepted,
         AssignmentStatus.PendingExtension,
         AssignmentStatus.PendingDecline,
-        AssignmentStatus.Overdue,
       ]);
 
       const assignRepo = AppDataSource.getRepository(Assignment);
@@ -594,6 +592,10 @@ export class AssignmentController {
 
       const isOwner = assignment.round.paper.coordinators?.some(c => c.id === coordinator.id);
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
+
+      if (assignment.status === AssignmentStatus.Overdue) {
+        return res.status(400).json({ message: 'Cannot update deadline for an overdue assignment' });
+      }
 
       const newDeadline = new Date(deadline);
       const round = assignment.round;

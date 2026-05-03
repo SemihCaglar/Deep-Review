@@ -11,6 +11,14 @@ import { RoundService } from '../services/RoundService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class ReviewerResponseController {
+  private static isOverdue(assignment: Assignment): boolean {
+    return assignment.status === AssignmentStatus.Overdue;
+  }
+
+  private static overdueResponseMessage(): string {
+    return 'This assignment is overdue. Extension requests, decline requests, and review submissions are no longer available.';
+  }
+
   // ── body-based: POST /responses/invitation ────────────────────────────────
   static async respondToInvitation(req: AuthenticatedRequest, res: Response) {
     try {
@@ -113,6 +121,9 @@ export class ReviewerResponseController {
       if (assignment.reviewer.id !== user.id) {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
       }
+      if (ReviewerResponseController.isOverdue(assignment)) {
+        return res.status(400).json({ message: ReviewerResponseController.overdueResponseMessage() });
+      }
       const allowedStatuses = [
         AssignmentStatus.Invited,
         AssignmentStatus.Accepted,
@@ -206,6 +217,9 @@ export class ReviewerResponseController {
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
+      }
+      if (ReviewerResponseController.isOverdue(assignment)) {
+        return res.status(400).json({ message: ReviewerResponseController.overdueResponseMessage() });
       }
       const allowedForExtension = [
         AssignmentStatus.Accepted,
@@ -499,6 +513,17 @@ export class ReviewerResponseController {
       if (assignment.reviewer.id !== user.id) {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
       }
+      if (ReviewerResponseController.isOverdue(assignment)) {
+        return res.status(400).json({ message: ReviewerResponseController.overdueResponseMessage() });
+      }
+      const summaryAllowedStatuses = [
+        AssignmentStatus.Accepted,
+        AssignmentStatus.PendingExtension,
+        AssignmentStatus.PendingDecline,
+      ];
+      if (!summaryAllowedStatuses.includes(assignment.status)) {
+        return res.status(400).json({ message: `Cannot submit review summary: your assignment is currently '${assignment.status}'. Only Accepted, PendingExtension, or PendingDecline assignments can submit summaries.` });
+      }
 
       const summaryRepo = AppDataSource.getRepository(Summary);
       const summary = summaryRepo.create({ assignment, text: text.trim() });
@@ -528,6 +553,9 @@ export class ReviewerResponseController {
       if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
       if (assignment.reviewer.id !== user.id) {
         return res.status(403).json({ message: 'Forbidden: This assignment is not assigned to you' });
+      }
+      if (ReviewerResponseController.isOverdue(assignment)) {
+        return res.status(400).json({ message: ReviewerResponseController.overdueResponseMessage() });
       }
       const completableStatuses = [
         AssignmentStatus.Accepted,

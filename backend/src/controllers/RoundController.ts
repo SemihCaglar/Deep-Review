@@ -9,6 +9,7 @@ import { ExtensionStatus } from '../entities/Extension';
 import { SubmissionRuleSet } from '../entities/SubmissionRuleSet';
 import { AIReviewReport } from '../entities/AIReviewReport';
 import { RoundService, RoundServiceError } from '../services/RoundService';
+import { computeWorkloadBatch } from '../services/workloadService';
 import { sendTemplatedEmail } from '../services/emailService';
 import { TemplateName } from '../entities/Template';
 import { ComplianceCheckAgentService } from '../ai_content/services/ComplianceCheckAgentService';
@@ -228,7 +229,6 @@ export class RoundController {
           AssignmentStatus.Accepted,
           AssignmentStatus.PendingExtension,
           AssignmentStatus.PendingDecline,
-          AssignmentStatus.Overdue,
         ];
         const assignments = await assignmentRepo.find({
           where: { round: { id: round.id } },
@@ -487,11 +487,16 @@ export class RoundController {
         suggestions.push({
           user: { id: user.id, name: user.name, email: user.email, role: user.role },
           hasPreviouslyCompletedReview: hasSubmittedReviewForPaper,
-          reasons
+          reasons,
         });
       }
 
-      return res.status(200).json(suggestions);
+      const workloadMap = await computeWorkloadBatch(suggestions.map(s => s.user.id));
+      const suggestionsWithWorkload = suggestions
+        .map(s => ({ ...s, workload: workloadMap.get(s.user.id)! }))
+        .sort((a, b) => a.workload.workloadPct - b.workload.workloadPct);
+
+      return res.status(200).json(suggestionsWithWorkload);
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -763,6 +768,7 @@ export class RoundController {
         aiReviewReport: r.aiReviewReport,
         complianceReport: r.complianceReport ?? null,
         referenceVerificationReport: r.referenceVerificationReport ?? null,
+        pcRelatedWorkRecommendations: r.pcRelatedWorkRecommendations ?? null,
         annotatedPdfUrl: r.annotatedPdfUrl,
         checklistJson: r.checklistJson ?? null,
         checklistUrl: r.checklistUrl ?? null,
@@ -869,6 +875,7 @@ export class RoundController {
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
         complianceReport: round.complianceReport ?? null,
         referenceVerificationReport: round.referenceVerificationReport ?? null,
+        pcRelatedWorkRecommendations: round.pcRelatedWorkRecommendations ?? null,
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
