@@ -98,6 +98,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     if (!isOpen || !round?.id) return;
     setLocalAiResult(null);
     setLocalComplianceResult(null);
+    setComplianceError('');
     setLocalRefVerifResult(null);
     setChecklistAnswerData(null);
     setChecklistAnswerError('');
@@ -105,11 +106,17 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     setFinalizedChecklist(null);
     setConfirmedStandards(new Set());
     setExpandedChecklistStandards(new Set());
-    setVenueUrl(round.targetVenueUrl || '');
     setCommitteeMembers('');
     setPcRelatedError('');
     setLocalPCRelatedResult(null);
-  }, [isOpen, round?.id, round?.targetVenueUrl]);
+  }, [isOpen, round?.id]);
+
+  // Keep venueUrl in sync with the round's targetVenueUrl separately
+  // (using a separate effect so it doesn't wipe local results on refresh)
+  useEffect(() => {
+    if (!isOpen) return;
+    setVenueUrl(round?.targetVenueUrl || '');
+  }, [isOpen, round?.targetVenueUrl]);
 
   // Fetch paper data (title + abstract) for PC Related Work feature
   useEffect(() => {
@@ -500,57 +507,73 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
             </div>
           )}
 
-          {/* Compliance Result */}
-          {comp && (
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
-              <button
-                onClick={() => setComplianceExpanded(v => !v)}
-                className="w-full flex items-center justify-between p-4 hover:bg-emerald-500/5 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <ChevronDown className={`w-4 h-4 text-emerald-500/60 transition-transform ${complianceExpanded ? '' : '-rotate-90'}`} />
-                  <p className="text-sm font-bold text-emerald-400 uppercase tracking-wider">Compliance Check</p>
-                </div>
+          {/* Compliance Check */}
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
+            <button
+              onClick={() => setComplianceExpanded(v => !v)}
+              className="w-full flex items-center justify-between p-4 hover:bg-emerald-500/5 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <ChevronDown className={`w-4 h-4 text-emerald-500/60 transition-transform ${complianceExpanded ? '' : '-rotate-90'}`} />
+                <p className="text-sm font-bold text-emerald-400 uppercase tracking-wider">Compliance Check</p>
+              </div>
+              {comp && (
                 <div className="flex items-center gap-2">
                   {(() => {
                     const entries = Object.entries(comp) as [string, any][];
                     const failCount = entries.filter(([, v]) => v.status === 'fail').length;
                     const unknownCount = entries.filter(([, v]) => v.status === 'unknown').length;
                     const passCount = entries.filter(([, v]) => v.status === 'pass').length;
+                    const skippedCount = entries.filter(([, v]) => v.status === 'skipped').length;
                     return (
                       <>
                         {failCount > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-500/20 text-red-300">{failCount} fail</span>}
                         {unknownCount > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">{unknownCount} ?</span>}
                         {passCount > 0 && <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">{passCount} pass</span>}
+                        {skippedCount > 0 && failCount === 0 && unknownCount === 0 && passCount === 0 && <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-500/20 text-slate-400">{skippedCount} skipped</span>}
                       </>
                     );
                   })()}
                 </div>
-              </button>
-
-              {complianceExpanded && (
-                <div className="p-4 pt-2 grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-emerald-500/10 bg-slate-900/30">
-                  {(Object.entries(comp) as [string, any][]).map(([key, val]) => {
-                    let icon;
-                    if (val.status === 'pass') icon = <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />;
-                    else if (val.status === 'fail') icon = <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />;
-                    else if (val.status === 'skipped') icon = <AlertCircle className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />;
-                    else icon = <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />;
-                    
-                    return (
-                      <div key={key} className="flex items-start gap-3 bg-slate-800/40 p-3 rounded-lg">
-                        {icon}
-                        <div>
-                          <p className="text-xs font-medium text-slate-300 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">{val.status === 'skipped' ? 'Not applicable' : (val.details || val.status)}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
               )}
-            </div>
-          )}
+            </button>
+
+            {complianceExpanded && (
+              <div className="p-4 pt-2 space-y-3 border-t border-emerald-500/10 bg-slate-900/30">
+                <div className="flex gap-2 items-center">
+                  <button
+                    onClick={() => complianceFileRef.current?.click()}
+                    disabled={runningCompliance}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  >
+                    {runningCompliance ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking…</> : comp ? 'Run Again' : 'Run Compliance Check'}
+                  </button>
+                  {complianceError && <p className="text-xs text-red-400">{complianceError}</p>}
+                </div>
+
+                {comp && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(Object.entries(comp) as [string, any][]).map(([key, val]) => {
+                      let icon;
+                      if (val.status === 'pass') icon = <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />;
+                      else if (val.status === 'fail') icon = <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />;
+                      else if (val.status === 'skipped') icon = <AlertCircle className="w-4 h-4 text-slate-500 mt-0.5 shrink-0" />;
+                      else icon = <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />;
+                      return (
+                        <div key={key} className="flex items-start gap-3 bg-slate-800/40 p-3 rounded-lg">
+                          {icon}
+                          <div>
+                            <p className="text-xs font-medium text-slate-300 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{val.status === 'skipped' ? 'Not applicable' : (val.details || val.status)}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Reference Verification */}
           {refReport && (

@@ -1385,7 +1385,8 @@ export class RoundController {
         rules: ruleSet.rules,
       });
 
-      // Persist results per requesting user so authors/coordinators do not overwrite each other's reports.
+      // Persist results — both shared field (for display) and per-user field (to avoid overwrites).
+      round.complianceReport = complianceReport;
       round.complianceReportsByUser = {
         ...(round.complianceReportsByUser ?? {}),
         [user.id]: {
