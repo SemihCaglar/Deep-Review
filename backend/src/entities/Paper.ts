@@ -9,8 +9,7 @@ export enum PaperStatus {
   Draft = 'Draft',
   InReview = 'In Review',
   Completed = 'Completed',
-  Accepted = 'Accepted',
-  Archived = 'Archived'
+  Accepted = 'Accepted'
 }
 
 @Entity()

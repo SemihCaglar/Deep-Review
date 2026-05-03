@@ -6,7 +6,7 @@ import { notFound, useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS } from '@/lib/mockData';
 import { confirmCancel } from '@/lib/confirmAction';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, Download } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, Download, AlertCircle } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getLabTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
@@ -106,8 +106,8 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [loading, setLoading] = useState(true);
     const [availableTopics, setAvailableTopics] = useState<TopicOption[]>([]);
     
-    const [isArchiving, setIsArchiving] = useState(false);
-    const [archiveError, setArchiveError] = useState('');
+    const [isAccepting, setIsAccepting] = useState(false);
+    const [acceptError, setAcceptError] = useState('');
     const [declineReason, setDeclineReason] = useState('');
     const [showDeclineForm, setShowDeclineForm] = useState(false);
     const [showExtensionForm, setShowExtensionForm] = useState(false);
@@ -333,43 +333,29 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
             case 'In Review': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
             case 'Completed': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Accepted': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-            case 'Archived': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
             default: return 'bg-white/10 text-slate-300 border-white/20';
         }
     };
 
-    const handleArchive = async () => {
-        setIsArchiving(true);
-        setArchiveError('');
+    const handleAccept = async () => {
+        if (!await confirmCancel('Are you sure you want to accept this paper? This action cannot be undone.')) return;
+        setIsAccepting(true);
+        setAcceptError('');
         try {
-            const updatedPaper = await updatePaperStatusRequest(paper.id, 'Archived');
+            const updatedPaper = await updatePaperStatusRequest(paper.id, 'Accepted');
             setPaper(updatedPaper);
             setLocalStatus(updatedPaper.status);
         } catch (err) {
-            setArchiveError(err instanceof ApiError ? err.message : 'Failed to archive paper.');
+            setAcceptError(err instanceof ApiError ? err.message : 'Failed to accept paper.');
         } finally {
-            setIsArchiving(false);
-        }
-    };
-
-    const handleUnarchive = async () => {
-        setIsArchiving(true);
-        setArchiveError('');
-        try {
-            const updatedPaper = await updatePaperStatusRequest(paper.id, 'Draft');
-            setPaper(updatedPaper);
-            setLocalStatus(updatedPaper.status);
-        } catch (err) {
-            setArchiveError(err instanceof ApiError ? err.message : 'Failed to unarchive paper.');
-        } finally {
-            setIsArchiving(false);
+            setIsAccepting(false);
         }
     };
 
     const effectivePaperStatus = currentStatus;
-    const canEditAuthors = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
-    const canEditLinks = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Archived';
-    const canChangeArchiveState = user.isCoordinator || isAuthor;
+    const canEditAuthors = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Accepted';
+    const canEditLinks = (user.isCoordinator || isAuthor) && effectivePaperStatus !== 'Accepted';
+    const canChangeAcceptState = user.isCoordinator || isAuthor;
     const authorDirectory = [
         ...(paper.authors ?? []),
         ...(paper.coordinators ?? []),
@@ -787,7 +773,12 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                 {isRoundExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                             </div>
                                             <div>
-                                            <h3 className="text-white font-semibold">Round {round.roundNumber}</h3>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-white font-semibold">Round {round.roundNumber}</h3>
+                                                {round.assignments.some(a => a.status === 'Completed' && !a.hasRating) && (
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.6)] border border-purple-400/20" title="Waiting rating" />
+                                                )}
+                                            </div>
                                             <p className="text-xs text-slate-500 mt-1">
                                                 Started: {formatDateTime(round.startedAt)} · Completed: {formatDateTime(round.completedAt)}
                                             </p>
@@ -1034,7 +1025,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                             {paper.overleafLink ? (
                                 <a href={paper.overleafLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 bg-blue-500/10 px-3 py-1.5 rounded-lg transition-colors border border-blue-500/20 w-fit">
                                     <ExternalLink className="w-4 h-4" />
-                                    Open Overleaf Manuscript
+                                    Open Overleaf
                                 </a>
                             ) : (
                                 <span className="inline-flex items-center gap-2 text-sm text-slate-500 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/10 w-fit">
@@ -1157,32 +1148,38 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         );
                     })()}
 
-                    {canChangeArchiveState && (
-                        <>
-                            {effectivePaperStatus === 'Archived' ? (
-                                <button
-                                    onClick={handleUnarchive}
-                                    disabled={isArchiving}
-                                    className="w-full px-5 py-2.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                                >
-                                    <Archive className="w-4 h-4" />
-                                    Unarchive Paper
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={handleArchive}
-                                    disabled={isArchiving}
-                                    className="w-full px-5 py-2.5 bg-red-600/10 hover:bg-red-600/20 text-red-400 border border-red-500/20 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                                >
-                                    <Archive className="w-4 h-4" />
-                                    Archive Paper
-                                </button>
-                            )}
-                            {archiveError && (
-                                <p className="text-xs text-red-400 leading-relaxed">{archiveError}</p>
-                            )}
-                        </>
-                    )}
+                    {canChangeAcceptState && (() => {
+                        const now = new Date();
+                        const hasFutureDeadline = authorRounds.some(r => r.submissionDeadline && new Date(r.submissionDeadline) > now);
+                        const hasActiveRound = authorRounds.some(r => r.status === 'Draft' || r.status === 'Open');
+                        const isAcceptDisabled = isAccepting || hasFutureDeadline || hasActiveRound;
+                        
+                        return (
+                            <>
+                                {effectivePaperStatus !== 'Accepted' && (
+                                    <div className="space-y-2">
+                                        <button
+                                            onClick={handleAccept}
+                                            disabled={isAcceptDisabled}
+                                            className="w-full px-5 py-2.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                            title={hasFutureDeadline ? "Cannot accept before submission deadline has passed" : hasActiveRound ? "Cannot accept while a review round is active" : ""}
+                                        >
+                                            <CheckCircle2 className="w-4 h-4" />
+                                            Accept Paper
+                                        </button>
+                                        {isAcceptDisabled && !isAccepting && (
+                                            <p className="text-xs text-slate-500 text-center">
+                                                {hasActiveRound ? "Cannot accept while a review round is active." : "Cannot accept before submission deadline has passed."}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                {acceptError && (
+                                    <p className="text-xs text-red-400 leading-relaxed">{acceptError}</p>
+                                )}
+                            </>
+                        );
+                    })()}
 
 
                     {/* Reviewer Actions */}
@@ -1434,8 +1431,13 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 {!loadingRounds && latestRound && (
                                     <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4 space-y-3">
                                         <div className="flex items-center gap-3 flex-wrap">
-                                            <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-xs font-bold shrink-0">
-                                                {latestRound.roundNumber}
+                                            <div className="relative shrink-0">
+                                                <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-xs font-bold">
+                                                    {latestRound.roundNumber}
+                                                </div>
+                                                {paperHistory?.rounds?.find(r => r.roundNumber === latestRound.roundNumber)?.assignments?.some(a => a.status === 'Completed' && !a.hasRating) && (
+                                                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(168,85,247,0.5)]" title="Waiting rating" />
+                                                )}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium text-white">{latestRound.targetVenue || `Round ${latestRound.roundNumber}`}</p>
@@ -1525,6 +1527,9 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             <input type="text" value={newTargetVenueUrl} onChange={e => setNewTargetVenueUrl(e.target.value)}
                                                 placeholder="https://neurips.cc/Conferences/2026"
                                                 className="w-full bg-background border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50" />
+                                            <p className="text-[11px] text-amber-400/80 flex items-center gap-1 mt-1 font-medium">
+                                                <AlertCircle className="w-3 h-3" /> Please double-check the venue URL. It cannot be changed after the round is created.
+                                            </p>
                                         </div>
                                         {newVenueCat === 'Conference' && (
                                             <div className="space-y-1">
@@ -1581,8 +1586,13 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors"
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-xs font-bold">
-                                                    {round.roundNumber}
+                                                <div className="relative">
+                                                    <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-xs font-bold">
+                                                        {round.roundNumber}
+                                                    </div>
+                                                    {paperHistory?.rounds?.find(r => r.roundNumber === round.roundNumber)?.assignments?.some(a => a.status === 'Completed' && !a.hasRating) && (
+                                                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(168,85,247,0.5)]" title="Waiting rating" />
+                                                    )}
                                                 </div>
                                                 <div className="text-left">
                                                     <p className="text-sm font-medium text-white">{round.targetVenue || `Round ${round.roundNumber}`}</p>

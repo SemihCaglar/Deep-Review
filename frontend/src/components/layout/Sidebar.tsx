@@ -24,11 +24,11 @@ export default function Sidebar() {
 
     const handleLogout = () => {
         logout();
-        router.replace('/login');
+        window.location.href = '/login';
     };
 
     const getNavItems = () => {
-            if (user.isAdmin) {
+        if (user.isAdmin) {
             return [
                 { name: 'Admin Dashboard', href: '/admin', icon: Shield },
             ];

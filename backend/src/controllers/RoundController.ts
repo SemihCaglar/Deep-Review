@@ -142,6 +142,14 @@ export class RoundController {
 
       const existingRounds = await roundRepo.find({ where: { paper: { id: paperId } } });
 
+      const now = new Date();
+      const roundWithFutureDeadline = existingRounds.find(r => 
+        r.submissionDeadline && r.submissionDeadline.getTime() > now.getTime()
+      );
+      if (roundWithFutureDeadline) {
+        return res.status(400).json({ message: 'Cannot create a new round while a previous round has a submission deadline in the future' });
+      }
+
       const round = new Round();
       round.paper = paper;
       round.roundNumber = existingRounds.length + 1;

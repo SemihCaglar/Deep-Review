@@ -97,7 +97,13 @@ export default function AdminPage() {
         {TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => {
+              if (activeTab !== tab.id) {
+                setLoading(true);
+                setData(null);
+                setActiveTab(tab.id);
+              }
+            }}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'

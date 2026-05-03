@@ -392,13 +392,17 @@ export class PaperController {
 
       const papers = await paperRepo.find({
         where: { id: In(authoredPaperIds.map(p => p.id)) },
-        relations: ['authors', 'topics', 'coordinators', 'rounds', 'rounds.assignments'],
+        relations: ['authors', 'topics', 'coordinators', 'rounds', 'rounds.assignments', 'rounds.assignments.rating'],
       });
 
       const result = papers.map(p => {
         const latestRound = p.rounds?.length
           ? p.rounds.slice().sort((a, b) => b.roundNumber - a.roundNumber)[0]
           : null;
+
+        const waitingRatingsCount = p.rounds?.reduce((count, round) => {
+          return count + (round.assignments?.filter(a => a.status === AssignmentStatus.Completed && !a.rating)?.length || 0);
+        }, 0) || 0;
 
         return {
           id: p.id,
@@ -423,6 +427,7 @@ export class PaperController {
             (count, round) => count + (round.assignments ?? []).length,
             0,
           ),
+          waitingRatingsCount,
         };
       });
 
@@ -714,7 +719,11 @@ export class PaperController {
         return res.status(403).json({ message: 'Forbidden: You are not an author or coordinator of this paper' });
       }
 
-      if (status === PaperStatus.Archived) {
+      if (paper.status === PaperStatus.Accepted && status !== PaperStatus.Accepted) {
+        return res.status(400).json({ message: 'Once a paper is accepted, its status cannot be changed' });
+      }
+
+      if (status === PaperStatus.Accepted) {
         const now = new Date();
 
         const futureConferenceSubmission = (paper.rounds ?? []).find(round =>
@@ -723,12 +732,12 @@ export class PaperController {
           round.submissionDeadline.getTime() > now.getTime()
         );
         if (futureConferenceSubmission) {
-          return res.status(400).json({ message: 'Paper cannot be archived before the conference submission deadline has passed' });
+          return res.status(400).json({ message: 'Paper cannot be accepted before the conference submission deadline has passed' });
         }
 
         const activeRound = (paper.rounds ?? []).find(round => round.status === RoundStatus.Draft || round.status === RoundStatus.Open);
         if (activeRound) {
-          return res.status(400).json({ message: 'Paper cannot be archived while a review round is draft or open' });
+          return res.status(400).json({ message: 'Paper cannot be accepted while a review round is draft or open' });
         }
       }
 

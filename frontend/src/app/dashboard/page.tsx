@@ -23,6 +23,7 @@ import {
   getMyCoordinatedPapersRequest,
   getMyAssignmentsRequest,
   getPaperRoundsRequest,
+  getMyWrittenPapersRequest,
   getPendingSignupsRequest,
   getOverallAnalyticsRequest,
   getPendingCollaborationInvitationsRequest,
@@ -179,6 +180,9 @@ export default function DashboardPage() {
   const [pendingCount, setPendingCount] = React.useState(0);
   const [isLoadingPending, setIsLoadingPending] = React.useState(false);
   const [pendingError, setPendingError] = React.useState('');
+
+  // Author State (Waiting Ratings)
+  const [waitingRatingsCount, setWaitingRatingsCount] = React.useState(0);
 
   // Coordinator State (Reviewer Requests)
   const [reviewerRequests, setReviewerRequests] = React.useState<PendingReviewerRequest[]>([]);
@@ -357,6 +361,17 @@ export default function DashboardPage() {
     }
   }, [user.isCoordinator, user.isAdmin]);
 
+  const loadWaitingRatingsCount = React.useCallback(async () => {
+    if (user.isCoordinator || user.isAdmin || user.isFrozen) return;
+    try {
+      const papers = await getMyWrittenPapersRequest();
+      const total = papers.reduce((sum, paper) => sum + (paper.waitingRatingsCount || 0), 0);
+      setWaitingRatingsCount(total);
+    } catch {
+      // silently ignore
+    }
+  }, [user.isCoordinator, user.isAdmin, user.isFrozen]);
+
   // --- Effects ---
 
   React.useEffect(() => {
@@ -367,8 +382,9 @@ export default function DashboardPage() {
       loadCollabInvitationCount();
     } else if (!user.isAdmin && !user.isFrozen) {
       loadRequestDecisions();
+      loadWaitingRatingsCount();
     }
-  }, [user.isCoordinator, user.isAdmin, loadPendingSignups, loadReviewerRequests, loadAnalytics, loadRequestDecisions, loadCollabInvitationCount]);
+  }, [user.isCoordinator, user.isAdmin, loadPendingSignups, loadReviewerRequests, loadAnalytics, loadRequestDecisions, loadCollabInvitationCount, loadWaitingRatingsCount]);
 
   // --- Actions ---
 
@@ -451,6 +467,7 @@ export default function DashboardPage() {
     : [
         { label: 'Account Status', value: 'Active', icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
         { label: 'Assigned Reviews', value: isLoadingMyReviews ? '...' : myReviewAssignments.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '/my-reviews' },
+        { label: 'Waiting Ratings', value: waitingRatingsCount, icon: FileText, color: 'text-purple-400', bg: 'bg-purple-500/10', href: '/papers?filter=authored' },
       ];
 
   const visibleRequestDecisions = requestDecisions.slice(0, 5);
