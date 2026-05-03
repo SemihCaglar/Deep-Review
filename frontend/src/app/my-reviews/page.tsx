@@ -335,7 +335,18 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                 </button>
                 {canRequestExtension && (
                   <button
-                    onClick={() => { setShowExtForm(v => !v); setShowCompleteForm(false); setShowLateDeclineForm(false); setError(''); }}
+                    onClick={() => {
+                      if (!showExtForm) {
+                        setExtDate(assignDeadlineDate);
+                        if (assignment.pendingExtensionRequest) {
+                          setExtReason(assignment.pendingExtensionRequest.reason);
+                        }
+                      }
+                      setShowExtForm(v => !v);
+                      setShowCompleteForm(false);
+                      setShowLateDeclineForm(false);
+                      setError('');
+                    }}
                     disabled={busy}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 disabled:opacity-50 transition-colors"
                   >
@@ -461,7 +472,7 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
                     >
                       Submit Decline Request
                     </button>
-                    <button onClick={() => setShowLateDeclineForm(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                    <button onClick={async () => { if (await confirmCancel()) setShowLateDeclineForm(false); }} className="text-xs text-slate-500 hover:text-slate-300">
                       Cancel
                     </button>
                   </div>
@@ -471,7 +482,6 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
           )}
 
           {declinePendingNotice}
-
 
           {error && <p className="text-xs text-red-400">{error}</p>}
           {successMsg && <p className="text-xs text-emerald-400">{successMsg}</p>}

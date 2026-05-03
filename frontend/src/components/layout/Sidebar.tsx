@@ -9,6 +9,7 @@ import ProfileModal from './ProfileModal';
 import {
     getMyCoordinatedPapersRequest,
     getPaperRoundsRequest,
+    getMyAssignmentsRequest,
     getPendingCollaborationInvitationsRequest,
     getPendingSignupsRequest,
 } from '@/lib/api';
@@ -21,6 +22,7 @@ export default function Sidebar() {
     const [isProfileOpen, setIsProfileOpen] = React.useState(false);
     const [hasPendingApprovals, setHasPendingApprovals] = React.useState(false);
     const [hasPendingRoundRequests, setHasPendingRoundRequests] = React.useState(false);
+    const [hasPendingInvitations, setHasPendingInvitations] = React.useState(false);
 
     const handleLogout = () => {
         logout();
@@ -66,6 +68,7 @@ export default function Sidebar() {
         if (!user.isCoordinator || user.isAdmin || user.isFrozen) {
             setHasPendingApprovals(false);
             setHasPendingRoundRequests(false);
+            setHasPendingInvitations(false);
             return;
         }
 
@@ -104,9 +107,24 @@ export default function Sidebar() {
             }
         };
 
+        const loadPendingInvitationsIndicator = async () => {
+            if (user.isAdmin || user.isCoordinator || user.isFrozen) return;
+            try {
+                const assignments = await getMyAssignmentsRequest();
+                if (!isMounted) return;
+                const hasInvited = assignments.some(a => a.status === 'Invited');
+                setHasPendingInvitations(hasInvited);
+            } catch {
+                if (isMounted) {
+                    setHasPendingInvitations(false);
+                }
+            }
+        };
+
         const loadIndicators = () => {
             loadPendingIndicator();
             loadRoundRequestIndicator();
+            loadPendingInvitationsIndicator();
         };
 
         loadIndicators();
@@ -186,6 +204,9 @@ export default function Sidebar() {
                             ) : null}
                             {item.href === '/rounds' && hasPendingRoundRequests ? (
                                 <span className="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_0_3px_rgba(251,191,36,0.16)]" />
+                            ) : null}
+                            {item.href === '/my-reviews' && hasPendingInvitations ? (
+                                <span className="h-2 w-2 rounded-full bg-blue-400 shadow-[0_0_0_3px_rgba(96,165,250,0.16)]" />
                             ) : null}
                         </Link>
                     );

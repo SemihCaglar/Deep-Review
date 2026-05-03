@@ -249,6 +249,13 @@ export type Paper = {
   topics?: TopicOption[];
   labs?: { id: string; name: string }[];
   history?: unknown[];
+
+  latestRoundNumber?: number | null;
+  latestRoundStatus?: string | null;
+  latestRoundDeadline?: string | null;
+  completedAssignments?: number;
+  totalAssignments?: number;
+  waitingRatingsCount?: number;
 };
 
 export type AuthoredPaper = Paper & {

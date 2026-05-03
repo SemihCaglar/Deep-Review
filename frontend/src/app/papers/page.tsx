@@ -107,6 +107,28 @@ export default function PapersList() {
         }
         if (statusFilter && p.status !== statusFilter) return false;
         return true;
+    }).sort((a, b) => {
+        const priority = (s: string) => {
+            if (s === 'Draft') return 0;
+            if (s === 'Accepted') return 2;
+            if (s === 'Completed') return 3;
+            return 1; // In Review, etc.
+        };
+
+        const pa = priority(a.status);
+        const pb = priority(b.status);
+
+        if (pa !== pb) return pa - pb;
+
+        // Within same status, specifically Accepted
+        if (a.status === 'Accepted') {
+            const da = a.latestRoundDeadline ? new Date(a.latestRoundDeadline).getTime() : 0;
+            const db = b.latestRoundDeadline ? new Date(b.latestRoundDeadline).getTime() : 0;
+            // "older is belower" => DESC order (newer deadlines at top of Accepted group)
+            return db - da;
+        }
+
+        return 0;
     });
 
     const hasActiveFilters = searchQuery.trim() || authorFilter.trim() || statusFilter;
@@ -228,7 +250,7 @@ export default function PapersList() {
                                                 </span>
                                             ))}
                                         </div>
-                                        {filter === 'authored' && 'latestRoundNumber' in paper && (
+                                        {paper.latestRoundNumber !== undefined && paper.latestRoundNumber !== null && (
                                             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                                                 <span className="inline-flex items-center gap-1.5">
                                                     <Clock className="w-3.5 h-3.5" />
