@@ -292,19 +292,33 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
               <div className="space-y-3">
                 {reviews.length > 0 ? reviews.map((review: any, idx: number) => (
                   <div key={review.id} className="rounded-lg bg-slate-800/50 overflow-hidden border border-slate-700/50">
-                    <button
-                      onClick={() => setExpandedReviewId(expandedReviewId === review.id ? null : review.id)}
-                      className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-700/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-full flex items-center justify-between px-3 py-2.5">
+                      <button
+                        onClick={() => setExpandedReviewId(expandedReviewId === review.id ? null : review.id)}
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
+                      >
                         <span className="text-sm font-medium text-slate-300">Review #{reviews.length - idx}</span>
                         <span className="text-xs text-slate-500">{new Date(review.createdAt).toLocaleString()}</span>
-                        {review.venue && (
-                          <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{review.venue}</span>
+                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {review.annotatedPdfUrl && (
+                          <a
+                            href={review.annotatedPdfUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 transition-colors"
+                          >
+                            <Download className="w-3 h-3" /> PDF
+                          </a>
                         )}
+                        <button
+                          onClick={() => setExpandedReviewId(expandedReviewId === review.id ? null : review.id)}
+                        >
+                          <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expandedReviewId === review.id ? 'rotate-180' : ''}`} />
+                        </button>
                       </div>
-                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expandedReviewId === review.id ? 'rotate-180' : ''}`} />
-                    </button>
+                    </div>
 
                     {expandedReviewId === review.id && (
                       <div className="px-4 py-3 border-t border-slate-700/50 bg-slate-900/50 space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar">
