@@ -1,12 +1,12 @@
-import { PdfAgentService } from './src/ai_content/services/PdfAgentService';
-import { ChecklistService } from './src/ai_content/services/ChecklistService';
+import { PdfAgentService } from '../../backend/src/ai_content/services/PdfAgentService';
+import { ChecklistService } from '../../backend/src/ai_content/services/ChecklistService';
 import fs from 'fs';
 import path from 'path';
 
 async function test() {
   console.log('🧪 Testing PDF Agent with test input...\n');
 
-  const testPdfPath = path.join(__dirname, 'src/ai_content/test_input.pdf');
+  const testPdfPath = path.join(__dirname, 'test_input.pdf');
   
   if (!fs.existsSync(testPdfPath)) {
     console.error('❌ Test PDF not found:', testPdfPath);

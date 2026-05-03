@@ -448,6 +448,7 @@ function RoundCard({
   const [reassigningForId, setReassigningForId] = useState<string | null>(null);
   
   const [suggestions, setSuggestions] = useState<SuggestedReviewer[]>([]);
+  const [addSearchQuery, setAddSearchQuery] = useState('');
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestError, setSuggestError] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -521,6 +522,7 @@ function RoundCard({
   const [loadingProposed, setLoadingProposed] = useState(false);
   const [showProposePanel, setShowProposePanel] = useState(false);
   const [proposeSuggestions, setProposeSuggestions] = useState<SuggestedReviewer[]>([]);
+  const [proposeSearchQuery, setProposeSearchQuery] = useState('');
   const [loadingProposeSuggestions, setLoadingProposeSuggestions] = useState(false);
   const [proposeError, setProposeError] = useState('');
   const [approving, setApproving] = useState(false);
@@ -587,6 +589,10 @@ function RoundCard({
     try {
       const updated = await removeProposedReviewerRequest(round.id, userId);
       setProposedReviewers(updated);
+      if (showProposePanel) {
+        const data = await getSuggestedReviewersRequest(round.id);
+        setProposeSuggestions(data.filter(s => !updated.some(p => p.id === s.user.id)));
+      }
     } catch (e) {
       setProposeError(e instanceof ApiError ? e.message : 'Failed to remove reviewer');
     }
@@ -705,190 +711,20 @@ function RoundCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [round.id, round.status]);
 
-  // AI Review
-  const aiFileRef = useRef<HTMLInputElement>(null);
-  const [runningAI, setRunningAI] = useState(false);
-  const [aiError, setAiError] = useState('');
-  const [aiStatus, setAiStatus] = useState('');
-  const [localAiResult, setLocalAiResult] = useState<any>(null);
-  const complianceFileRef = useRef<HTMLInputElement>(null);
-  const [runningCompliance, setRunningCompliance] = useState(false);
-  const [complianceError, setComplianceError] = useState('');
-  const [localComplianceResult, setLocalComplianceResult] = useState<any>(null);
-  const [complianceExpanded, setComplianceExpanded] = useState(false);
-  const [confirmedStandards, setConfirmedStandards] = useState<Set<string>>(new Set());
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['General', 'Qualitative', 'Quantitative', 'Literature Review', 'Other']));
-  const [finalizedChecklist, setFinalizedChecklist] = useState<any>(null);
-  const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null);
-  const [checklistAnswerData, setChecklistAnswerData] = useState<any>(null);
-  const [isRunningChecklistAnswering, setIsRunningChecklistAnswering] = useState(false);
-  const [checklistAnswerError, setChecklistAnswerError] = useState('');
-  const [expandedChecklistStandards, setExpandedChecklistStandards] = useState<Set<string>>(new Set());
-  const [checklistAnswerFilter, setChecklistAnswerFilter] = useState<'no' | 'unknown' | 'yes' | null>(null);
-  const checklistAnswerFileRef = useRef<HTMLInputElement>(null);
-  const refVerifFileRef = useRef<HTMLInputElement>(null);
-  const [runningRefVerif, setRunningRefVerif] = useState(false);
-  const [refVerifError, setRefVerifError] = useState('');
-  const [localRefVerifResult, setLocalRefVerifResult] = useState<ReferenceVerificationReport | null>(null);
-  const [refVerifExpanded, setRefVerifExpanded] = useState(false);
-
-  const STANDARDS_BY_CATEGORY = {
-    General: [
-      'Engineering Research',
-      'Multimethodology or mixed methods',
-    ],
-    Qualitative: [
-      'Action Research',
-      'Case Study',
-      'Grounded Theory',
-      'Qualitative Survey',
-    ],
-    Quantitative: [
-      'Benchmarking',
-      'Data Science',
-      'Experiment with human participants',
-      'Optimization Study',
-      'Quantitative Longitudinal Study',
-      'Quantitative Simulation',
-      'Questionnaire Survey',
-      'Repository Mining',
-    ],
-    'Literature Review': [
-      'Case Survey',
-      'Systematic Literature Review',
-    ],
-    Other: [
-      'Meta Science',
-      'Replication',
-      'Empirical Method Not Listed Above',
-    ],
-  } as Record<string, string[]>;
-
-  const AI_PHASES = [
-    { at: 0,  msg: 'Uploading PDF to agent…' },
-    { at: 4,  msg: 'Agent is reading the paper…' },
-    { at: 12, msg: 'Analyzing content and generating feedback…' },
-    { at: 22, msg: 'Annotating PDF…' },
-    { at: 32, msg: 'Downloading annotated PDF…' },
-    { at: 42, msg: 'Almost done…' },
-  ];
-
-  const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    setRunningAI(true);
-    setAiError('');
-    setAiStatus(AI_PHASES[0].msg);
-
-    const start = Date.now();
-    const ticker = setInterval(() => {
-      const elapsed = (Date.now() - start) / 1000;
-      const phase = [...AI_PHASES].reverse().find(p => elapsed >= p.at);
-      if (phase) setAiStatus(phase.msg);
-    }, 1000);
-
-    try {
-      const res = await startAIReviewRequest(round.id, file);
-      const aiReviewData = res.data?.aiReview;
-      const refVerifData = res.data?.referenceVerification;
-
-      // Normalize the response format for local display
-      setLocalAiResult({
-        reviewText: aiReviewData?.summaryReport,
-        annotatedPdfUrl: aiReviewData?.annotatedPdfUrl,
-        checklistJson: aiReviewData?.checklist,
-        checklistUrl: aiReviewData?.checklistUrl,
-        suggestedCitations: aiReviewData?.suggestedCitations
-      });
-
-      if (aiReviewData?.checklist?.selectedStandards) {
-        const standards = new Set<string>(aiReviewData.checklist.selectedStandards.map((s: any) => s.label));
-        setConfirmedStandards(standards);
-      }
-
-      // Display reference verification results
-      if (refVerifData?.report) {
-        setLocalRefVerifResult(refVerifData.report);
-      }
-
-      setAiStatus('');
-      onRefresh();
-    } catch (err: any) {
-      setAiError(err.message || 'AI Review failed');
-      setAiStatus('');
-    } finally {
-      clearInterval(ticker);
-      setRunningAI(false);
-    }
-  };
-
-  const handleComplianceFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    setRunningCompliance(true);
-    setComplianceError('');
-
-    try {
-      const res = await runComplianceCheckRequest(round.id, file);
-      setLocalComplianceResult(res.data);
-      onRefresh();
-    } catch (err: any) {
-      setComplianceError(err.message || 'Compliance check failed');
-    } finally {
-      setRunningCompliance(false);
-    }
-  };
-
-  const handleRefVerifFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
-    setRunningRefVerif(true);
-    setRefVerifError('');
-
-    try {
-      const res = await runReferenceVerificationRequest(round.id, file);
-      setLocalRefVerifResult(res.data);
-      onRefresh();
-    } catch (err: any) {
-      setRefVerifError(err.message || 'Reference verification failed');
-    } finally {
-      setRunningRefVerif(false);
-    }
-  };
-
-  // Initialize confirmed standards when round data loads
-  useEffect(() => {
-    // If already confirmed, show that state
-    if (round.confirmedChecklistJson?.selectedStandards) {
-      setFinalizedChecklist(round.confirmedChecklistJson);
-      return;
-    }
-
-    // Otherwise, pre-select AI-selected standards from local result or round data
-    if (confirmedStandards.size === 0) {
-      const checklist = localAiResult?.checklistJson || round.checklistJson;
-      if (checklist?.selectedStandards) {
-        const standards = new Set<string>(checklist.selectedStandards.map((s: any) => s.label));
-        setConfirmedStandards(standards);
-      }
-    }
-  }, [round.checklistJson, round.confirmedChecklistJson, localAiResult]);
-
-  useEffect(() => {
-    if (round.confirmedChecklistJson?.selectedStandards) {
-      getEmpiricalChecklistAnswersRequest(round.id)
-        .then(res => { if (res?.data) setChecklistAnswerData(res.data); })
-        .catch(() => {});
-    }
-  }, [round.id, round.confirmedChecklistJson]);
-
   const pendingCount = round.assignments.filter(
     a => a.pendingDeclineRequest || a.pendingExtensionRequest,
   ).length;
   const draftReviewerCount = proposedReviewers.length + round.assignments.length;
+
+  const filteredProposeSuggestions = proposeSuggestions.filter(s =>
+    s.user.name.toLowerCase().includes(proposeSearchQuery.toLowerCase()) ||
+    s.user.email.toLowerCase().includes(proposeSearchQuery.toLowerCase())
+  );
+
+  const filteredSuggestions = suggestions.filter(s =>
+    s.user.name.toLowerCase().includes(addSearchQuery.toLowerCase()) ||
+    s.user.email.toLowerCase().includes(addSearchQuery.toLowerCase())
+  );
 
   return (
     <div className="glass rounded-2xl border border-white/5 overflow-hidden">
@@ -902,7 +738,7 @@ function RoundCard({
             <div className="w-9 h-9 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-sm font-bold">
               {round.roundNumber}
             </div>
-            {round.assignments.some(a => a.status === 'Completed' && !a.hasRating) && (
+            {round.assignments.some(a => a.status === 'Completed' && !(a as any).hasRating) && (
               <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-purple-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(168,85,247,0.5)]" title="Waiting rating" />
             )}
           </div>
@@ -1080,37 +916,53 @@ function RoundCard({
                     ) : proposeSuggestions.length === 0 ? (
                       <p className="text-xs text-slate-500">No more eligible reviewers available.</p>
                     ) : (
-                      <div className="space-y-1 max-h-48 overflow-y-auto">
-                        {proposeSuggestions.map(s => (
-                          <div key={s.user.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <p className="text-sm text-white truncate">{s.user.name}</p>
-                                {s.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
+                      <>
+                        <div className="relative mb-2">
+                          <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search reviewers..."
+                            value={proposeSearchQuery}
+                            onChange={(e) => setProposeSearchQuery(e.target.value)}
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                          />
+                        </div>
+                        <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                          {filteredProposeSuggestions.length === 0 ? (
+                            <p className="text-xs text-slate-500 p-2">No matching reviewers found.</p>
+                          ) : (
+                            filteredProposeSuggestions.map(s => (
+                              <div key={s.user.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <p className="text-sm text-white truncate">{s.user.name}</p>
+                                    {s.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
+                                  </div>
+                                  <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
+                                </div>
+                                <button
+                                  onClick={async () => {
+                                    if (!round.createdByCoordinator) {
+                                      try {
+                                        await assignReviewersRequest(round.id, [s.user.id]);
+                                        setProposeSuggestions(prev => prev.filter(p => p.user.id !== s.user.id));
+                                        onRefresh();
+                                      } catch (e) {
+                                        setProposeError(e instanceof ApiError ? e.message : 'Failed to add reviewer');
+                                      }
+                                    } else {
+                                      handleAddProposed(s.user.id);
+                                    }
+                                  }}
+                                  className="ml-2 flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 transition-colors shrink-0"
+                                >
+                                  <Plus className="w-3 h-3" /> Add
+                                </button>
                               </div>
-                              <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
-                            </div>
-                            <button
-                              onClick={async () => {
-                                if (!round.createdByCoordinator) {
-                                  try {
-                                    await assignReviewersRequest(round.id, [s.user.id]);
-                                    setProposeSuggestions(prev => prev.filter(p => p.user.id !== s.user.id));
-                                    onRefresh();
-                                  } catch (e) {
-                                    setProposeError(e instanceof ApiError ? e.message : 'Failed to add reviewer');
-                                  }
-                                } else {
-                                  handleAddProposed(s.user.id);
-                                }
-                              }}
-                              className="ml-2 flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 transition-colors shrink-0"
-                            >
-                              <Plus className="w-3 h-3" /> Add
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                            ))
+                          )}
+                        </div>
+                      </>
                     )}
                     <button onClick={() => setShowProposePanel(false)} className="text-xs text-slate-500 hover:text-slate-300">Close</button>
                   </div>
@@ -1314,33 +1166,49 @@ function RoundCard({
               ) : suggestions.length === 0 ? (
                 <p className="text-xs text-slate-500">No eligible reviewers found for this round.</p>
               ) : (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {suggestions.map(s => (
-                    <label
-                      key={s.user.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                        selectedIds.has(s.user.id)
-                          ? 'border-blue-500/40 bg-blue-500/10'
-                          : 'border-white/5 bg-white/[0.02] hover:bg-white/5'
-                      }`}
-                    >
-                      <input
-                        type={reassigningForId ? "radio" : "checkbox"}
-                        name="reviewerSelect"
-                        checked={selectedIds.has(s.user.id)}
-                        onChange={() => toggleSelect(s.user.id)}
-                        className="accent-blue-500 w-4 h-4 shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <p className="text-sm font-medium text-white truncate">{s.user.name}</p>
-                          {s.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
-                        </div>
-                        <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                <>
+                  <div className="relative mb-2">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search reviewers..."
+                      value={addSearchQuery}
+                      onChange={(e) => setAddSearchQuery(e.target.value)}
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                    />
+                  </div>
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {filteredSuggestions.length === 0 ? (
+                      <p className="text-xs text-slate-500 p-2">No matching reviewers found.</p>
+                    ) : (
+                      filteredSuggestions.map(s => (
+                        <label
+                          key={s.user.id}
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                            selectedIds.has(s.user.id)
+                              ? 'border-blue-500/40 bg-blue-500/10'
+                              : 'border-white/5 bg-white/[0.02] hover:bg-white/5'
+                          }`}
+                        >
+                          <input
+                            type={reassigningForId ? "radio" : "checkbox"}
+                            name="reviewerSelect"
+                            checked={selectedIds.has(s.user.id)}
+                            onChange={() => toggleSelect(s.user.id)}
+                            className="accent-blue-500 w-4 h-4 shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p className="text-sm font-medium text-white truncate">{s.user.name}</p>
+                              {s.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
+                            </div>
+                            <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
+                          </div>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </>
               )}
               <div className="flex items-center gap-3 pt-1">
                 <button
@@ -1379,631 +1247,6 @@ function RoundCard({
             </div>
           )}
 
-          {round.status !== 'Draft' && (
-            <>
-              {/* AI Tools */}
-              <div className="pt-3 border-t border-white/5 space-y-3">
-                {isLatestRound && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      onClick={() => aiFileRef.current?.click()}
-                      disabled={runningAI}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {runningAI ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
-                      {runningAI ? 'Running…' : 'Run AI Review'}
-                    </button>
-                    {aiStatus && (
-                      <span className="text-xs text-indigo-300 animate-pulse">{aiStatus}</span>
-                    )}
-                    {aiError && <p className="text-xs text-red-400">{aiError}</p>}
-                  </div>
-                )}
-
-                {/* AI Review History */}
-                {(() => {
-                  const reviews = round.aiReviewReports || [];
-                  const recentReport = localAiResult || round.aiReviewReport;
-
-                  if (reviews.length === 0 && !recentReport) return null;
-
-                  return (
-                    <div className="p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5 space-y-2">
-                      <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">AI Review History</p>
-
-                      {reviews.length > 0 ? (
-                        <div className="space-y-2">
-                          {reviews.map((review, idx) => (
-                            <div key={review.id} className="rounded-lg bg-slate-800/30 overflow-hidden">
-                              <button
-                                onClick={() => setExpandedReviewId(expandedReviewId === review.id ? null : review.id)}
-                                className="w-full flex items-center justify-between px-2 py-1.5 hover:bg-slate-800/50 transition-colors"
-                              >
-                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                  <span className="text-xs text-slate-400">Review #{reviews.length - idx}</span>
-                                  <span className="text-[10px] text-slate-500">{new Date(review.createdAt).toLocaleString()}</span>
-                                  {review.venue && (
-                                    <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded">{review.venue}</span>
-                                  )}
-                                  {review.annotatedPdfUrl && (
-                                    <a
-                                      href={review.annotatedPdfUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-1 text-[10px] bg-indigo-500/30 text-indigo-300 hover:bg-indigo-500/50 px-2 py-0.5 rounded transition-colors"
-                                    >
-                                      <Download className="w-3 h-3" /> PDF
-                                    </a>
-                                  )}
-                                </div>
-                                <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${expandedReviewId === review.id ? 'rotate-180' : ''}`} />
-                              </button>
-
-                              {expandedReviewId === review.id && (
-                                <div className="px-2 py-2 border-t border-slate-700/50 bg-slate-800/20 space-y-2 max-h-96 overflow-y-auto">
-                                  <div className="text-xs text-slate-300 leading-relaxed markdown-content whitespace-pre-wrap">
-                                    <ReactMarkdown
-                                      components={{
-                                        h1: ({node, ...props}) => <h1 className="text-sm font-bold text-slate-100 mt-3 mb-2" {...props} />,
-                                        h2: ({node, ...props}) => <h2 className="text-xs font-bold text-slate-100 mt-2 mb-1" {...props} />,
-                                        h3: ({node, ...props}) => <h3 className="text-xs font-semibold text-slate-100 mt-2 mb-1" {...props} />,
-                                        h4: ({node, ...props}) => <h4 className="text-xs font-semibold text-slate-200 mt-1 mb-1" {...props} />,
-                                        p: ({node, ...props}) => <p className="text-xs text-slate-300 mb-1" {...props} />,
-                                        ul: ({node, ...props}) => <ul className="text-xs text-slate-300 list-disc list-inside mb-1" {...props} />,
-                                        ol: ({node, ...props}) => <ol className="text-xs text-slate-300 list-decimal list-inside mb-1" {...props} />,
-                                        li: ({node, ...props}) => <li className="text-xs text-slate-300 ml-2" {...props} />,
-                                        strong: ({node, ...props}) => <strong className="text-slate-100 font-semibold" {...props} />,
-                                        em: ({node, ...props}) => <em className="italic text-slate-200" {...props} />,
-                                      }}
-                                    >
-                                      {review.reviewText}
-                                    </ReactMarkdown>
-                                  </div>
-                                  {review.annotatedPdfUrl && (
-                                    <a href={review.annotatedPdfUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
-                                      <Download className="w-3 h-3" /> Download Annotated PDF
-                                    </a>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : recentReport ? (
-                        <div className="p-2 rounded-lg bg-slate-800/30 space-y-2 max-h-96 overflow-y-auto">
-                          <div className="text-xs text-slate-300 leading-relaxed markdown-content whitespace-pre-wrap">
-                            <ReactMarkdown
-                              components={{
-                                h1: ({node, ...props}) => <h1 className="text-sm font-bold text-slate-100 mt-3 mb-2" {...props} />,
-                                h2: ({node, ...props}) => <h2 className="text-xs font-bold text-slate-100 mt-2 mb-1" {...props} />,
-                                h3: ({node, ...props}) => <h3 className="text-xs font-semibold text-slate-100 mt-2 mb-1" {...props} />,
-                                h4: ({node, ...props}) => <h4 className="text-xs font-semibold text-slate-200 mt-1 mb-1" {...props} />,
-                                p: ({node, ...props}) => <p className="text-xs text-slate-300 mb-1" {...props} />,
-                                ul: ({node, ...props}) => <ul className="text-xs text-slate-300 list-disc list-inside mb-1" {...props} />,
-                                ol: ({node, ...props}) => <ol className="text-xs text-slate-300 list-decimal list-inside mb-1" {...props} />,
-                                li: ({node, ...props}) => <li className="text-xs text-slate-300 ml-2" {...props} />,
-                                strong: ({node, ...props}) => <strong className="text-slate-100 font-semibold" {...props} />,
-                                em: ({node, ...props}) => <em className="italic text-slate-200" {...props} />,
-                              }}
-                            >
-                              {typeof recentReport === 'string' ? recentReport : (recentReport.reviewText || 'Review text not available')}
-                            </ReactMarkdown>
-                          </div>
-                          {recentReport?.annotatedPdfUrl && (
-                            <a href={recentReport.annotatedPdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
-                              <Download className="w-3 h-3" /> Download Annotated PDF
-                            </a>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })()}
-
-                {/* Compliance result */}
-                {(() => {
-                  const comp = round.complianceReport;
-                  if (!comp) return null;
-
-                  const entries = Object.entries(comp) as [string, any][];
-                  const passCount = entries.filter(([, v]) => v.status === 'pass').length;
-                  const failCount = entries.filter(([, v]) => v.status === 'fail').length;
-                  const unknownCount = entries.filter(([, v]) => v.status === 'unknown').length;
-
-                  return (
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
-                      {/* Clickable header */}
-                      <button
-                        onClick={() => setComplianceExpanded(v => !v)}
-                        className="w-full flex items-center justify-between px-3 py-2 hover:bg-emerald-500/5 transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <ChevronDown className={`w-3 h-3 text-emerald-500/60 transition-transform ${complianceExpanded ? '' : '-rotate-90'}`} />
-                          <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Compliance Check</p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {failCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">{failCount} fail</span>}
-                          {unknownCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">{unknownCount} ?</span>}
-                          {passCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">{passCount} pass</span>}
-                        </div>
-                      </button>
-
-                      {/* Expanded details */}
-                      {complianceExpanded && (
-                        <div className="px-3 pb-3 pt-1 grid grid-cols-2 gap-2 border-t border-emerald-500/10">
-                          {entries.map(([key, val]) => {
-                            let icon;
-                            if (val.status === 'pass') {
-                              icon = <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />;
-                            } else if (val.status === 'fail') {
-                              icon = <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />;
-                            } else if (val.status === 'skipped') {
-                              icon = <AlertCircle className="w-3 h-3 text-slate-500 mt-0.5 shrink-0" />;
-                            } else {
-                              icon = <AlertCircle className="w-3 h-3 text-amber-400 mt-0.5 shrink-0" />;
-                            }
-                            return (
-                              <div key={key} className="flex items-start gap-1.5">
-                                {icon}
-                                <div>
-                                  <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-                                  <p className="text-[10px] text-slate-300">{val.status === 'skipped' ? 'Not applicable' : (val.details || val.status)}</p>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Reference Verification */}
-                {(() => {
-                  const report = localRefVerifResult ?? round.referenceVerificationReport;
-
-                  return (
-                    <div className="pt-3 space-y-2">
-                      {/* Run button */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <button
-                          onClick={() => refVerifFileRef.current?.click()}
-                          disabled={runningRefVerif}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {runningRefVerif ? (
-                            <>
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                              Analyzing references…
-                            </>
-                          ) : (
-                            <>
-                              <Search className="w-3 h-3" />
-                              {report ? 'Run again' : 'Verify References'}
-                            </>
-                          )}
-                        </button>
-                        {refVerifError && <p className="text-xs text-red-400">{refVerifError}</p>}
-                      </div>
-
-                      {/* Results card */}
-                      {report && (
-                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
-                          {/* Collapsible header */}
-                          <button
-                            onClick={() => setRefVerifExpanded(v => !v)}
-                            className="w-full flex items-center justify-between px-3 py-2 hover:bg-amber-500/5 transition-colors"
-                          >
-                            <div className="flex items-center gap-2">
-                              <ChevronDown className={`w-3 h-3 text-amber-500/60 transition-transform ${refVerifExpanded ? '' : '-rotate-90'}`} />
-                              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Reference Verification</p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              {report.verifiedCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">{report.verifiedCount} ✓</span>}
-                              {report.possibleMatchCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">{report.possibleMatchCount} ~</span>}
-                              {report.notFoundCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">{report.notFoundCount} ✗</span>}
-                              <span className="text-[9px] text-slate-500">/ {report.totalReferences}</span>
-                            </div>
-                          </button>
-
-                          {/* Expanded: issues + reference list */}
-                          {refVerifExpanded && (
-                            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-amber-500/10 max-h-96 overflow-y-auto">
-                              {/* Pipeline-level issues */}
-                              {report.issues.length > 0 && (
-                                <div className="p-2 rounded-lg bg-slate-800/40 border border-slate-700/30">
-                                  {report.issues.map((issue, i) => (
-                                    <p key={i} className="text-[10px] text-amber-300">{issue}</p>
-                                  ))}
-                                </div>
-                              )}
-                              {/* Per-reference rows */}
-                              {report.references.slice(0, 50).map(ref => {
-                                const statusColors: Record<string, string> = {
-                                  verified: 'bg-emerald-500/20 text-emerald-300',
-                                  possible_match: 'bg-amber-500/20 text-amber-300',
-                                  not_found: 'bg-red-500/20 text-red-300',
-                                  metadata_mismatch: 'bg-orange-500/20 text-orange-300',
-                                  parse_failed: 'bg-slate-500/20 text-slate-300',
-                                };
-                                return (
-                                  <div key={ref.index} className="text-[10px] p-2 rounded bg-slate-800/20 space-y-1">
-                                    <div className="flex items-start gap-2 justify-between">
-                                      <p className="text-slate-400 line-clamp-2">{ref.rawText}</p>
-                                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded shrink-0 ${statusColors[ref.status] || 'bg-slate-500/20 text-slate-300'}`}>
-                                        {ref.status.replace(/_/g, ' ')}
-                                      </span>
-                                    </div>
-                                    {ref.openAlexTitle && ref.openAlexTitle !== ref.parsedTitle && (
-                                      <p className="text-slate-500">Found: <span className="text-slate-300">{ref.openAlexTitle.slice(0, 100)}</span></p>
-                                    )}
-                                    {ref.note && <p className="text-slate-500 italic">{ref.note}</p>}
-                                  </div>
-                                );
-                              })}
-                              {report.references.length > 50 && (
-                                <p className="text-[10px] text-slate-500 p-2">... and {report.references.length - 50} more references</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Hidden file input */}
-                      <input
-                        ref={refVerifFileRef}
-                        type="file"
-                        accept="application/pdf"
-                        className="hidden"
-                        onChange={handleRefVerifFileSelected}
-                      />
-                    </div>
-                  );
-                })()}
-
-                {/* Empirical Standards result */}
-                {(() => {
-                  const checklist = localAiResult?.checklistJson || round.checklistJson;
-                  if (!checklist?.selectedStandards?.length) return null;
-
-                  const aiSelectedMap = new Map<string, { label: string; confidence: string; evidence: string }>(
-                    checklist.selectedStandards.map((s: any) => [s.label, s])
-                  );
-
-                  const buildChecklistUrl = (standards: Set<string>) => {
-                    const base = "https://www2.sigsoft.org/EmpiricalStandards/form_generator/result.html";
-                    const params = new URLSearchParams();
-                    Array.from(standards).forEach(standard => params.append("standard", standard));
-                    params.append("role", "author");
-                    return `${base}?${params.toString()}`;
-                  };
-
-                  const handleConfirm = async () => {
-                    try {
-                      const selectedStandardsArray = Array.from(confirmedStandards);
-                      await confirmChecklistSelectionRequest(round.id, selectedStandardsArray);
-                      setFinalizedChecklist({
-                        selectedStandards: selectedStandardsArray,
-                        confirmedAt: new Date().toISOString(),
-                      });
-                      onRefresh();
-                    } catch (err) {
-                      console.error('Failed to confirm checklist:', err);
-                      alert('Failed to confirm checklist. Please try again.');
-                    }
-                  };
-
-                  return (
-                    <div className="p-3 rounded-xl border border-violet-500/20 bg-violet-500/5 space-y-3">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Empirical Standards</p>
-                        {!finalizedChecklist && (
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={buildChecklistUrl(confirmedStandards)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                            >
-                              <ExternalLink className="w-3 h-3" /> Open Form
-                            </a>
-                            <button
-                              onClick={handleConfirm}
-                              disabled={confirmedStandards.size === 0}
-                              className="px-2 py-1 text-xs font-medium rounded-lg bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              Confirm Checklist
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {finalizedChecklist ? (
-                        <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
-                          <div>
-                            <p className="text-xs text-emerald-300 font-medium">✓ Checklist confirmed</p>
-                            <p className="text-[10px] text-emerald-300/70 mt-1">{finalizedChecklist.selectedStandards.length} standards selected</p>
-                          </div>
-                          <button
-                            onClick={() => {
-                              setFinalizedChecklist(null);
-                              setConfirmedStandards(new Set(finalizedChecklist.selectedStandards));
-                            }}
-                            className="px-2 py-1 text-xs rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 transition-colors"
-                            title="Update checklist selection"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {(Object.entries(STANDARDS_BY_CATEGORY) as Array<[string, string[]]>).map(([category, standards]) => (
-                            <div key={category} className="rounded-lg bg-slate-800/30 overflow-hidden">
-                              <button
-                                onClick={() => {
-                                  const newExpanded = new Set(expandedCategories);
-                                  if (newExpanded.has(category)) {
-                                    newExpanded.delete(category);
-                                  } else {
-                                    newExpanded.add(category);
-                                  }
-                                  setExpandedCategories(newExpanded);
-                                }}
-                                className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-slate-800/50 transition-colors"
-                              >
-                                <ChevronDown
-                                  className={`w-3 h-3 text-slate-400 transition-transform ${expandedCategories.has(category) ? '' : '-rotate-90'}`}
-                                />
-                                <p className="text-xs font-semibold text-slate-300">{category}</p>
-                                <span className="text-[10px] text-slate-500 ml-auto">
-                                  {standards.filter(s => confirmedStandards.has(s)).length}/{standards.length}
-                                </span>
-                              </button>
-
-                              {expandedCategories.has(category) && (
-                                <div className="px-2 py-1.5 space-y-1 border-t border-slate-700/50">
-                                  {standards.map((standard) => {
-                                    const aiData = aiSelectedMap.get(standard);
-                                    return (
-                                      <div key={standard} className="flex items-start gap-2 p-1.5 rounded bg-slate-900/50 hover:bg-slate-900/75 transition-colors">
-                                        <input
-                                          type="checkbox"
-                                          checked={confirmedStandards.has(standard)}
-                                          onChange={(e) => {
-                                            const newConfirmed = new Set<string>(confirmedStandards);
-                                            if (e.target.checked) {
-                                              newConfirmed.add(standard);
-                                            } else {
-                                              newConfirmed.delete(standard);
-                                            }
-                                            setConfirmedStandards(newConfirmed);
-                                          }}
-                                          className="mt-0.5 cursor-pointer"
-                                        />
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-center gap-1.5 flex-wrap">
-                                            <p className="text-xs text-slate-200 font-medium">{standard}</p>
-                                            {aiData && (
-                                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${
-                                                aiData.confidence === 'high'
-                                                  ? 'bg-emerald-500/20 text-emerald-300'
-                                                  : aiData.confidence === 'medium'
-                                                  ? 'bg-amber-500/20 text-amber-300'
-                                                  : 'bg-orange-500/20 text-orange-300'
-                                              }`}>
-                                                {aiData.confidence}
-                                              </span>
-                                            )}
-                                          </div>
-                                          {aiData && (
-                                            <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{aiData.evidence}</p>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Empirical Standards Checklist Answers */}
-              {finalizedChecklist && (
-                <div className="mt-3 rounded-xl bg-slate-900/50 border border-slate-700/50 p-3 space-y-2">
-                  {/* Header */}
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Checklist Answers</p>
-                    {checklistAnswerData && (() => {
-                      const answers = checklistAnswerData.answers ?? [];
-                      const no = answers.filter((a: any) => a.answer === 'no').length;
-                      const unknown = answers.filter((a: any) => a.answer === 'unknown').length;
-                      const yes = answers.filter((a: any) => a.answer === 'yes').length;
-                      return (
-                        <div className="flex items-center gap-1.5">
-                          {no > 0 && (
-                            <button
-                              onClick={() => setChecklistAnswerFilter(f => f === 'no' ? null : 'no')}
-                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors ${checklistAnswerFilter === 'no' ? 'bg-red-500/40 text-red-200 ring-1 ring-red-400/50' : 'bg-red-500/20 text-red-300 hover:bg-red-500/30'}`}
-                            >{no} no</button>
-                          )}
-                          {unknown > 0 && (
-                            <button
-                              onClick={() => setChecklistAnswerFilter(f => f === 'unknown' ? null : 'unknown')}
-                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors ${checklistAnswerFilter === 'unknown' ? 'bg-slate-500/40 text-slate-200 ring-1 ring-slate-400/50' : 'bg-slate-500/20 text-slate-400 hover:bg-slate-500/30'}`}
-                            >{unknown} ?</button>
-                          )}
-                          {yes > 0 && (
-                            <button
-                              onClick={() => setChecklistAnswerFilter(f => f === 'yes' ? null : 'yes')}
-                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors ${checklistAnswerFilter === 'yes' ? 'bg-emerald-500/40 text-emerald-200 ring-1 ring-emerald-400/50' : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'}`}
-                            >{yes} yes</button>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Re-run button — only shown when results exist */}
-                  {checklistAnswerData && (
-                    <button
-                      onClick={() => checklistAnswerFileRef.current?.click()}
-                      disabled={isRunningChecklistAnswering}
-                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/10 text-violet-400 border border-violet-500/20 hover:bg-violet-600/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-[11px] font-medium"
-                    >
-                      {isRunningChecklistAnswering ? <><Loader2 className="w-3 h-3 animate-spin" /> Running…</> : <><Cpu className="w-3 h-3" /> Run again</>}
-                    </button>
-                  )}
-
-                  {checklistAnswerError && (
-                    <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg p-2">{checklistAnswerError}</p>
-                  )}
-
-                  {!checklistAnswerData ? (
-                    <button
-                      onClick={() => checklistAnswerFileRef.current?.click()}
-                      disabled={isRunningChecklistAnswering}
-                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-violet-600/20 text-violet-300 border border-violet-500/30 hover:bg-violet-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs font-medium"
-                    >
-                      {isRunningChecklistAnswering ? (
-                        <><Loader2 className="w-3 h-3 animate-spin" /> Answering checklist…</>
-                      ) : (
-                        <><Cpu className="w-3 h-3" /> Run Checklist Answering</>
-                      )}
-                    </button>
-                  ) : (() => {
-                    const answerOrder: Record<string, number> = { no: 0, unknown: 1, yes: 2 };
-                    const answerMap = new Map<string, any>(
-                      (checklistAnswerData.answers ?? []).map((a: any) => [a.itemId, a])
-                    );
-
-                    // Group items: standard → section → entries[], sorted no first
-                    const grouped = new Map<string, Map<string, any[]>>();
-                    for (const item of (checklistAnswerData.items ?? [])) {
-                      const std = item.standard;
-                      const sec = item.sectionTitle ?? 'General';
-                      if (!grouped.has(std)) grouped.set(std, new Map());
-                      if (!grouped.get(std)!.has(sec)) grouped.get(std)!.set(sec, []);
-                      grouped.get(std)!.get(sec)!.push({ item, answer: answerMap.get(item.id) });
-                    }
-
-                    // Sort entries within each section: no → unknown → yes
-                    grouped.forEach(sections => {
-                      sections.forEach((entries, sec) => {
-                        sections.set(sec, entries.sort((a: any, b: any) =>
-                          (answerOrder[a.answer?.answer] ?? 1) - (answerOrder[b.answer?.answer] ?? 1)
-                        ));
-                      });
-                    });
-
-                    return (
-                      <div className="space-y-1.5">
-                        {Array.from(grouped.entries()).map(([standard, sections]) => {
-                          const stdAnswers = Array.from(sections.values()).flat().map((e: any) => e.answer?.answer);
-                          const noCount = stdAnswers.filter(a => a === 'no').length;
-                          const unknownCount = stdAnswers.filter(a => a === 'unknown').length;
-                          const yesCount = stdAnswers.filter(a => a === 'yes').length;
-
-                          // When filter active, skip standards with no matching items
-                          if (checklistAnswerFilter && !stdAnswers.includes(checklistAnswerFilter)) return null;
-
-                          // Auto-expand when filter is active
-                          const isExpanded = checklistAnswerFilter ? true : expandedChecklistStandards.has(standard);
-
-                          return (
-                            <div key={standard} className="rounded-lg bg-slate-800/40 overflow-hidden border border-slate-700/30">
-                              {/* Standard header — clickable to expand/collapse */}
-                              <button
-                                onClick={() => {
-                                  const next = new Set(expandedChecklistStandards);
-                                  if (next.has(standard)) next.delete(standard);
-                                  else next.add(standard);
-                                  setExpandedChecklistStandards(next);
-                                }}
-                                className="w-full flex items-center justify-between px-2.5 py-1.5 bg-slate-800/60 hover:bg-slate-800/80 transition-colors"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <ChevronDown className={`w-3 h-3 text-slate-500 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
-                                  <p className="text-[11px] font-semibold text-slate-300">{standard}</p>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  {noCount > 0 && <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-red-500/20 text-red-300">{noCount}✗</span>}
-                                  {unknownCount > 0 && <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-slate-500/20 text-slate-400">{unknownCount}?</span>}
-                                  {yesCount > 0 && <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300">{yesCount}✓</span>}
-                                </div>
-                              </button>
-
-                              {/* Expanded content */}
-                              {isExpanded && Array.from(sections.entries()).map(([section, entries]) => {
-                                const visibleEntries = checklistAnswerFilter
-                                  ? entries.filter((e: any) => e.answer?.answer === checklistAnswerFilter)
-                                  : entries;
-                                if (visibleEntries.length === 0) return null;
-                                return (
-                                <div key={section} className="px-2.5 py-2 space-y-1.5 border-t border-slate-700/40">
-                                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{section}</p>
-                                  {visibleEntries.map(({ item, answer }: any) => (
-                                    <div key={item.id} className="flex items-start gap-2">
-                                      <span className={`shrink-0 mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded min-w-[32px] text-center ${
-                                        answer?.answer === 'yes'
-                                          ? 'bg-emerald-500/20 text-emerald-300'
-                                          : answer?.answer === 'no'
-                                          ? 'bg-red-500/20 text-red-300'
-                                          : 'bg-slate-500/20 text-slate-400'
-                                      }`}>
-                                        {answer?.answer?.toUpperCase() ?? '?'}
-                                      </span>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-[10px] text-slate-300 leading-relaxed">{item.itemText}</p>
-                                        {answer?.evidence && (
-                                          <p className="text-[9px] text-slate-500 mt-0.5 italic leading-relaxed">{answer.evidence}</p>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              );
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-
-              {/* Hidden file inputs */}
-              <input ref={aiFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
-              <input
-                ref={checklistAnswerFileRef}
-                type="file"
-                accept="application/pdf"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  e.target.value = '';
-                  setIsRunningChecklistAnswering(true);
-                  setChecklistAnswerError('');
-                  try {
-                    const res = await runEmpiricalChecklistAnsweringRequest(round.id, file);
-                    if (res.data) setChecklistAnswerData(res.data);
-                  } catch (err: any) {
-                    setChecklistAnswerError(err.message || 'Checklist answering failed. Please try again.');
-                  } finally {
-                    setIsRunningChecklistAnswering(false);
-                  }
-                }}
-              />
-            </>
-          )}
         </div>
       )}
     </div>

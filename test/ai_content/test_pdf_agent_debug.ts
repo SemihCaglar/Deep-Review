@@ -1,4 +1,4 @@
-import { PdfAgentService } from './src/ai_content/services/PdfAgentService';
+import { PdfAgentService } from '../../backend/src/ai_content/services/PdfAgentService';
 import { ClientSecretCredential } from "@azure/identity";
 import { AgentsClient } from "@azure/ai-agents";
 import yaml from "js-yaml";
@@ -8,7 +8,7 @@ import path from 'path';
 async function test() {
   console.log('🧪 Testing PDF Agent - Debug Mode\n');
 
-  const testPdfPath = path.join(__dirname, 'src/ai_content/test_input.pdf');
+  const testPdfPath = path.join(__dirname, 'test_input.pdf');
   
   if (!fs.existsSync(testPdfPath)) {
     console.error('❌ Test PDF not found:', testPdfPath);
@@ -20,7 +20,7 @@ async function test() {
 
   try {
     // Initialize secrets
-    const secretsPath = path.resolve(__dirname, 'src/ai_content/secrets.yaml');
+    const secretsPath = path.resolve(__dirname, 'secrets.yaml');
     const secrets: any = yaml.load(fs.readFileSync(secretsPath, "utf8"));
     
     const credential = new ClientSecretCredential(

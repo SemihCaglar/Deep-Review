@@ -1,4 +1,4 @@
-import { PdfAgentService } from './src/ai_content/services/PdfAgentService';
+import { PdfAgentService } from '../../backend/src/ai_content/services/PdfAgentService';
 import { ClientSecretCredential } from "@azure/identity";
 import { AgentsClient } from "@azure/ai-agents";
 import yaml from "js-yaml";
@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 
 async function test() {
-  const testPdfPath = path.join(__dirname, 'src/ai_content/test_input.pdf');
+  const testPdfPath = path.join(__dirname, 'test_input.pdf');
   const pdfBuffer = fs.readFileSync(testPdfPath);
 
   const agent = new PdfAgentService();
