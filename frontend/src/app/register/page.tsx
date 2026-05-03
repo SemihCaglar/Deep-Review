@@ -155,7 +155,7 @@ export default function RegisterPaper() {
         <div className="max-w-3xl mx-auto py-8">
             <div className="mb-8">
                 <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">Register New Paper</h1>
-                <p className="text-slate-400 mt-1">Submit a manuscript and assign authors for BILSEN review.</p>
+                <p className="text-slate-400 mt-1">Submit a manuscript and assign authors for Deep Review.</p>
             </div>
 
             <div className="flex items-center justify-between mb-8 relative">

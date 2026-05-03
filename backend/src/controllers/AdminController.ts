@@ -181,11 +181,11 @@ export class AdminController {
 
     await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Lab', lab.id, `Created lab: ${name} with coordinator ${coordinator.email}`);
 
-    const subject = 'Welcome to BILSEN - Coordinator Account Created';
+    const subject = 'Welcome to Deep Review - Coordinator Account Created';
     const loginUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const body = `Hello ${coordinator.name},
 
-An admin has created a Coordinator account and a Lab for you on the BILSEN platform.
+An admin has created a Coordinator account and a Lab for you on the Deep Review platform.
 
 Your login credentials:
 Email: ${coordinator.email}
@@ -193,10 +193,10 @@ Password: ${password}
 
 Please log in at: ${loginUrl}/login
 
-If you are not involved with BILSEN, please ignore this email.
+If you are not involved with Deep Review, please ignore this email.
 
 Best regards,
-BILSEN Admin Team`;
+Deep Review Admin Team`;
 
     await sendEmail(coordinator, subject, body);
 

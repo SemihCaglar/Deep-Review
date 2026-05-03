@@ -232,10 +232,10 @@ export class AccountController {
             usedAt: null,
             user,
           });
-          const subject = 'Reset your BILSEN password';
+          const subject = 'Reset your Deep Review password';
           const body =
             `Hello ${user.name},\n\n` +
-            `We received a request to reset your BILSEN password.\n\n` +
+            `We received a request to reset your Deep Review password.\n\n` +
             `Reset your password using this link:\n${resetLink}\n\n` +
             `If you did not request this change, you can safely ignore this email.`;
 
@@ -637,8 +637,8 @@ export class AccountController {
 
     sendEmail(
       savedMember as unknown as import('../entities/User').User,
-      'Your BILSEN account has been approved',
-      `Hello ${savedMember.name},\n\nYour sign-up request for BILSEN has been approved. You can now log in and start using the system.\n\nWelcome aboard!${note ? `\n\nNote from coordinator: ${note}` : ''}`,
+      'Your Deep Review account has been approved',
+      `Hello ${savedMember.name},\n\nYour sign-up request for Deep Review has been approved. You can now log in and start using the system.\n\nWelcome aboard!${note ? `\n\nNote from coordinator: ${note}` : ''}`,
     ).catch(console.error);
 
     return res.status(200).json({
@@ -688,8 +688,8 @@ export class AccountController {
 
     sendEmail(
       savedMember as unknown as import('../entities/User').User,
-      'Your BILSEN sign-up request was not approved',
-      `Hello ${savedMember.name},\n\nUnfortunately your sign-up request for BILSEN has not been approved at this time.${note ? `\n\nReason: ${note}` : ''}\n\nIf you believe this is a mistake, please contact the lab coordinator.`,
+      'Your Deep Review sign-up request was not approved',
+      `Hello ${savedMember.name},\n\nUnfortunately your sign-up request for Deep Review has not been approved at this time.${note ? `\n\nReason: ${note}` : ''}\n\nIf you believe this is a mistake, please contact the lab coordinator.`,
     ).catch(console.error);
 
     return res.status(200).json({

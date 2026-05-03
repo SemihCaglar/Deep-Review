@@ -62,3 +62,72 @@ export function confirmCancel(message = 'Are you sure you want to cancel?'): Pro
     stayButton.focus();
   });
 }
+
+export interface ConfirmOptions {
+  title: string;
+  message: string;
+  confirmText: string;
+  cancelText: string;
+  confirmButtonClass?: string;
+}
+
+export function customConfirm(options: ConfirmOptions): Promise<boolean> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return Promise.resolve(false);
+  }
+
+  return new Promise(resolve => {
+    const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm';
+
+    const panel = document.createElement('div');
+    panel.className = 'w-full max-w-sm rounded-2xl border border-white/10 bg-[#17191e]/95 p-5 shadow-2xl shadow-black/40';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+
+    const title = document.createElement('h2');
+    title.className = 'text-lg font-semibold text-white';
+    title.textContent = options.title;
+
+    const body = document.createElement('p');
+    body.className = 'mt-2 text-sm leading-6 text-slate-400';
+    body.textContent = options.message;
+
+    const actions = document.createElement('div');
+    actions.className = 'mt-6 flex items-center justify-end gap-2';
+
+    const stayButton = document.createElement('button');
+    stayButton.type = 'button';
+    stayButton.className = 'rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500/50';
+    stayButton.textContent = options.cancelText;
+
+    const discardButton = document.createElement('button');
+    discardButton.type = 'button';
+    discardButton.className = options.confirmButtonClass || 'rounded-xl bg-blue-600/90 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60';
+    discardButton.textContent = options.confirmText;
+
+    const cleanup = (confirmed: boolean) => {
+      document.removeEventListener('keydown', handleKeyDown);
+      overlay.remove();
+      previousActiveElement?.focus();
+      resolve(confirmed);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        cleanup(false);
+      }
+    };
+
+    stayButton.addEventListener('click', () => cleanup(false));
+    discardButton.addEventListener('click', () => cleanup(true));
+    document.addEventListener('keydown', handleKeyDown);
+
+    actions.append(stayButton, discardButton);
+    panel.append(title, body, actions);
+    overlay.append(panel);
+    document.body.append(overlay);
+    discardButton.focus();
+  });
+}

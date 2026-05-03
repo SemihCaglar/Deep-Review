@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { notFound, useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS } from '@/lib/mockData';
-import { confirmCancel } from '@/lib/confirmAction';
+import { confirmCancel, customConfirm } from '@/lib/confirmAction';
 import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, Download, AlertCircle } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
@@ -336,7 +336,14 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     };
 
     const handleAccept = async () => {
-        if (!await confirmCancel('Are you sure you want to accept this paper? This action cannot be undone.')) return;
+        const confirmed = await customConfirm({
+            title: 'Accept Paper?',
+            message: 'Are you sure you want to set the paper as accepted? This action cannot be undone.',
+            confirmText: 'Set as Accepted',
+            cancelText: 'Cancel',
+            confirmButtonClass: 'rounded-xl bg-emerald-600/90 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/60',
+        });
+        if (!confirmed) return;
         setIsAccepting(true);
         setAcceptError('');
         try {

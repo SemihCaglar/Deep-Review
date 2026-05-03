@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', message: 'BILSEN Backend API is running' });
+    res.json({ status: 'ok', message: 'Deep Review Backend API is running' });
 });
 
 app.use('/downloads', express.static(path.join(process.cwd(), 'downloads')));

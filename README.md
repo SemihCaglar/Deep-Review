@@ -1,4 +1,4 @@
-# BILSEN Review Management System
+# Deep Review Management System
 
 A full-stack system for managing academic paper reviews, featuring AI-assisted review generation and relational reviewer management.
 
