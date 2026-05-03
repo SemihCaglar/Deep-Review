@@ -1,6 +1,7 @@
 import * as nodemailer from 'nodemailer';
 import { AppDataSource } from '../data-source';
 import { EmailNotification, EmailStatus } from '../entities/EmailNotification';
+import { Template, TemplateName } from '../entities/Template';
 import type { User } from '../entities/User';
 
 function createTransport() {
@@ -49,4 +50,32 @@ export async function sendEmail(recipient: User, subject: string, body: string):
   }
 
   await notificationRepo.save(notification);
+}
+
+export async function sendTemplatedEmail(
+  recipient: User,
+  templateName: TemplateName,
+  variables: Record<string, string>,
+  labId?: string,
+): Promise<void> {
+  const templateRepo = AppDataSource.getRepository(Template);
+
+  let template: Template | null = null;
+
+  if (labId) {
+    template = await templateRepo.findOne({ where: { name: templateName, lab: { id: labId } } });
+  }
+
+  if (!template) {
+    template = await templateRepo.findOne({ where: { name: templateName, lab: null as any } });
+  }
+
+  if (!template) {
+    console.warn(`[emailService] No template found for "${templateName}" — skipping email to ${recipient.email}`);
+    return;
+  }
+
+  const render = (text: string) => text.replace(/\{\{(\w+)\}\}/g, (_, key) => variables[key] ?? '');
+
+  await sendEmail(recipient, render(template.subject), render(template.body));
 }

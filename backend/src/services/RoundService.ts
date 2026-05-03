@@ -6,7 +6,8 @@ import { User, UserRole } from '../entities/User';
 import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest';
 import { Extension, ExtensionStatus } from '../entities/Extension';
 import { SubmissionRuleSet } from '../entities/SubmissionRuleSet';
-import { sendEmail } from './emailService';
+import { sendTemplatedEmail } from './emailService';
+import { TemplateName } from '../entities/Template';
 import { SubmissionRuleExtractionService } from '../ai_content/services/SubmissionRuleExtractionService';
 import { EntityManager, In, Not } from 'typeorm';
 
@@ -237,11 +238,12 @@ export class RoundService {
         assignment.invitationSent = true;
         await assignRepo.save(assignment);
 
-        await sendEmail(
-          reviewer,
-          'You have been invited to review a paper',
-          `Hello ${reviewer.name},\n\nYou have been invited to review the paper "${round.paper.title}" (Round ${round.roundNumber}).\n\nPlease log in to accept or decline.\n\nDeadline: ${round.deadline?.toISOString().split('T')[0] ?? 'TBD'}`,
-        ).catch(err => console.error('[approveRound] invite email failed:', err));
+        await sendTemplatedEmail(reviewer, TemplateName.REVIEW_INVITATION, {
+          userName: reviewer.name,
+          paperTitle: round.paper.title,
+          roundNumber: String(round.roundNumber),
+          deadline: round.deadline?.toISOString().split('T')[0] ?? 'TBD',
+        }).catch(err => console.error('[approveRound] invite email failed:', err));
 
         assigned++;
       }
@@ -254,11 +256,12 @@ export class RoundService {
         assignment.invitationSent = true;
         await assignRepo.save(assignment);
 
-        await sendEmail(
-          assignment.reviewer,
-          'You have been invited to review a paper',
-          `Hello ${assignment.reviewer.name},\n\nYou have been invited to review the paper "${round.paper.title}" (Round ${round.roundNumber}).\n\nPlease log in to accept or decline.\n\nDeadline: ${assignment.deadline?.toISOString().split('T')[0] ?? 'TBD'}`,
-        ).catch(err => console.error('[approveRound] existing invite email failed:', err));
+        await sendTemplatedEmail(assignment.reviewer, TemplateName.REVIEW_INVITATION, {
+          userName: assignment.reviewer.name,
+          paperTitle: round.paper.title,
+          roundNumber: String(round.roundNumber),
+          deadline: assignment.deadline?.toISOString().split('T')[0] ?? 'TBD',
+        }).catch(err => console.error('[approveRound] existing invite email failed:', err));
 
         assigned++;
       }
@@ -323,19 +326,23 @@ export class RoundService {
 
       // Alert coordinator(s)
       for (const coordinator of paper?.coordinators ?? []) {
-        await sendEmail(
-          coordinator,
-          `Overdue Review Alert: ${paperTitle}`,
-          `Hello ${coordinator.name},\n\nReviewer ${reviewer.name} (${reviewer.email}) has missed their review deadline for paper "${paperTitle}" (Round ${roundNumber}).\n\nDeadline was: ${assignment.deadline?.toISOString() ?? 'N/A'}\n\nPlease consider reassigning or taking action.`,
-        ).catch(err => console.error('[overdueAlert] coordinator email failed:', err));
+        await sendTemplatedEmail(coordinator, TemplateName.REVIEW_OVERDUE_COORDINATOR, {
+          coordinatorName: coordinator.name,
+          reviewerName: reviewer.name,
+          reviewerEmail: reviewer.email,
+          paperTitle,
+          roundNumber: String(roundNumber),
+          deadline: assignment.deadline?.toISOString() ?? 'N/A',
+        }).catch(err => console.error('[overdueAlert] coordinator email failed:', err));
       }
 
       // Notify reviewer
-      await sendEmail(
-        reviewer,
-        `Your review for "${paperTitle}" is now Overdue`,
-        `Hello ${reviewer.name},\n\nYour review assignment for paper "${paperTitle}" (Round ${roundNumber}) has passed its deadline and is now marked as Overdue.\n\nDeadline was: ${assignment.deadline?.toISOString() ?? 'N/A'}\n\nPlease contact the coordinator if you need assistance.`,
-      ).catch(err => console.error('[overdueAlert] reviewer email failed:', err));
+      await sendTemplatedEmail(reviewer, TemplateName.REVIEW_OVERDUE, {
+        userName: reviewer.name,
+        paperTitle,
+        roundNumber: String(roundNumber),
+        deadline: assignment.deadline?.toISOString() ?? 'N/A',
+      }).catch(err => console.error('[overdueAlert] reviewer email failed:', err));
     }
 
     for (const roundId of affectedRoundIds) {
@@ -369,11 +376,11 @@ export class RoundService {
       const paperTitle = assignment.round?.paper?.title ?? 'Unknown Paper';
       const deadline = assignment.deadline?.toISOString().split('T')[0] ?? 'N/A';
 
-      const emailSent = await sendEmail(
-        assignment.reviewer,
-        `Reminder: Review due tomorrow for "${paperTitle}"`,
-        `Hello ${assignment.reviewer.name},\n\nThis is a reminder that your review for paper "${paperTitle}" is due on ${deadline}.\n\nPlease log in and submit your review before the deadline.`,
-      )
+      const emailSent = await sendTemplatedEmail(assignment.reviewer, TemplateName.DEADLINE_REMINDER, {
+        userName: assignment.reviewer.name,
+        paperTitle,
+        deadline,
+      })
         .then(() => true)
         .catch(err => {
           console.error('[autoReminder] email failed:', err);

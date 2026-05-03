@@ -172,7 +172,7 @@ export default function DashboardPage() {
     }
   }, [user.isAdmin, router]);
 
-  if (user.isAdmin) {
+  if (!user.id || user.isAdmin) {
     return null;
   }
 
@@ -375,6 +375,8 @@ export default function DashboardPage() {
   // --- Effects ---
 
   React.useEffect(() => {
+    if (!user.id) return;
+
     loadPendingSignups();
     if (user.isCoordinator) {
       loadReviewerRequests();
@@ -384,7 +386,7 @@ export default function DashboardPage() {
       loadRequestDecisions();
       loadWaitingRatingsCount();
     }
-  }, [user.isCoordinator, user.isAdmin, loadPendingSignups, loadReviewerRequests, loadAnalytics, loadRequestDecisions, loadCollabInvitationCount, loadWaitingRatingsCount]);
+  }, [user.id, user.isCoordinator, user.isAdmin, user.isFrozen, loadPendingSignups, loadReviewerRequests, loadAnalytics, loadRequestDecisions, loadCollabInvitationCount, loadWaitingRatingsCount]);
 
   // --- Actions ---
 

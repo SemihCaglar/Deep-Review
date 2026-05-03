@@ -47,8 +47,9 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!user.id) return;
     fetchData();
-  }, [activeTab]);
+  }, [user.id, activeTab]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -70,6 +71,8 @@ export default function AdminPage() {
       setLoading(false);
     }
   };
+
+  if (!user.id) return null;
 
   if (!user.isAdmin) {
     return (

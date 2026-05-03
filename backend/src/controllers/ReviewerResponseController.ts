@@ -5,7 +5,8 @@ import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest
 import { Extension, ExtensionStatus } from '../entities/Extension';
 import { Summary } from '../entities/Summary';
 import { UserRole } from '../entities/User';
-import { sendEmail } from '../services/emailService';
+import { sendTemplatedEmail } from '../services/emailService';
+import { TemplateName } from '../entities/Template';
 import { RoundService } from '../services/RoundService';
 import type { AuthenticatedRequest } from '../types/auth';
 
@@ -148,11 +149,13 @@ export class ReviewerResponseController {
       const paperTitle = assignment.round.paper.title;
       const roundNumber = assignment.round.roundNumber;
       for (const coord of assignment.round.paper.coordinators ?? []) {
-        sendEmail(
-          coord,
-          `${isUpdate ? '[Updated] ' : ''}Decline Request from ${user.name}`,
-          `Hello ${coord.name},\n\n${user.name} has ${isUpdate ? 'updated their' : 'submitted a'} decline request for paper "${paperTitle}" (Round ${roundNumber}).\n\nReason: "${reason}"\n\nPlease log in to approve or reject the request.`,
-        ).catch(console.error);
+        sendTemplatedEmail(coord, TemplateName.DECLINE_REQUEST, {
+          coordinatorName: coord.name,
+          reviewerName: user.name,
+          paperTitle,
+          roundNumber: String(roundNumber),
+          reason,
+        }).catch(console.error);
       }
 
       return res.status(isUpdate ? 200 : 201).json({
@@ -260,11 +263,15 @@ export class ReviewerResponseController {
       const currentDeadline = assignment.deadline?.toISOString() ?? 'N/A';
 
       await Promise.all(coordinators.map(c =>
-        sendEmail(
-          c,
-          `${isUpdate ? '[Updated] ' : ''}Extension Request from ${user.name}`,
-          `Hello ${c.name},\n\n${user.name} has ${isUpdate ? 'updated their' : 'submitted a new'} deadline extension request.\n\nPaper: ${paperTitle}\nRound: ${roundNumber}\nCurrent deadline: ${currentDeadline}\nRequested deadline: ${requested.toISOString()}\nReason: ${reason}\n\nPlease log in to approve or reject this request.`
-        )
+        sendTemplatedEmail(c, TemplateName.EXTENSION_REQUEST, {
+          coordinatorName: c.name,
+          reviewerName: user.name,
+          paperTitle,
+          roundNumber: String(roundNumber),
+          currentDeadline,
+          requestedDeadline: requested.toISOString().split('T')[0],
+          reason,
+        })
       ));
 
       return res.status(isUpdate ? 200 : 201).json({
@@ -338,20 +345,14 @@ export class ReviewerResponseController {
       }
 
       const reviewer = declineRequest.assignment.reviewer;
-      const paperTitle = declineRequest.assignment.round.paper.title;
-      const roundNumber = declineRequest.assignment.round.roundNumber;
       if (decision === 'approve') {
-        sendEmail(
-          reviewer,
-          `Your decline request for "${paperTitle}" has been approved`,
-          `Hello ${reviewer.name},\n\nYour decline request for paper "${paperTitle}" (Round ${roundNumber}) has been approved. You are no longer assigned to review this paper.`,
-        ).catch(console.error);
+        sendTemplatedEmail(reviewer, TemplateName.DECLINE_APPROVED, {
+          userName: reviewer.name,
+        }).catch(console.error);
       } else {
-        sendEmail(
-          reviewer,
-          `Your decline request for "${paperTitle}" has been rejected`,
-          `Hello ${reviewer.name},\n\nYour decline request for paper "${paperTitle}" (Round ${roundNumber}) has been rejected. Your assignment remains active — please continue with the review.`,
-        ).catch(console.error);
+        sendTemplatedEmail(reviewer, TemplateName.DECLINE_REJECTED, {
+          userName: reviewer.name,
+        }).catch(console.error);
       }
 
       return res.status(200).json({
@@ -425,21 +426,16 @@ export class ReviewerResponseController {
       await extensionRepo.save(extension);
 
       const reviewer = extension.assignment.reviewer;
-      const paperTitle = extension.assignment.round.paper.title;
-      const roundNumber = extension.assignment.round.roundNumber;
       if (decision === 'approve') {
         const newDeadline = extension.assignment.deadline?.toISOString().split('T')[0] ?? 'N/A';
-        sendEmail(
-          reviewer,
-          `Your extension request for "${paperTitle}" has been approved`,
-          `Hello ${reviewer.name},\n\nYour deadline extension request for paper "${paperTitle}" (Round ${roundNumber}) has been approved.\n\nYour new deadline is: ${newDeadline}\n\nPlease log in and submit your review before the new deadline.`,
-        ).catch(console.error);
+        sendTemplatedEmail(reviewer, TemplateName.EXTENSION_APPROVED, {
+          userName: reviewer.name,
+          newDeadline,
+        }).catch(console.error);
       } else {
-        sendEmail(
-          reviewer,
-          `Your extension request for "${paperTitle}" has been rejected`,
-          `Hello ${reviewer.name},\n\nYour deadline extension request for paper "${paperTitle}" (Round ${roundNumber}) has been rejected. Your original deadline remains unchanged.\n\nPlease log in and submit your review on time.`,
-        ).catch(console.error);
+        sendTemplatedEmail(reviewer, TemplateName.EXTENSION_REJECTED, {
+          userName: reviewer.name,
+        }).catch(console.error);
       }
 
       return res.status(200).json({
@@ -544,7 +540,6 @@ export class ReviewerResponseController {
       await RoundService.completeRoundIfAllAssignmentsTerminal(assignment.round.id);
 
       const paperTitle = assignment.round.paper.title;
-      const roundNumber = assignment.round.roundNumber;
       const reviewerName = assignment.reviewer.name;
       const recipients = [
         ...(assignment.round.paper.coordinators ?? []),
@@ -554,11 +549,11 @@ export class ReviewerResponseController {
       for (const recipient of recipients) {
         if (seen.has(recipient.id)) continue;
         seen.add(recipient.id);
-        sendEmail(
-          recipient,
-          `Review submitted for "${paperTitle}"`,
-          `Hello ${recipient.name},\n\n${reviewerName} has submitted their review for paper "${paperTitle}" (Round ${roundNumber}).\n\nPlease log in to view the review summary.`,
-        ).catch(console.error);
+        sendTemplatedEmail(recipient, TemplateName.REVIEW_SUBMITTED, {
+          coordinatorName: recipient.name,
+          reviewerName,
+          paperTitle,
+        }).catch(console.error);
       }
 
       return res.status(200).json({ message: 'Review completed', id: assignment.id, status: assignment.status });
