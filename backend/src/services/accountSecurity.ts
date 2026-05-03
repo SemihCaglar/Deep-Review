@@ -56,11 +56,16 @@ export function clearLoginLockout(user: Pick<User, 'failedLogins' | 'failedLogin
 
 export function registerFailedLoginAttempt(
   user: Pick<User, 'failedLogins' | 'failedLoginWindowStartedAt' | 'lockedUntil'>,
+  policy: { lockoutThreshold?: number; lockoutWindowMs?: number; lockoutDurationMs?: number } = {},
   now: Date = new Date(),
 ): void {
+  const threshold = policy.lockoutThreshold ?? LOCKOUT_THRESHOLD;
+  const windowMs = policy.lockoutWindowMs ?? LOCKOUT_WINDOW_MS;
+  const durationMs = policy.lockoutDurationMs ?? LOCKOUT_DURATION_MS;
+
   if (
     !user.failedLoginWindowStartedAt ||
-    now.getTime() - user.failedLoginWindowStartedAt.getTime() > LOCKOUT_WINDOW_MS
+    now.getTime() - user.failedLoginWindowStartedAt.getTime() > windowMs
   ) {
     user.failedLoginWindowStartedAt = now;
     user.failedLogins = 1;
@@ -68,8 +73,8 @@ export function registerFailedLoginAttempt(
     user.failedLogins += 1;
   }
 
-  if (user.failedLogins >= LOCKOUT_THRESHOLD) {
-    user.lockedUntil = new Date(now.getTime() + LOCKOUT_DURATION_MS);
+  if (user.failedLogins >= threshold) {
+    user.lockedUntil = new Date(now.getTime() + durationMs);
   }
 }
 
