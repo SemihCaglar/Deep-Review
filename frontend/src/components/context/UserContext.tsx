@@ -8,6 +8,7 @@ interface UserContextType {
     user: User;
     setUser: (user: User) => void;
     logout: () => void;
+    isLoggingOut: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -18,6 +19,7 @@ const LEGACY_USER_KEY = 'bilsen_user';
 export function UserProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User>(EMPTY_USER);
     const [mounted, setMounted] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     // Sync from localStorage after hydration
     React.useEffect(() => {
@@ -35,6 +37,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     // Handle saving user to state and localStorage
     const handleSetUser = (newUser: User) => {
+        setIsLoggingOut(false);
         setUser(newUser);
         if (typeof window !== 'undefined') {
             localStorage.setItem('bilsen_user', JSON.stringify(newUser));
@@ -42,6 +45,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     };
 
     const logout = () => {
+        setIsLoggingOut(true);
         clearToken();
         if (typeof window !== 'undefined') {
             localStorage.removeItem(AUTH_USER_KEY);
@@ -56,7 +60,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
 
     return (
-        <UserContext.Provider value={{ user, setUser: handleSetUser, logout }}>
+        <UserContext.Provider value={{ user, setUser: handleSetUser, logout, isLoggingOut }}>
             {children}
         </UserContext.Provider>
     );

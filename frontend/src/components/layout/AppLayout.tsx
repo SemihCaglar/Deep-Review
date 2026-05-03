@@ -1,12 +1,18 @@
 'use client';
 
 import React from 'react';
+import { usePathname } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import Sidebar from './Sidebar';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-    const { user } = useUser();
+    const { user, isLoggingOut } = useUser();
+    const pathname = usePathname();
     const isLoggedIn = user && user.id !== '';
+
+    if (isLoggingOut && pathname !== '/login') {
+        return <main className="min-h-screen bg-background text-foreground" />;
+    }
 
     if (!isLoggedIn) {
         // If not logged in, just show children (the login page)
