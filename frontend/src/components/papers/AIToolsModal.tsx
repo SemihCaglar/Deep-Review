@@ -229,7 +229,8 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
       const res = await getPCRelatedWorkRecommendations(
         venueUrl.trim(),
         paperData.title,
-        paperData.abstractText || ''
+        paperData.abstractText || '',
+        round.id
       ) as PCRelatedWorkResponse;
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
@@ -264,6 +265,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
         venueUrl.trim(),
         paperData.title,
         paperData.abstractText || '',
+        round.id,
         'csv'
       ) as Blob;
       const url = window.URL.createObjectURL(blob);
@@ -325,7 +327,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
 
   const comp = localComplianceResult || round.complianceReport;
   const refReport = localRefVerifResult ?? round.referenceVerificationReport;
-  const pcRelated = localPCRelatedResult;
+  const pcRelated = localPCRelatedResult ?? round.pcRelatedWorkRecommendations;
   
   const checklist = localAiResult?.checklistJson || round.checklistJson;
   const aiSelectedMap = new Map<string, { label: string; confidence: string; evidence: string }>(

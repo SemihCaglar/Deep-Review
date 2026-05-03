@@ -110,4 +110,7 @@ export class Round {
 
   @Column({ type: 'simple-json', nullable: true })
   referenceVerificationReport: any;
+
+  @Column({ type: 'simple-json', nullable: true })
+  pcRelatedWorkRecommendations: any;
 }

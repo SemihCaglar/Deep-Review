@@ -14,7 +14,7 @@ import type {
 } from '../../types/pcRelatedWork';
 
 const MAX_TOTAL_CANDIDATES = 400;
-const MAX_RECOMMENDATIONS = 10;
+const MAX_RECOMMENDATIONS = 500; // Return all relevant recommendations, not just top 10
 
 const RELATIONSHIP_PRIORITY: Record<string, number> = {
   same_problem: 6,

@@ -448,6 +448,7 @@ export type AuthorRound = {
   aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
   referenceVerificationReport?: ReferenceVerificationReport | null;
+  pcRelatedWorkRecommendations?: PCRelatedWorkResponse | null;
   annotatedPdfUrl?: string | null;
   checklistJson?: EmpiricalStandardsChecklist | null;
   checklistUrl?: string | null;
@@ -560,6 +561,7 @@ export type RoundWithAssignments = {
   aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
   referenceVerificationReport?: ReferenceVerificationReport | null;
+  pcRelatedWorkRecommendations?: PCRelatedWorkResponse | null;
   annotatedPdfUrl?: string | null;
   checklistJson?: EmpiricalStandardsChecklist | null;
   checklistUrl?: string | null;
@@ -1089,6 +1091,7 @@ export async function getPCRelatedWorkRecommendations(
   venueUrl: string,
   paperTitle: string,
   paperAbstract: string,
+  roundId?: string,
   format?: 'json' | 'csv'
 ): Promise<PCRelatedWorkResponse | Blob> {
   const token = getToken();
@@ -1101,7 +1104,7 @@ export async function getPCRelatedWorkRecommendations(
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ venueUrl, paperTitle, paperAbstract }),
+    body: JSON.stringify({ venueUrl, paperTitle, paperAbstract, ...(roundId && { roundId }) }),
   });
 
   if (format === 'csv') {

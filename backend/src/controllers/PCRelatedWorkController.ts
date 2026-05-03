@@ -1,4 +1,6 @@
 import { Response } from 'express';
+import { AppDataSource } from '../data-source';
+import { Round } from '../entities/Round';
 import { PCRelatedWorkRecommendationService } from '../ai_content/services/pcRelatedWorkRecommendationService';
 import type { AuthenticatedRequest } from '../types/auth';
 import type { RelatedWorkRecommendation } from '../types/pcRelatedWork';
@@ -29,7 +31,7 @@ export class PCRelatedWorkController {
       const user = req.user;
       if (!user) return res.status(401).json({ message: 'Unauthorized' });
 
-      const { venueUrl, paperTitle, paperAbstract } = req.body;
+      const { venueUrl, paperTitle, paperAbstract, roundId } = req.body;
 
       if (!venueUrl || typeof venueUrl !== 'string') {
         return res.status(400).json({ message: 'venueUrl is required.' });
@@ -51,6 +53,20 @@ export class PCRelatedWorkController {
         paperTitle.trim(),
         paperAbstract.trim()
       );
+
+      // Save to database if roundId is provided
+      if (roundId && typeof roundId === 'string') {
+        try {
+          const roundRepo = AppDataSource.getRepository(Round);
+          await roundRepo.update({ id: roundId }, { pcRelatedWorkRecommendations: result as any });
+          console.log(`[PCRelatedWorkController] ✓ Saved ${result.recommendations.length} recommendations to round ${roundId}`);
+        } catch (dbErr) {
+          console.warn(`[PCRelatedWorkController] Could not save to database:`, dbErr);
+          // Don't fail the response if DB save fails
+        }
+      } else {
+        console.log(`[PCRelatedWorkController] No roundId provided - results will not be saved`);
+      }
 
       if (req.query.format === 'csv') {
         const csv = toCSV(result.recommendations);
