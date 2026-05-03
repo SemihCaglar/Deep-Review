@@ -129,9 +129,13 @@ export class AdminController {
   static async deleteUser(req: AuthenticatedRequest, res: Response) {
     const id = req.params.id as string;
     const userRepo = AppDataSource.getRepository<User>('User');
-    const user = await userRepo.findOne({ where: { id } });
+    const user = await userRepo.findOne({ where: { id }, relations: ['labs'] });
 
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (user.labs && user.labs.length > 0) {
+      return res.status(400).json({ message: 'Lab members cannot be deleted. Only users who have not yet joined a lab can be removed.' });
+    }
 
     await userRepo.remove(user);
 
