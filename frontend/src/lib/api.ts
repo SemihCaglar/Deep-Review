@@ -884,6 +884,33 @@ export function getVenueRulesRequest(roundId: string) {
   });
 }
 
+export async function runEmpiricalChecklistAnsweringRequest(
+  roundId: string,
+  pdfFile: File
+): Promise<{ success: boolean; data: any }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('pdf', pdfFile);
+
+  const response = await fetch(buildUrl(`/rounds/${roundId}/empirical-checklist-answers`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const payload = await parseResponseBody(response);
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
+  return payload as { success: boolean; data: any };
+}
+
+export function getEmpiricalChecklistAnswersRequest(roundId: string) {
+  return apiRequest<{ success: boolean; data: any }>(`/rounds/${roundId}/empirical-checklist-answers`, {
+    method: 'GET',
+  });
+}
+
 function buildUrl(path: string) {
   if (/^https?:\/\//.test(path)) {
     return path;

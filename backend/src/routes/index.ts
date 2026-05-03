@@ -176,6 +176,8 @@ router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
 router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistItem);
 router.put('/rounds/:id/checklist/:itemId', RoundController.updateChecklistItem);
 router.post('/rounds/:id/confirm-checklist', authenticateRequest, RoundController.confirmChecklistSelection);
+router.post('/rounds/:id/empirical-checklist-answers', authenticateRequest, handlePdfUpload, RoundController.runEmpiricalChecklistAnswering);
+router.get('/rounds/:id/empirical-checklist-answers', authenticateRequest, RoundController.getEmpiricalChecklistAnswers);
 
 // ==== SEARCH ROUTES ====
 router.get('/topics', TopicController.getAllTopics);
