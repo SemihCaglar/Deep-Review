@@ -13,6 +13,7 @@ import { SearchController } from '../controllers/SearchController';
 import { TopicController } from '../controllers/TopicController';
 import { SubmissionRuleController } from '../controllers/SubmissionRuleController';
 import { AIController } from '../controllers/AIController';
+import { PCRelatedWorkController } from '../controllers/PCRelatedWorkController';
 import { authenticateRequest, requireAdmin, requireCoordinator, requireActiveAccount } from '../middleware/auth';
 
 import multer, { FileFilterCallback } from 'multer';
@@ -182,6 +183,9 @@ router.get('/rounds/:id/empirical-checklist-answers', authenticateRequest, Round
 
 // ==== AI CHECKS (standalone) ====
 router.post('/rounds/:id/reference-verification', authenticateRequest, handlePdfUpload, AIController.runReferenceVerification);
+
+// ==== PC RELATED WORK ====
+router.post('/pc-related-work/recommendations', authenticateRequest, PCRelatedWorkController.getRecommendations);
 
 // ==== SEARCH ROUTES ====
 router.get('/topics', TopicController.getAllTopics);

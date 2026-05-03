@@ -51,6 +51,7 @@
   "type": "commonjs",
   "devDependencies": {
     "@types/adm-zip": "^0.5.8",
+    "@types/cheerio": "^0.22.35",
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/jsonwebtoken": "^9.0.10",
@@ -70,6 +71,7 @@
     "@types/express": "^5.0.6",
     "@types/nodemailer": "^8.0.0",
     "adm-zip": "^0.5.17",
+    "cheerio": "^1.2.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
