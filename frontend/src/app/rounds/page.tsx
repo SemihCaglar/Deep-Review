@@ -460,6 +460,7 @@ function RoundCard({
   const [assigning, setAssigning] = useState(false);
   const [assignMsg, setAssignMsg] = useState('');
   const [assignError, setAssignError] = useState('');
+  const [reassigningForId, setReassigningForId] = useState<string | null>(null);
   const roundDeadlineHasNotPassed = round.deadline ? new Date(round.deadline).getTime() >= Date.now() : false;
   const canAddReviewer = isLatestRound && (round.status === 'Open' || (round.status === 'Completed' && roundDeadlineHasNotPassed));
 
