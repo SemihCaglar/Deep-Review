@@ -623,9 +623,11 @@ export class PaperController {
       const repo = AppDataSource.getRepository(Paper);
       let papers: Paper[];
 
+      const relations = ['authors', 'coordinators', 'topics', 'labs', 'rounds', 'rounds.assignments', 'rounds.assignments.rating'];
+
       if (authReq.user.role === UserRole.Admin) {
         // Admins can see everything
-        papers = await repo.find({ relations: ['authors', 'coordinators', 'topics'] });
+        papers = await repo.find({ relations });
       } else if (authReq.user.role === UserRole.Coordinator) {
         // Coordinators can see papers in their own lab
         const coordinatorRepo = AppDataSource.getRepository(Coordinator);
@@ -641,21 +643,41 @@ export class PaperController {
             { labs: { id: coordinator.lab.id } },
             { coordinators: { id: authReq.user.id } },
           ],
-          relations: ['authors', 'coordinators', 'topics', 'labs']
+          relations
         });
       } else {
         return res.status(403).json({ message: 'Access denied' });
       }
 
-      const sortedPapers = papers.map(paper => {
+      const enrichedPapers = papers.map(p => {
+        const latestRound = p.rounds?.length
+          ? p.rounds.slice().sort((a, b) => b.roundNumber - a.roundNumber)[0]
+          : null;
+
+        const waitingRatingsCount = p.rounds?.reduce((count, round) => {
+          return count + (round.assignments?.filter(a => a.status === AssignmentStatus.Completed && !a.rating)?.length || 0);
+        }, 0) || 0;
+
         return {
-          ...paper,
-          authors: getOrderedPaperAuthors(paper),
-          coordinators: paper.coordinators?.map(c => ({ id: c.id, name: c.name, email: c.email })) || []
+          ...p,
+          authors: getOrderedPaperAuthors(p),
+          coordinators: p.coordinators?.map(c => ({ id: c.id, name: c.name, email: c.email })) || [],
+          latestRoundNumber: latestRound?.roundNumber ?? null,
+          latestRoundStatus: latestRound?.status ?? null,
+          latestRoundDeadline: latestRound?.deadline ?? null,
+          completedAssignments: (p.rounds ?? []).reduce(
+            (count, round) => count + (round.assignments ?? []).filter(a => a.status === AssignmentStatus.Completed).length,
+            0,
+          ),
+          totalAssignments: (p.rounds ?? []).reduce(
+            (count, round) => count + (round.assignments ?? []).length,
+            0,
+          ),
+          waitingRatingsCount,
         };
       });
 
-      res.status(200).json(sortedPapers);
+      res.status(200).json(enrichedPapers);
     } catch (e: any) {
       res.status(500).json({ error: e.message });
     }

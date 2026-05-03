@@ -121,13 +121,11 @@ function AssignmentRow({
   roundDeadline,
   roundStatus,
   onRefresh,
-  onReassign
 }: {
   assignment: RoundAssignment;
   roundDeadline: string | null;
   roundStatus: RoundWithAssignments['status'];
   onRefresh: () => void;
-  onReassign: (id: string) => void;
 }) {
   const [showDeadlineInput, setShowDeadlineInput] = useState(false);
   const [newDeadline, setNewDeadline] = useState('');
@@ -248,16 +246,7 @@ function AssignmentRow({
               <Ban className="w-3.5 h-3.5" /> Cancel
             </button>
           )}
-          {showReassign && (
-            <button
-              onClick={() => onReassign(assignment.id)}
-              disabled={busy || !isReassignable}
-              title={!isReassignable ? 'Cancelled assignments cannot be reassigned' : undefined}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-orange-500/10"
-            >
-              <UserPlus className="w-3.5 h-3.5" /> Reassign
-            </button>
-          )}
+
           {assignment.status !== 'Reassigned' && assignment.status !== 'Cancelled' && (
             <button
               onClick={() => {
@@ -457,12 +446,12 @@ function RoundCard({
   paperHasOverleafLink: boolean;
   isLatestRound: boolean;
 }) {
+  const { user } = useUser();
   const [expanded, setExpanded] = useState(true);
   const [aiToolsOpen, setAiToolsOpen] = useState(false);
 
-  // Add Reviewer / Reassign panel
+  // Add Reviewer panel
   const [showAddPanel, setShowAddPanel] = useState(false);
-  const [reassigningForId, setReassigningForId] = useState<string | null>(null);
 
   const [suggestions, setSuggestions] = useState<SuggestedReviewer[]>([]);
   const [addSearchQuery, setAddSearchQuery] = useState('');
@@ -472,12 +461,12 @@ function RoundCard({
   const [assigning, setAssigning] = useState(false);
   const [assignMsg, setAssignMsg] = useState('');
   const [assignError, setAssignError] = useState('');
+  const [reassigningForId, setReassigningForId] = useState<string | null>(null);
   const roundDeadlineHasNotPassed = round.deadline ? new Date(round.deadline).getTime() >= Date.now() : false;
   const canAddReviewer = isLatestRound && (round.status === 'Open' || (round.status === 'Completed' && roundDeadlineHasNotPassed));
 
-  const openAddPanel = async (reassignId?: string) => {
+  const openAddPanel = async () => {
     setShowAddPanel(true);
-    setReassigningForId(reassignId || null);
     setSelectedIds(new Set());
     setAssignMsg('');
     setAssignError('');
@@ -494,19 +483,15 @@ function RoundCard({
   };
 
   const toggleSelect = (id: string) => {
-    if (reassigningForId) {
-      setSelectedIds(new Set([id]));
-    } else {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        if (next.has(id)) {
-          next.delete(id);
-        } else {
-          next.add(id);
-        }
-        return next;
-      });
-    }
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
   const handleAssign = async () => {
@@ -515,15 +500,9 @@ function RoundCard({
     setAssignMsg('');
     setAssignError('');
     try {
-      if (reassigningForId) {
-        const newReviewerId = Array.from(selectedIds)[0];
-        await reassignReviewerRequest(reassigningForId, newReviewerId);
-        setAssignMsg(`Reviewer reassigned. Invitation sent automatically.`);
-      } else {
-        const result = await assignReviewersRequest(round.id, Array.from(selectedIds));
-        await sendInvitationsRequest(round.id);
-        setAssignMsg(`${result.length} reviewer(s) assigned and invited.`);
-      }
+      const result = await assignReviewersRequest(round.id, Array.from(selectedIds));
+      await sendInvitationsRequest(round.id);
+      setAssignMsg(`${result.length} reviewer(s) assigned and invited.`);
       setSelectedIds(new Set());
       setShowAddPanel(false);
       onRefresh();
@@ -755,7 +734,7 @@ function RoundCard({
             <div className="w-9 h-9 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-sm font-bold">
               {round.roundNumber}
             </div>
-            {round.assignments.some(a => a.status === 'Completed' && !(a as any).hasRating) && (
+            {!user.isCoordinator && round.assignments.some(a => a.status === 'Completed' && !(a as any).hasRating) && (
               <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-purple-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(168,85,247,0.5)]" title="Waiting rating" />
             )}
           </div>
@@ -1267,7 +1246,7 @@ function RoundCard({
                   className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                  Assign {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+                  {`Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ''}`}
                 </button>
                 <button
                   onClick={async () => {
@@ -1307,7 +1286,6 @@ function RoundCard({
                   roundDeadline={round.deadline}
                   roundStatus={round.status}
                   onRefresh={onRefresh}
-                  onReassign={openAddPanel}
                 />
               ))}
             </div>
@@ -1540,7 +1518,7 @@ export default function RoundsPage() {
   const selectedPaper = papers.find(p => p.id === selectedPaperId);
 
   const latestRound = rounds.length > 0 ? rounds[0] : null;
-  const canCreateNextRound = !latestRound || latestRound.status === 'Completed';
+  const canCreateNextRound = (!latestRound || latestRound.status === 'Completed') && selectedPaper?.status !== 'Accepted';
 
   return (
     <div className="max-w-5xl mx-auto py-6 space-y-8 animate-in fade-in duration-500 mb-20">
@@ -1581,12 +1559,26 @@ export default function RoundsPage() {
             </div>
             {(() => {
               const q = paperSearch.trim().toLowerCase();
-              const filtered = q
+              const filtered = (q
                 ? papers.filter(p =>
                   p.title.toLowerCase().includes(q) ||
                   (p.authors ?? []).some(a => a.name.toLowerCase().includes(q))
                 )
-                : papers;
+                : [...papers]).sort((a, b) => {
+                  const priority = (s: string) => {
+                    switch (s) {
+                      case 'In Review': return 0;
+                      case 'Draft':     return 1;
+                      case 'Accepted':  return 2;
+                      case 'Completed': return 3;
+                      default:          return 4;
+                    }
+                  };
+                  const pa = priority(a.status);
+                  const pb = priority(b.status);
+                  if (pa !== pb) return pa - pb;
+                  return a.title.localeCompare(b.title);
+                });
               return filtered.length === 0 ? (
                 <p className="text-sm text-slate-500">No papers match your search.</p>
               ) : (
