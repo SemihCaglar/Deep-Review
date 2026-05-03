@@ -12,9 +12,11 @@ import {
   RoundStatusSummary,
   SuggestedReviewer,
   ProposedReviewer,
+  ReferenceVerificationReport,
   ApiError,
   startAIReviewRequest,
   runComplianceCheckRequest,
+  runReferenceVerificationRequest,
   getMyCoordinatedPapersRequest,
   getPaperByIdRequest,
   getPaperRoundsRequest,
@@ -722,6 +724,11 @@ function RoundCard({
   const [expandedChecklistStandards, setExpandedChecklistStandards] = useState<Set<string>>(new Set());
   const [checklistAnswerFilter, setChecklistAnswerFilter] = useState<'no' | 'unknown' | 'yes' | null>(null);
   const checklistAnswerFileRef = useRef<HTMLInputElement>(null);
+  const refVerifFileRef = useRef<HTMLInputElement>(null);
+  const [runningRefVerif, setRunningRefVerif] = useState(false);
+  const [refVerifError, setRefVerifError] = useState('');
+  const [localRefVerifResult, setLocalRefVerifResult] = useState<ReferenceVerificationReport | null>(null);
+  const [refVerifExpanded, setRefVerifExpanded] = useState(false);
 
   const STANDARDS_BY_CATEGORY = {
     General: [
@@ -782,6 +789,7 @@ function RoundCard({
     try {
       const res = await startAIReviewRequest(round.id, file);
       const aiReviewData = res.data?.aiReview;
+      const refVerifData = res.data?.referenceVerification;
 
       // Normalize the response format for local display
       setLocalAiResult({
@@ -796,6 +804,12 @@ function RoundCard({
         const standards = new Set<string>(aiReviewData.checklist.selectedStandards.map((s: any) => s.label));
         setConfirmedStandards(standards);
       }
+
+      // Display reference verification results
+      if (refVerifData?.report) {
+        setLocalRefVerifResult(refVerifData.report);
+      }
+
       setAiStatus('');
       onRefresh();
     } catch (err: any) {
@@ -822,6 +836,24 @@ function RoundCard({
       setComplianceError(err.message || 'Compliance check failed');
     } finally {
       setRunningCompliance(false);
+    }
+  };
+
+  const handleRefVerifFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setRunningRefVerif(true);
+    setRefVerifError('');
+
+    try {
+      const res = await runReferenceVerificationRequest(round.id, file);
+      setLocalRefVerifResult(res.data);
+      onRefresh();
+    } catch (err: any) {
+      setRefVerifError(err.message || 'Reference verification failed');
+    } finally {
+      setRunningRefVerif(false);
     }
   };
 
@@ -1502,6 +1534,109 @@ function RoundCard({
                           })}
                         </div>
                       )}
+                    </div>
+                  );
+                })()}
+
+                {/* Reference Verification */}
+                {(() => {
+                  const report = localRefVerifResult ?? round.referenceVerificationReport;
+
+                  return (
+                    <div className="pt-3 space-y-2">
+                      {/* Run button */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => refVerifFileRef.current?.click()}
+                          disabled={runningRefVerif}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {runningRefVerif ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Analyzing references…
+                            </>
+                          ) : (
+                            <>
+                              <Search className="w-3 h-3" />
+                              {report ? 'Run again' : 'Verify References'}
+                            </>
+                          )}
+                        </button>
+                        {refVerifError && <p className="text-xs text-red-400">{refVerifError}</p>}
+                      </div>
+
+                      {/* Results card */}
+                      {report && (
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+                          {/* Collapsible header */}
+                          <button
+                            onClick={() => setRefVerifExpanded(v => !v)}
+                            className="w-full flex items-center justify-between px-3 py-2 hover:bg-amber-500/5 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <ChevronDown className={`w-3 h-3 text-amber-500/60 transition-transform ${refVerifExpanded ? '' : '-rotate-90'}`} />
+                              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Reference Verification</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {report.verifiedCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">{report.verifiedCount} ✓</span>}
+                              {report.possibleMatchCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">{report.possibleMatchCount} ~</span>}
+                              {report.notFoundCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">{report.notFoundCount} ✗</span>}
+                              <span className="text-[9px] text-slate-500">/ {report.totalReferences}</span>
+                            </div>
+                          </button>
+
+                          {/* Expanded: issues + reference list */}
+                          {refVerifExpanded && (
+                            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-amber-500/10 max-h-96 overflow-y-auto">
+                              {/* Pipeline-level issues */}
+                              {report.issues.length > 0 && (
+                                <div className="p-2 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                                  {report.issues.map((issue, i) => (
+                                    <p key={i} className="text-[10px] text-amber-300">{issue}</p>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Per-reference rows */}
+                              {report.references.slice(0, 50).map(ref => {
+                                const statusColors: Record<string, string> = {
+                                  verified: 'bg-emerald-500/20 text-emerald-300',
+                                  possible_match: 'bg-amber-500/20 text-amber-300',
+                                  not_found: 'bg-red-500/20 text-red-300',
+                                  metadata_mismatch: 'bg-orange-500/20 text-orange-300',
+                                  parse_failed: 'bg-slate-500/20 text-slate-300',
+                                };
+                                return (
+                                  <div key={ref.index} className="text-[10px] p-2 rounded bg-slate-800/20 space-y-1">
+                                    <div className="flex items-start gap-2 justify-between">
+                                      <p className="text-slate-400 line-clamp-2">{ref.rawText}</p>
+                                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded shrink-0 ${statusColors[ref.status] || 'bg-slate-500/20 text-slate-300'}`}>
+                                        {ref.status.replace(/_/g, ' ')}
+                                      </span>
+                                    </div>
+                                    {ref.openAlexTitle && ref.openAlexTitle !== ref.parsedTitle && (
+                                      <p className="text-slate-500">Found: <span className="text-slate-300">{ref.openAlexTitle.slice(0, 100)}</span></p>
+                                    )}
+                                    {ref.note && <p className="text-slate-500 italic">{ref.note}</p>}
+                                  </div>
+                                );
+                              })}
+                              {report.references.length > 50 && (
+                                <p className="text-[10px] text-slate-500 p-2">... and {report.references.length - 50} more references</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Hidden file input */}
+                      <input
+                        ref={refVerifFileRef}
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={handleRefVerifFileSelected}
+                      />
                     </div>
                   );
                 })()}

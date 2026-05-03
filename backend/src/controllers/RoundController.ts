@@ -683,6 +683,7 @@ export class RoundController {
         ),
         aiReviewReport: r.aiReviewReport,
         complianceReport: r.complianceReportsByUser?.[user.id]?.report ?? (r.complianceReportsByUser ? null : r.complianceReport),
+        referenceVerificationReport: r.referenceVerificationReport ?? null,
         annotatedPdfUrl: r.annotatedPdfUrl,
         aiReviewReports: (r.aiReviewReports ?? [])
           .filter(ar => !ar.requestedBy || ar.requestedBy.id === user.id)
@@ -759,6 +760,7 @@ export class RoundController {
         aiReviewReport: round.aiReviewReport ?? null,
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
         complianceReport: round.complianceReportsByUser?.[coordinator.id]?.report ?? (round.complianceReportsByUser ? null : round.complianceReport ?? null),
+        referenceVerificationReport: round.referenceVerificationReport ?? null,
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
@@ -1379,7 +1381,18 @@ export class RoundController {
       console.log(`[RoundController] Checklist: ${aiReviewResult.checklistJson?.selectedStandards?.length || 0} standards selected`);
       console.log(`[RoundController] =========================================\n`);
 
-      // STEP 3: Save results to database
+      // STEP 3: Reference Verification (included in aiReviewResult)
+      console.log(`[RoundController] ========== STEP 3: REFERENCE VERIFICATION ==========`);
+      const refVerifReport = aiReviewResult.referenceVerificationReport;
+      if (refVerifReport) {
+        console.log(`[RoundController] ✓ Reference verification: ${refVerifReport.verifiedCount}/${refVerifReport.totalReferences} verified`);
+        if (refVerifReport.issues && refVerifReport.issues.length > 0) {
+          console.warn(`[RoundController] Reference verification issues: ${refVerifReport.issues.join('; ')}`);
+        }
+      }
+      console.log(`[RoundController] ==================================================\n`);
+
+      // STEP 4: Save results to database
       console.log(`[RoundController] Saving results to database...`);
 
       // Create new AIReviewReport record for this run
@@ -1388,6 +1401,7 @@ export class RoundController {
       aiReviewReport.reviewText = aiReviewResult.summaryReport;
       aiReviewReport.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
       aiReviewReport.complianceReport = complianceReport;
+      aiReviewReport.referenceVerificationReport = aiReviewResult.referenceVerificationReport;
       aiReviewReport.venue = round.targetVenue;
       aiReviewReport.round = round;
       aiReviewReport.requestedBy = user as any;
@@ -1399,6 +1413,10 @@ export class RoundController {
       round.aiReviewReport = aiReviewResult.summaryReport;
       round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
 
+      if (aiReviewResult.referenceVerificationReport) {
+        round.referenceVerificationReport = aiReviewResult.referenceVerificationReport;
+      }
+
       // Set checklist only if generated (first time only)
       if (aiReviewResult.checklistJson) {
         round.checklistJson = aiReviewResult.checklistJson;
@@ -1409,10 +1427,10 @@ export class RoundController {
       await roundRepo.save(round);
       console.log(`[RoundController] ✓ Round updated`);
 
-      // STEP 4: Return combined results
+      // STEP 5: Return combined results
       return res.status(200).json({
         success: true,
-        message: 'AI Review and Compliance check completed successfully',
+        message: 'AI Review, Compliance check, and Reference Verification completed successfully',
         data: {
           compliance: complianceReport ? {
             report: complianceReport,
@@ -1427,6 +1445,13 @@ export class RoundController {
             suggestedCitations: aiReviewResult.suggestedCitations,
             checklist: aiReviewResult.checklistJson,
             checklistUrl: aiReviewResult.checklistUrl
+          },
+          referenceVerification: aiReviewResult.referenceVerificationReport ? {
+            report: aiReviewResult.referenceVerificationReport,
+            message: `${aiReviewResult.referenceVerificationReport.verifiedCount}/${aiReviewResult.referenceVerificationReport.totalReferences} references verified`
+          } : {
+            report: null,
+            message: 'Reference verification did not complete'
           }
         }
       });

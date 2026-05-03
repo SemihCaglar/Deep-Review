@@ -107,4 +107,7 @@ export class Round {
 
   @Column({ type: 'simple-json', nullable: true })
   confirmedChecklistJson: any;
+
+  @Column({ type: 'simple-json', nullable: true })
+  referenceVerificationReport: any;
 }
