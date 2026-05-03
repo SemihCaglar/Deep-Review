@@ -329,23 +329,23 @@ async function ensureDefaultTemplates(templateRepo: ReturnType<typeof AppDataSou
     },
     {
       name: TemplateName.ACCOUNT_APPROVED,
-      subject: 'Your BILSEN account has been approved',
-      body: 'Hello {{userName}},\n\nYour sign-up request for BILSEN has been approved. You can now log in and start using the system.\n\nWelcome aboard!{{note}}',
+      subject: 'Your Deep Review account has been approved',
+      body: 'Hello {{userName}},\n\nYour sign-up request for Deep Review has been approved. You can now log in and start using the system.\n\nWelcome aboard!{{note}}',
     },
     {
       name: TemplateName.ACCOUNT_REJECTED,
-      subject: 'Your BILSEN sign-up request was not approved',
-      body: 'Hello {{userName}},\n\nUnfortunately your sign-up request for BILSEN has not been approved at this time.{{note}}\n\nIf you believe this is a mistake, please contact the lab coordinator.',
+      subject: 'Your Deep Review sign-up request was not approved',
+      body: 'Hello {{userName}},\n\nUnfortunately your sign-up request for Deep Review has not been approved at this time.{{note}}\n\nIf you believe this is a mistake, please contact the lab coordinator.',
     },
     {
       name: TemplateName.PASSWORD_RESET,
-      subject: 'Reset your BILSEN password',
-      body: 'Hello {{userName}},\n\nWe received a request to reset your BILSEN password.\n\nReset your password using this link:\n{{resetLink}}\n\nIf you did not request this change, you can safely ignore this email.',
+      subject: 'Reset your Deep Review password',
+      body: 'Hello {{userName}},\n\nWe received a request to reset your Deep Review password.\n\nReset your password using this link:\n{{resetLink}}\n\nIf you did not request this change, you can safely ignore this email.',
     },
     {
       name: TemplateName.COORDINATOR_CREATED,
-      subject: 'Welcome to BILSEN - Coordinator Account Created',
-      body: 'Hello {{userName}},\n\nAn admin has created a Coordinator account and a Lab for you on the BILSEN platform.\n\nYour login credentials:\nEmail: {{email}}\nPassword: {{password}}\n\nPlease log in at: {{loginUrl}}/login\n\nIf you are not involved with BILSEN, please ignore this email.\n\nBest regards,\nBILSEN Admin Team',
+      subject: 'Welcome to Deep Review - Coordinator Account Created',
+      body: 'Hello {{userName}},\n\nAn admin has created a Coordinator account and a Lab for you on the Deep Review platform.\n\nYour login credentials:\nEmail: {{email}}\nPassword: {{password}}\n\nPlease log in at: {{loginUrl}}/login\n\nIf you are not involved with Deep Review, please ignore this email.\n\nBest regards,\nDeep Review Admin Team',
     },
     {
       name: TemplateName.ASSIGNMENT_CANCELLED,
