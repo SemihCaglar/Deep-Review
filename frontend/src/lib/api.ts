@@ -1159,7 +1159,16 @@ export async function getPCRelatedWorkRecommendations(
     return response.blob();
   }
 
-  const payload = await response.json();
-  if (!response.ok) throw new ApiError(payload.message || 'Unknown error', response.status);
+  const text = await response.text();
+  let payload: any;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch (e) {
+    payload = { message: text };
+  }
+
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
   return payload as PCRelatedWorkResponse;
 }
