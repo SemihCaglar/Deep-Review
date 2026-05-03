@@ -779,11 +779,12 @@ function LogsTab({ logs }: { logs: any[] }) {
           <select
             value={actionFilter}
             onChange={e => setActionFilter(e.target.value)}
-            className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 min-w-[180px]"
+            style={{ colorScheme: 'dark' }}
+            className="bg-slate-900 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-blue-500/50 min-w-[180px]"
           >
-            <option value="">All actions</option>
+            <option value="" className="bg-slate-900 text-white">All actions</option>
             {uniqueActions.map(a => (
-              <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>
+              <option key={a} value={a} className="bg-slate-900 text-white">{a.replace(/_/g, ' ')}</option>
             ))}
           </select>
         </div>
