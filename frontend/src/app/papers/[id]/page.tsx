@@ -1,26 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { notFound, useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS } from '@/lib/mockData';
 import { confirmCancel, customConfirm } from '@/lib/confirmAction';
-import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, Download, AlertCircle } from 'lucide-react';
+import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, AlertCircle } from 'lucide-react';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getLabTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
   getLabMembersRequest, ApiError, LabMember, Lab,
   AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest, editSubmissionDeadlineRequest,
   getSuggestedReviewersRequest, SuggestedReviewer, ProposedReviewer,
-  getProposedReviewersRequest, addProposedReviewerRequest, removeProposedReviewerRequest,
+  addProposedReviewerRequest, removeProposedReviewerRequest,
   updateOverleafLinkRequest, updatePaperStatusRequest,
   submitRatingRequest,
   getLabsRequest,
   getPaperInvitationsRequest, sendCollaborationInvitationsRequest, cancelCollaborationInvitationRequest,
   LabCollaborationInvitation,
-  startAIReviewRequest,
-  sendPaperRemindersRequest,
 } from '@/lib/api';
 import AIToolsModal from '@/components/papers/AIToolsModal';
 
@@ -120,9 +118,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [isEditingAbstract, setIsEditingAbstract] = useState(false);
     const [isEditingTopics, setIsEditingTopics] = useState(false);
     const [isEditingLinks, setIsEditingLinks] = useState(false);
-    const [isSendingReminder, setIsSendingReminder] = useState(false);
-    const [reminderSent, setReminderSent] = useState(false);
-    const [reminderError, setReminderError] = useState('');
     const [isEditingAuthors, setIsEditingAuthors] = useState(false);
     const [localAuthors, setLocalAuthors] = useState<string[]>([]);
     const [availableUsers, setAvailableUsers] = useState<LabMember[]>([]);
@@ -168,11 +163,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [roundDeadlineDraft, setRoundDeadlineDraft] = useState('');
     const [editingSubmissionDeadline, setEditingSubmissionDeadline] = useState<string | null>(null);
     const [submissionDeadlineDraft, setSubmissionDeadlineDraft] = useState('');
-    const aiFileRef = useRef<HTMLInputElement>(null);
-    const pendingAiRoundId = useRef<string | null>(null);
-    const [runningAiRoundId, setRunningAiRoundId] = useState<string | null>(null);
-    const [aiStatusByRound, setAiStatusByRound] = useState<Record<string, string>>({});
-    const [aiResultsByRound, setAiResultsByRound] = useState<Record<string, any>>({});
 
     // Collaboration state
     const [collabInvitations, setCollabInvitations] = useState<LabCollaborationInvitation[]>([]);
@@ -457,20 +447,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         
         [newAuthors[index], newAuthors[targetIndex]] = [newAuthors[targetIndex], newAuthors[index]];
         setLocalAuthors(newAuthors);
-    };
-
-    const handleSendReminder = async () => {
-        setIsSendingReminder(true);
-        setReminderError('');
-        try {
-            await sendPaperRemindersRequest(paper.id);
-            setReminderSent(true);
-            setTimeout(() => setReminderSent(false), 3000);
-        } catch (err) {
-            setReminderError(err instanceof ApiError ? err.message : 'Failed to send reminders. Please try again.');
-        } finally {
-            setIsSendingReminder(false);
-        }
     };
 
     const handleSaveAbstract = async () => {
@@ -1075,65 +1051,15 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
                 {/* Action Buttons based on Role & State */}
                 <div className="flex flex-col gap-3 shrink-0 lg:min-w-48">
-                    {/* Coordinator Draft Actions */}
-                    {user.isCoordinator && effectivePaperStatus === 'Draft' && (
+                    {(user.isCoordinator || isAuthor) && (
                         <Link
-                            href={`/rounds?paper=${paper.id}`}
-                            className="w-full px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
-                        >
-                            <Play className="w-4 h-4" />
-                            Start Round & Assign
-                        </Link>
-                    )}
-
-                    {/* Coordinator Active Actions */}
-                    {user.isCoordinator && effectivePaperStatus === 'In Review' && (
-                        <Link
-                            href={`/rounds?paper=${paper.id}`}
+                            href={user.isCoordinator ? `/rounds?paper=${paper.id}` : `/papers/${paper.id}/rounds`}
                             className="w-full px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2"
                         >
-                            <UserPlus className="w-4 h-4" />
-                            Assign Reviewers
+                            <ExternalLink className="w-4 h-4" />
+                            Round Overview
                         </Link>
                     )}
-
-                    {/* Send Reminder + Run AI Review — coordinator and authors */}
-                    {(user.isCoordinator || isAuthor) && effectivePaperStatus === 'In Review' && (() => {
-                        const openRound = authorRounds.find(r => r.status === 'Open');
-                        return (
-                            <>
-                            <button
-                                onClick={handleSendReminder}
-                                disabled={isSendingReminder || reminderSent || !openRound}
-                                className={`w-full px-5 py-2.5 text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 border
-                                        ${reminderSent
-                                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                                        : !openRound ? 'bg-slate-800/50 text-slate-500 border-slate-700 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20'
-                                    } disabled:opacity-50`}
-                            >
-                                {isSendingReminder ? (
-                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : reminderSent ? (
-                                    <><CheckCircle2 className="w-4 h-4" /> Reminder Sent</>
-                                ) : (
-                                    <><Clock className="w-4 h-4" /> Send Reminder</>
-                                )}
-                            </button>
-                            {reminderError && <p className="text-xs text-red-400">{reminderError}</p>}
-                            {openRound && isAuthor && (
-                                <button
-                                    onClick={() => {
-                                        setAiToolsModalRoundId(openRound.id);
-                                        setAiToolsModalRound(openRound);
-                                    }}
-                                    className="w-full px-5 py-2.5 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2 border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20"
-                                >
-                                    <Cpu className="w-4 h-4" /> AI Tools
-                                </button>
-                            )}
-                            </>
-                        );
-                    })()}
 
                     {canChangeAcceptState && (() => {
                         const now = new Date();
@@ -1381,49 +1307,39 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                         )}
                     </div>
 
-                    {/* Coordinator: compact round status card */}
-                    {user.isCoordinator && (() => {
-                        const latestRound = authorRounds.length > 0
-                            ? authorRounds.reduce((a, b) => a.roundNumber > b.roundNumber ? a : b)
-                            : null;
+                    {/* Compact round status card */}
+                    {(user.isCoordinator || isAuthor) && (() => {
+                        const roundOverviewHref = user.isCoordinator ? `/rounds?paper=${paper.id}` : `/papers/${paper.id}/rounds`;
+                        const sortedRounds = [...authorRounds].sort((a, b) => b.roundNumber - a.roundNumber);
+                        const latestRound = sortedRounds[0] ?? null;
                         const pendingProposals = latestRound?.status === 'Draft'
                             ? (proposedMap[latestRound.id] ?? latestRound.proposedReviewers ?? []).length
                             : 0;
-                        const roundStatusColor = latestRound?.status === 'Draft'
+                        const getRoundStatusColor = (status: string) => status === 'Draft'
                             ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
-                            : latestRound?.status === 'Open'
+                            : status === 'Open'
                                 ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
                                 : 'text-slate-400 border-slate-500/30 bg-slate-500/10';
+                        const roundStatusColor = latestRound ? getRoundStatusColor(latestRound.status) : 'text-slate-400 border-slate-500/30 bg-slate-500/10';
                         return (
                             <div className="glass p-6 rounded-2xl border border-white/5 space-y-4">
                                 <div className="flex items-center justify-between flex-wrap gap-2">
                                     <h2 className="text-xl font-semibold text-white">Round Overview</h2>
                                     <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() => {
-                                                setAiToolsModalRoundId(latestRound?.id || null);
-                                                setAiToolsModalRound(latestRound);
-                                            }}
-                                            disabled={!latestRound || latestRound.status === 'Draft'}
-                                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            <Cpu className="w-4 h-4" />
-                                            AI Tools
-                                        </button>
                                         <Link
-                                            href={`/rounds?paper=${paper.id}`}
+                                            href={roundOverviewHref}
                                             className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors"
                                         >
                                             <ExternalLink className="w-4 h-4" />
-                                            Manage in Round Overview
+                                            Open Round Overview
                                         </Link>
                                     </div>
                                 </div>
                                 {loadingRounds && <p className="text-sm text-slate-400">Loading…</p>}
-                                {!loadingRounds && !latestRound && (
+                                {!loadingRounds && sortedRounds.length === 0 && (
                                     <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-5 text-center space-y-2">
                                         <p className="text-sm text-slate-400">No round created yet.</p>
-                                        <Link href={`/rounds?paper=${paper.id}`} className="text-xs text-blue-400 hover:text-blue-300 block">
+                                        <Link href={roundOverviewHref} className="text-xs text-blue-400 hover:text-blue-300 block">
                                             → Create a round in Round Overview
                                         </Link>
                                     </div>
@@ -1460,18 +1376,61 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         {pendingProposals > 0 && (
                                             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
                                                 <Clock className="w-3.5 h-3.5 shrink-0" />
-                                                <span>{pendingProposals} reviewer proposal{pendingProposals > 1 ? 's' : ''} pending your approval</span>
-                                                <Link href={`/rounds?paper=${paper.id}`} className="ml-auto text-amber-300 hover:text-amber-200 font-medium">Review →</Link>
+                                                <span>{pendingProposals} reviewer proposal{pendingProposals > 1 ? 's' : ''} pending {user.isCoordinator ? 'your' : 'coordinator'} approval</span>
+                                                <Link href={roundOverviewHref} className="ml-auto text-amber-300 hover:text-amber-200 font-medium">Review →</Link>
                                             </div>
                                         )}
                                     </div>
                                 )}
+                                {!loadingRounds && sortedRounds.filter(round => round.id !== latestRound?.id).map(round => {
+                                    const roundPendingProposals = round.status === 'Draft'
+                                        ? (proposedMap[round.id] ?? round.proposedReviewers ?? []).length
+                                        : 0;
+                                    return (
+                                        <div key={round.id} className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4 space-y-3">
+                                            <div className="flex items-center gap-3 flex-wrap">
+                                                <div className="relative shrink-0">
+                                                    <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-xs font-bold">
+                                                        {round.roundNumber}
+                                                    </div>
+                                                    {paperHistory?.rounds?.find(r => r.roundNumber === round.roundNumber)?.assignments?.some(a => a.status === 'Completed' && !a.hasRating) && (
+                                                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(168,85,247,0.5)]" title="Waiting rating" />
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-white">{round.targetVenue || `Round ${round.roundNumber}`}</p>
+                                                    <p className="text-xs text-slate-500">{round.venueCategory}</p>
+                                                </div>
+                                                <span className={`px-2 py-0.5 rounded-full text-xs border ${getRoundStatusColor(round.status)}`}>{round.status}</span>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3 text-sm">
+                                                {round.venueCategory === 'Conference' && round.submissionDeadline && (
+                                                    <div>
+                                                        <p className="text-xs text-slate-500">Submission Deadline</p>
+                                                        <p className="text-white">{new Date(round.submissionDeadline).toLocaleDateString()}</p>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <p className="text-xs text-slate-500">Round Deadline</p>
+                                                    <p className="text-white">{round.deadline ? new Date(round.deadline).toLocaleDateString() : '—'}</p>
+                                                </div>
+                                            </div>
+                                            {roundPendingProposals > 0 && (
+                                                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
+                                                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                                                    <span>{roundPendingProposals} reviewer proposal{roundPendingProposals > 1 ? 's' : ''} pending {user.isCoordinator ? 'your' : 'coordinator'} approval</span>
+                                                    <Link href={roundOverviewHref} className="ml-auto text-amber-300 hover:text-amber-200 font-medium">Review →</Link>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         );
                     })()}
 
-                    {/* Author (non-coordinator): full round management */}
-                    {isAuthor && !user.isCoordinator && (
+                    {/* Author round management now lives in /papers/[id]/rounds. */}
+                    {false && isAuthor && !user.isCoordinator && (
                         <div className="glass p-6 rounded-2xl border border-white/5 space-y-4">
                             
                             <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1576,9 +1535,6 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 const statusColor = round.status === 'Draft' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
                                     : round.status === 'Open' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
                                     : 'text-slate-400 border-slate-500/30 bg-slate-500/10';
-                                const aiReviews = round.aiReviewReports ?? round.artifacts?.aiReviewReports ?? [];
-                                const recentAiResult = aiResultsByRound[round.id];
-
                                 return (
                                     <div key={round.id} className="rounded-xl border border-white/10 overflow-hidden">
                                         <button

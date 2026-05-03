@@ -9,6 +9,9 @@ export class EmpiricalChecklistAnswer {
   @Column()
   paperId: string;
 
+  @Column({ type: 'text', nullable: true })
+  roundId: string | null;
+
   @Column()
   configurationId: string;
 

@@ -16,6 +16,7 @@ import { hashPassword } from '../services/accountSecurity';
 import type { AuthenticatedRequest } from '../types/auth';
 import * as crypto from 'crypto';
 import { sendTemplatedEmail } from '../services/emailService';
+import { logAudit } from '../services/auditService';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -343,7 +344,7 @@ export class AdminController {
 
     await templateRepo.save(template);
 
-    await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Template', id, `Updated template ${template.name}`);
+    await AdminController.logAction(req, AuditAction.UPDATE_TEMPLATE, 'Template', id, `Updated template ${template.name}`);
 
     return res.status(200).json(template);
   }
@@ -364,16 +365,7 @@ export class AdminController {
   // ==== UTILS ====
 
   private static async logAction(req: AuthenticatedRequest, action: AuditAction, entityType: string, entityId: string, details?: string) {
-    const logRepo = AppDataSource.getRepository(AuditLog);
-    const log = logRepo.create({
-      action,
-      entityType,
-      entityId,
-      details,
-      actor: req.user,
-      createdAt: new Date(),
-    });
-    await logRepo.save(log);
+    await logAudit(action, { actor: req.user, entityType, entityId, details });
   }
 
   private static async deleteOrphanCoordinators(manager: EntityManager) {

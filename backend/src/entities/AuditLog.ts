@@ -12,7 +12,14 @@ import type { Lab } from './Lab';
  * Enum of critical actions that are tracked in the audit log.
  */
 export enum AuditAction {
+  // Authentication
+  LOGIN_SUCCESS = 'LOGIN_SUCCESS',
+  LOGIN_FAILED = 'LOGIN_FAILED',
+  PASSWORD_RESET_REQUEST = 'PASSWORD_RESET_REQUEST',
+  PASSWORD_RESET_COMPLETE = 'PASSWORD_RESET_COMPLETE',
+
   // User management
+  SIGNUP = 'SIGNUP',
   CREATE_USER = 'CREATE_USER',
   UPDATE_USER_ROLE = 'UPDATE_USER_ROLE',
   APPROVE_USER = 'APPROVE_USER',

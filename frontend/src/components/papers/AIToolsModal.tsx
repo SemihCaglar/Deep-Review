@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import { 
   Cpu, Loader2, Download, ChevronDown, CheckCircle, 
@@ -80,6 +81,19 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     { at: 32, msg: 'Downloading annotated PDF…' },
     { at: 42, msg: 'Almost done…' },
   ];
+
+  useEffect(() => {
+    if (!isOpen || !round?.id) return;
+    setLocalAiResult(null);
+    setLocalComplianceResult(null);
+    setLocalRefVerifResult(null);
+    setChecklistAnswerData(null);
+    setChecklistAnswerError('');
+    setChecklistAnswerFilter(null);
+    setFinalizedChecklist(null);
+    setConfirmedStandards(new Set());
+    setExpandedChecklistStandards(new Set());
+  }, [isOpen, round?.id]);
 
   const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -183,6 +197,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
 
   useEffect(() => {
     if (isOpen && round?.confirmedChecklistJson?.selectedStandards) {
+      setChecklistAnswerData(null);
       getEmpiricalChecklistAnswersRequest(round.id)
         .then(res => { if (res?.data) setChecklistAnswerData(res.data); })
         .catch(() => {});
@@ -201,7 +216,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     };
   }, [isOpen]);
 
-  if (!isOpen || !round) return null;
+  if (!isOpen || !round || typeof document === 'undefined') return null;
 
   const isLatestRound = round.status !== 'Draft'; // Assume tools can run if it's not a draft, or could rely on another prop if needed.
   
@@ -239,7 +254,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -779,6 +794,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
           />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

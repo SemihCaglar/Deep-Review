@@ -9,7 +9,6 @@ import { Lab } from '../entities/Lab';
 import { Coordinator } from '../entities/Coordinator';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import {
-  accountSecurityPolicy,
   clearLoginLockout,
   createPasswordResetToken,
   hashPasswordResetToken,
@@ -21,6 +20,10 @@ import {
 } from '../services/accountSecurity';
 import { sendTemplatedEmail } from '../services/emailService';
 import { TemplateName } from '../entities/Template';
+import { logAudit } from '../services/auditService';
+import { AuditAction } from '../entities/AuditLog';
+import { getPolicyNumber } from '../services/policyService';
+import { PolicyKey } from '../entities/SystemPolicy';
 import { generateAuthToken } from '../services/tokenService';
 import type { AuthenticatedRequest } from '../types/auth';
 
@@ -89,6 +92,12 @@ export class AccountController {
       throw error;
     }
 
+    logAudit(AuditAction.SIGNUP, {
+      entityType: 'User',
+      entityId: savedMember.id,
+      details: `New signup request from ${savedMember.email} for lab ${requestedLab.name}`,
+    }).catch(console.error);
+
     return res.status(201).json({
       message: 'Signup submitted and pending approval',
       user: AccountController.serializeAccount(savedMember),
@@ -123,11 +132,35 @@ export class AccountController {
     const passwordMatches = await verifyPassword(password, user.passwordHash);
 
     if (!passwordMatches) {
-      registerFailedLoginAttempt(user);
+      const [lockoutThreshold, lockoutWindowMins, lockoutDurationMins] = await Promise.all([
+        getPolicyNumber(PolicyKey.MAX_FAILED_LOGINS, 5),
+        getPolicyNumber(PolicyKey.FAILED_LOGIN_WINDOW_MINS, 10),
+        getPolicyNumber(PolicyKey.ACCOUNT_LOCK_MINS, 10),
+      ]);
+      registerFailedLoginAttempt(user, {
+        lockoutThreshold,
+        lockoutWindowMs: lockoutWindowMins * 60 * 1000,
+        lockoutDurationMs: lockoutDurationMins * 60 * 1000,
+      });
       await userRepo.save(user);
 
+      logAudit(AuditAction.LOGIN_FAILED, {
+        entityType: 'User',
+        entityId: user.id,
+        details: `Failed login attempt for ${user.email} (attempt ${user.failedLogins})`,
+      }).catch(console.error);
+
       if (isAccountLocked(user)) {
-        return res.status(423).json({ message: 'Account is temporarily locked' });
+        logAudit(AuditAction.LOCK_USER, {
+          entityType: 'User',
+          entityId: user.id,
+          details: `Account auto-locked after ${user.failedLogins} failed login attempts`,
+        }).catch(console.error);
+        return res.status(423).json({ message: 'Account has been locked due to too many failed login attempts' });
+      }
+
+      if (user.failedLogins === lockoutThreshold - 1) {
+        return res.status(401).json({ message: 'Invalid credentials. Warning: 1 more failed attempt will lock your account' });
       }
 
       return AccountController.authenticationFailed(res);
@@ -135,6 +168,12 @@ export class AccountController {
 
     registerSuccessfulLogin(user);
     const savedUser = await userRepo.save(user);
+
+    logAudit(AuditAction.LOGIN_SUCCESS, {
+      actor: savedUser,
+      entityType: 'User',
+      entityId: savedUser.id,
+    }).catch(console.error);
 
     return res.status(200).json({
       message: 'Login successful',
@@ -227,9 +266,10 @@ export class AccountController {
         try {
           const rawResetToken = createPasswordResetToken();
           const resetLink = `${frontendBaseUrl}/reset-password?token=${rawResetToken}`;
+          const tokenTtlMins = await getPolicyNumber(PolicyKey.PASSWORD_RESET_TOKEN_EXP_MINS, 60);
           const token = tokenRepo.create({
             tokenHash: hashPasswordResetToken(rawResetToken),
-            expiresAt: new Date(Date.now() + accountSecurityPolicy.passwordResetTokenTtlMs),
+            expiresAt: new Date(Date.now() + tokenTtlMins * 60 * 1000),
             usedAt: null,
             user,
           });
@@ -238,6 +278,11 @@ export class AccountController {
             userName: user.name,
             resetLink,
           });
+          logAudit(AuditAction.PASSWORD_RESET_REQUEST, {
+            entityType: 'User',
+            entityId: user.id,
+            details: `Password reset requested for ${user.email}`,
+          }).catch(console.error);
         } catch (error) {
           console.error('[password-reset] Failed to prepare or send reset email.', error);
 
@@ -277,6 +322,12 @@ export class AccountController {
 
     await userRepo.save(resetToken.user);
     await tokenRepo.save(resetToken);
+
+    logAudit(AuditAction.PASSWORD_RESET_COMPLETE, {
+      entityType: 'User',
+      entityId: resetToken.user.id,
+      details: `Password reset completed for ${resetToken.user.email}`,
+    }).catch(console.error);
 
     return res.status(200).json({ message: 'Password reset successful' });
   }
@@ -641,6 +692,13 @@ export class AccountController {
       },
     ).catch(console.error);
 
+    logAudit(AuditAction.APPROVE_USER, {
+      actor: req.user ?? undefined,
+      entityType: 'User',
+      entityId: savedMember.id,
+      details: `Approved signup for ${savedMember.email}`,
+    }).catch(console.error);
+
     return res.status(200).json({
       message: 'Signup approved',
       user: AccountController.serializeAccount(savedMember),
@@ -694,6 +752,13 @@ export class AccountController {
         note: note ? `\n\nReason: ${note}` : '',
       },
     ).catch(console.error);
+
+    logAudit(AuditAction.REJECT_USER, {
+      actor: req.user ?? undefined,
+      entityType: 'User',
+      entityId: savedMember.id,
+      details: `Rejected signup for ${savedMember.email}${note ? `: ${note}` : ''}`,
+    }).catch(console.error);
 
     return res.status(200).json({
       message: 'Signup rejected',
