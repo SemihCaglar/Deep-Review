@@ -242,6 +242,11 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
       });
 
       setLocalPCRelatedResult(res);
+      // Auto-expand when results arrive
+      if (res.recommendations.length > 0) {
+        setPcRelatedExpanded(true);
+        console.log('[Frontend] Auto-expanded results card');
+      }
       onRefresh();
     } catch (err: any) {
       console.error('[Frontend] Error:', err);
