@@ -1,5 +1,6 @@
 import { AppDataSource } from '../data-source';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
+import { ExtensionStatus } from '../entities/Extension';
 import { Lab } from '../entities/Lab';
 import { User, UserRole } from '../entities/User';
 import { RoundStatus } from '../entities/Round';
@@ -76,10 +77,6 @@ function getPeriodWindow(period: AnalyticsPeriod): PeriodWindow {
   return { period, start: null, end: null };
 }
 
-function effectiveAssignmentDeadline(assignment: Assignment): Date | null {
-  return assignment.deadline ?? assignment.round?.deadline ?? null;
-}
-
 function isWithinWindow(value: Date | string | null | undefined, window: PeriodWindow): boolean {
   if (!window.start || !window.end) return true;
   if (!value) return false;
@@ -105,6 +102,7 @@ export async function computeUserLabStats(
     .innerJoin('round.paper', 'paper')
     .innerJoin('paper.labs', 'lab')
     .leftJoinAndSelect('assignment.rating', 'rating')
+    .leftJoinAndSelect('assignment.extensions', 'extensions')
     .where('reviewer.id = :userId', { userId: user.id })
     .andWhere('lab.id = :labId', { labId })
     .getMany();
@@ -114,27 +112,33 @@ export async function computeUserLabStats(
     a.status === AssignmentStatus.Completed && isWithinWindow(a.submittedAt, window),
   );
   const totalAssigned = assignmentsInPeriod.length;
-  const totalAccepted = assignmentsInPeriod.filter(a => a.acceptedAt != null).length;
+  const totalAccepted = assignmentsInPeriod.filter(a => a.acceptedAt !== null).length;
   const totalCompleted = completedAssignmentsInPeriod.length;
   const totalDeclined = assignmentsInPeriod.filter(a => a.status === AssignmentStatus.Declined).length;
-  const acceptanceRate = totalAssigned > 0 ? (totalAccepted / totalAssigned) * 100 : null;
-  const rejectionRate = totalAssigned > 0 ? (totalDeclined / totalAssigned) * 100 : null;
-  const onTimeCompleted = completedAssignmentsInPeriod.filter(a => {
-    const deadline = effectiveAssignmentDeadline(a);
-    return a.submittedAt != null && deadline != null && a.submittedAt <= deadline;
-  }).length;
+  const decisionTotal = totalAccepted + totalDeclined;
+  const acceptanceRate = decisionTotal > 0 ? (totalAccepted / decisionTotal) * 100 : null;
+  const rejectionRate = decisionTotal > 0 ? (totalDeclined / decisionTotal) * 100 : null;
   const delayedCompleted = completedAssignmentsInPeriod.filter(a => {
-    const deadline = effectiveAssignmentDeadline(a);
-    return a.submittedAt != null && (deadline == null || a.submittedAt > deadline);
+    const isLate = a.submittedAt && a.deadline && new Date(a.submittedAt) > new Date(a.deadline);
+    const hasApprovedExtension = a.extensions?.some(ext => ext.status === ExtensionStatus.Approved) ?? false;
+    return isLate || hasApprovedExtension;
   }).length;
+  const onTimeCompleted = Math.max(totalCompleted - delayedCompleted, 0);
   const onTimeRate = totalCompleted > 0 ? (onTimeCompleted / totalCompleted) * 100 : null;
   const delayedRate = totalCompleted > 0 ? (delayedCompleted / totalCompleted) * 100 : null;
-  // Incomplete = Overdue, or Accepted while the round is already Completed
-  const totalIncomplete = assignmentsInPeriod.filter(
+  // Incomplete = overdue assignments whose deadline falls in the window,
+  // plus accepted assignments from rounds that completed in the window without a submission.
+  const overdueAssignments = assignments.filter(
+    a => a.status === AssignmentStatus.Overdue && isWithinWindow(a.deadline, window),
+  );
+  const acceptedAndExpiredRounds = assignments.filter(
     a =>
-      a.status === AssignmentStatus.Overdue ||
-      (a.status === AssignmentStatus.Accepted && a.round?.status === RoundStatus.Completed),
-  ).length;
+      a.status === AssignmentStatus.Accepted &&
+      a.submittedAt == null &&
+      a.round?.status === RoundStatus.Completed &&
+      isWithinWindow(a.round.completedAt, window),
+  );
+  const totalIncomplete = overdueAssignments.length + acceptedAndExpiredRounds.length;
 
   const ratings = assignments
     .filter(a => a.rating != null && isWithinWindow(a.rating.createdAt, window))

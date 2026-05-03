@@ -228,7 +228,6 @@ export class RoundController {
           AssignmentStatus.Accepted,
           AssignmentStatus.PendingExtension,
           AssignmentStatus.PendingDecline,
-          AssignmentStatus.Overdue,
         ];
         const assignments = await assignmentRepo.find({
           where: { round: { id: round.id } },

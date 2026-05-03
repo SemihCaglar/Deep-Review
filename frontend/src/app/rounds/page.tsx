@@ -199,7 +199,7 @@ function AssignmentRow({
   };
 
   const isCancelable = ['Invited', 'Accepted'].includes(assignment.status);
-  const isRemindable = ['Accepted', 'PendingExtension', 'PendingDecline', 'Overdue'].includes(assignment.status);
+  const isRemindable = ['Accepted', 'PendingExtension', 'PendingDecline'].includes(assignment.status);
   const showReassign = ['Declined', 'Cancelled'].includes(assignment.status);
   const isReassignable = roundStatus !== 'Completed' && assignment.status === 'Declined';
   const isCompleted = assignment.status === 'Completed';
@@ -266,8 +266,14 @@ function AssignmentRow({
                 setShowDeadlineInput(v => !v);
                 setError('');
               }}
-              disabled={busy || isCompleted}
-              title={isCompleted ? 'Cannot change deadline for a completed assignment' : undefined}
+              disabled={busy || isCompleted || assignment.status === 'Overdue'}
+              title={
+                isCompleted 
+                  ? 'Cannot change deadline for a completed assignment' 
+                  : assignment.status === 'Overdue' 
+                    ? 'Cannot change deadline for an overdue assignment' 
+                    : undefined
+              }
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Calendar className="w-3.5 h-3.5" /> Deadline
