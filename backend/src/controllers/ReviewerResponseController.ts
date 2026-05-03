@@ -11,15 +11,26 @@ import { RoundService } from '../services/RoundService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class ReviewerResponseController {
+  /**
+   * Checks if an assignment is overdue.
+   */
   private static isOverdue(assignment: Assignment): boolean {
     return assignment.status === AssignmentStatus.Overdue;
   }
 
+  /**
+   * Returns a standardized overdue error message.
+   */
   private static overdueResponseMessage(): string {
     return 'This assignment is overdue. Extension requests, decline requests, and review submissions are no longer available.';
   }
 
   // ── body-based: POST /responses/invitation ────────────────────────────────
+  /**
+   * Responds to a review invitation (Accept or Decline).
+   * @param req - The authenticated request object containing assignmentId and response.
+   * @param res - The express response object.
+   */
   static async respondToInvitation(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -75,6 +86,11 @@ export class ReviewerResponseController {
   }
 
   // ── param-based: PATCH /responses/:id/accept ─────────────────────────────
+  /**
+   * Accepts a review invitation.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async acceptInvitation(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -104,6 +120,12 @@ export class ReviewerResponseController {
   }
 
   // ── param-based: POST /responses/:id/decline-request ─────────────────────
+  /**
+   * Submits a decline request for an assignment.
+   * Requires a reason and notifies lab coordinators.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async requestDeclineForAssignment(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -189,11 +211,20 @@ export class ReviewerResponseController {
     }
   }
 
+  /**
+   * Alias for requestDeclineForAssignment.
+   */
   static async requestDecline(req: AuthenticatedRequest, res: Response) {
     return ReviewerResponseController.requestDeclineForAssignment(req, res);
   }
 
   // ── body-based: POST /responses/extension ────────────────────────────────
+  /**
+   * Submits a deadline extension request.
+   * Validates requested deadline against system rules (e.g., conference deadline).
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async requestDeadlineExtension(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -313,6 +344,9 @@ export class ReviewerResponseController {
   }
 
   // ── param-based: POST /responses/:id/extension-request ───────────────────
+  /**
+   * Alias for requestDeadlineExtension.
+   */
   static async requestExtensionForAssignment(req: AuthenticatedRequest, res: Response) {
     const reason = req.body?.reason ?? req.body?.extensionReason;
     const requestedDeadline = req.body?.proposedDeadline ?? req.body?.requestedDeadline;
@@ -321,6 +355,12 @@ export class ReviewerResponseController {
   }
 
   // ── coordinator: process decline ─────────────────────────────────────────
+  /**
+   * Processes a decline request (Approve or Reject).
+   * Requires Coordinator or Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async processDeclineRequest(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;
@@ -403,6 +443,12 @@ export class ReviewerResponseController {
   }
 
   // ── coordinator: process extension ───────────────────────────────────────
+  /**
+   * Processes an extension request (Approve or Reject).
+   * Requires Coordinator or Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async processExtensionRequest(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;
@@ -495,6 +541,11 @@ export class ReviewerResponseController {
   }
 
   // ── reviewer: submit summary without completing ───────────────────────────
+  /**
+   * Submits a review summary without marking the assignment as complete.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async submitReviewSummary(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -537,6 +588,12 @@ export class ReviewerResponseController {
   }
 
   // ── reviewer: complete review (optional summary) ──────────────────────────
+  /**
+   * Completes a review assignment, optionally providing a final summary.
+   * Marks the assignment as 'Completed' and notifies relevant parties.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async completeReview(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -622,6 +679,9 @@ export class ReviewerResponseController {
     }
   }
 
+  /**
+   * Alias for completeReview.
+   */
   static async markReviewCompleted(req: AuthenticatedRequest, res: Response) {
     return ReviewerResponseController.completeReview(req, res);
   }

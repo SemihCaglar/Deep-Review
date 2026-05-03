@@ -8,10 +8,19 @@ import { AnalyticsPeriod, computeLabRankings, computeLabRankingsForPeriod } from
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class RatingAnalyticsController {
+  /**
+   * Parses and validates an analytics period string.
+   */
   private static parseAnalyticsPeriod(value: unknown): AnalyticsPeriod {
     return value === 'monthly' || value === 'yearly' || value === 'overall' ? value : 'overall';
   }
 
+  /**
+   * Submits a rating for a completed review assignment.
+   * Requires the user to be an author of the paper.
+   * @param req - The authenticated request object containing assignmentId and scores.
+   * @param res - The express response object.
+   */
   static async rateReviewer(req: AuthenticatedRequest, res: Response) {
     try {
       const authenticatedUser = req.user;
@@ -72,6 +81,12 @@ export class RatingAnalyticsController {
     }
   }
 
+  /**
+   * Retrieves overall analytics for all reviewers in a lab.
+   * Requires Coordinator role.
+   * @param req - The authenticated request object with period in query.
+   * @param res - The express response object.
+   */
   static async getOverallAnalytics(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinatorRepo = AppDataSource.getRepository(Coordinator);
@@ -93,6 +108,12 @@ export class RatingAnalyticsController {
     }
   }
 
+  /**
+   * Retrieves detailed analytics for a specific lab member.
+   * Requires Coordinator role and lab membership of the target user.
+   * @param req - The authenticated request object with userId in params.
+   * @param res - The express response object.
+   */
   static async getUserAnalytics(req: AuthenticatedRequest, res: Response) {
     try {
       const targetUserId = req.params.id;

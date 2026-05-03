@@ -10,7 +10,12 @@ import { RegisterPaperDto } from '../dtos/PaperDto';
 import { AuthenticatedRequest } from '../types/auth';
 import { Coordinator } from '../entities/Coordinator';
 
-/** Safely extracts a single string from a query param (which Express types as string | string[]). */
+/**
+ * Safely extracts a single string from a query param.
+ * Express types query params as string | string[] | ParsedQs | ParsedQs[].
+ * @param value - The value to extract from.
+ * @returns The trimmed string or undefined if not found or invalid.
+ */
 function queryString(value: unknown): string | undefined {
   if (typeof value === 'string') return value.trim() || undefined;
   if (Array.isArray(value) && typeof value[0] === 'string') return (value[0] as string).trim() || undefined;
@@ -23,6 +28,12 @@ type PaperAuthorResponse = {
   email: string;
 };
 
+/**
+ * Retrieves the authors of a paper in their specified order.
+ * Combines explicit authors and coordinators, ensuring each is listed once.
+ * @param paper - The paper entity.
+ * @returns A list of formatted author objects.
+ */
 function getOrderedPaperAuthors(paper: Paper): PaperAuthorResponse[] {
   const byId = new Map<string, PaperAuthorResponse>();
 
@@ -56,6 +67,12 @@ function getOrderedPaperAuthors(paper: Paper): PaperAuthorResponse[] {
 }
 
 export class PaperController {
+  /**
+   * Registers a new paper in the system.
+   * Saves the paper as a Draft.
+   * @param req - The authenticated request object containing RegisterPaperDto in body.
+   * @param res - The express response object.
+   */
   static async registerPaper(req: AuthenticatedRequest, res: Response) {
     try {
       const dto = req.body as RegisterPaperDto;
@@ -94,6 +111,11 @@ export class PaperController {
       return res.status(500).json({ error: e.message || 'Internal Server Error' });
     }
   }
+  /**
+   * Retrieves a specific paper by its ID.
+   * @param req - The request object containing paper ID in params.
+   * @param res - The express response object.
+   */
   static async getPaperById(req: Request<{ id: string }>, res: Response) {
     try {
       const { id } = req.params;
@@ -107,6 +129,11 @@ export class PaperController {
       res.status(500).json({ error: e.message });
     }
   }
+  /**
+   * Updates the topics associated with a paper.
+   * @param req - The request object containing paper ID in params and topics in body.
+   * @param res - The express response object.
+   */
   static async setTopics(req: Request<{ id: string }>, res: Response) {
     try {
       const { id } = req.params;
@@ -121,12 +148,24 @@ export class PaperController {
       res.status(500).json({ error: e.message });
     }
   }
+  /**
+   * Placeholder for manuscript uploading.
+   */
   static async uploadManuscript(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
+  /**
+   * Placeholder for linking parent papers.
+   */
   static async linkParentPapers(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
+  /**
+   * Updates the abstract of a paper.
+   * Requires the user to be an author or coordinator of the paper.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async updateAbstract(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -153,6 +192,11 @@ export class PaperController {
       res.status(500).json({ error: e.message });
     }
   }
+  /**
+   * Updates the topics associated with a paper.
+   * @param req - The request object.
+   * @param res - The response object.
+   */
   static async updateTopics(req: Request<{ id: string }>, res: Response) {
     try {
       const { id } = req.params;
@@ -169,10 +213,11 @@ export class PaperController {
   }
 
   /**
-   * GET /papers/:id/status?userId=<uuid>
-   *
    * Returns the current status and a snapshot of the latest round for a specific paper.
    * Access: coordinator of the paper OR any of its authors.
+   * 
+   * @param req - The request object containing paper ID in params and userId in query.
+   * @param res - The express response object.
    */
   static async getPaperStatus(req: Request, res: Response) {
     const paperId = String(req.params.id ?? '').trim();
@@ -236,12 +281,13 @@ export class PaperController {
   }
 
   /**
-   * GET /papers/:id/history
-   *
    * Returns the full round-by-round review history for a specific paper.
    * Response depth: rounds + assignments, plus optional review artifacts.
    * Excludes reviewer ratings and review summaries from the author-facing history.
    * Access: coordinators can view every paper; lab members can view papers they authored.
+   * 
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
    */
   static async getPaperHistory(req: Request, res: Response) {
     try {
@@ -371,10 +417,11 @@ export class PaperController {
     }
   }
   /**
-   * GET /papers/my-written
-   *
    * Returns all papers that the authenticated caller is listed as an author of.
-   * Filters at the database level via the join table — does NOT load all papers into memory.
+   * Filters at the database level via the join table.
+   * 
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
    */
   static async getMyWrittenPapers(req: Request, res: Response) {
     try {
@@ -438,11 +485,12 @@ export class PaperController {
   }
 
   /**
-   * GET /papers/my-reviewed
-   *
    * Returns all papers the authenticated caller has ever been assigned to review.
    * Each paper is returned exactly once, deduplicated by paper.id.
    * Tagged with the caller's most recent assignment status for that paper.
+   * 
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
    */
   static async getMyReviewedPapers(req: Request, res: Response) {
     try {
@@ -497,10 +545,11 @@ export class PaperController {
   }
 
   /**
-   * GET /papers/my-current-reviewed
-   *
    * Returns papers for which the authenticated caller has an active review assignment.
    * "Active" means: assignment.status IN [Invited, Accepted, Overdue] AND round.status = Open.
+   * 
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
    */
   static async getMyCurrentReviewedPapers(req: Request, res: Response) {
     try {
@@ -541,6 +590,11 @@ export class PaperController {
       return res.status(500).json({ error: e.message });
     }
   }
+  /**
+   * Returns all papers where the authenticated user is a coordinator.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getMyCoordinatedPapers(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -570,6 +624,12 @@ export class PaperController {
     }
   }
 
+  /**
+   * Updates the Overleaf link for a paper.
+   * Requires the user to be an author or coordinator of the paper.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async updateOverleafLink(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -615,6 +675,12 @@ export class PaperController {
   }
 
 
+  /**
+   * Retrieves all papers visible to the user based on their role.
+   * Admins see everything. Coordinators see papers in their lab.
+   * @param req - The request object.
+   * @param res - The response object.
+   */
   static async getAllPapers(req: Request, res: Response) {
     try {
       const authReq = req as AuthenticatedRequest;
@@ -682,6 +748,12 @@ export class PaperController {
       res.status(500).json({ error: e.message });
     }
   }
+  /**
+   * Updates the author list and order for a paper.
+   * Requires the user to be an author or coordinator of the paper.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async updateAuthors(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -716,6 +788,13 @@ export class PaperController {
       res.status(500).json({ error: e.message });
     }
   }
+  /**
+   * Updates the status of a paper (e.g., from PeerReview to Accepted).
+   * Includes validation for acceptance criteria.
+   * Requires the user to be an author or coordinator of the paper.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async updatePaperStatus(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;

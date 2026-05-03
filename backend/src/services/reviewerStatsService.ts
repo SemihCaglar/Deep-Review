@@ -56,6 +56,9 @@ type PeriodWindow = {
   end: Date | null;
 };
 
+/**
+ * Calculates the start and end dates for a given analytics period.
+ */
 function getPeriodWindow(period: AnalyticsPeriod): PeriodWindow {
   const now = new Date();
   if (period === 'monthly') {
@@ -77,6 +80,9 @@ function getPeriodWindow(period: AnalyticsPeriod): PeriodWindow {
   return { period, start: null, end: null };
 }
 
+/**
+ * Checks if a given date falls within a specific period window.
+ */
 function isWithinWindow(value: Date | string | null | undefined, window: PeriodWindow): boolean {
   if (!window.start || !window.end) return true;
   if (!value) return false;
@@ -85,6 +91,13 @@ function isWithinWindow(value: Date | string | null | undefined, window: PeriodW
   return date >= window.start && date < window.end;
 }
 
+/**
+ * Computes detailed review statistics for a specific user within a lab and period.
+ * @param user - The user entity.
+ * @param labId - The lab ID.
+ * @param window - The time period window.
+ * @returns An object containing review stats (totals, rates, scores).
+ */
 export async function computeUserLabStats(
   user: User,
   labId: string,
@@ -180,10 +193,19 @@ export async function computeUserLabStats(
   };
 }
 
+/**
+ * Computes lab-wide reviewer rankings for all time.
+ */
 export async function computeLabRankings(labId: string): Promise<LabRankingsResult> {
   return computeLabRankingsForPeriod(labId, 'overall');
 }
 
+/**
+ * Computes lab-wide reviewer rankings for a specific period.
+ * @param labId - The lab ID.
+ * @param period - The analytics period ('monthly', 'yearly', 'overall').
+ * @returns A ranked list of reviewers and a summary of lab performance.
+ */
 export async function computeLabRankingsForPeriod(labId: string, period: AnalyticsPeriod): Promise<LabRankingsResult> {
   const labRepo = AppDataSource.getRepository(Lab);
   const window = getPeriodWindow(period);

@@ -17,6 +17,11 @@ import { runChecklistAnswers, getStoredChecklistAnswers } from '../ai_content/se
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class RoundController {
+  /**
+   * Parses a value into a Date object.
+   * @param value - The value to parse (string or Date).
+   * @returns A Date object or null if invalid.
+   */
   private static parseDate(value: unknown): Date | null {
     if (typeof value !== 'string' && !(value instanceof Date)) {
       return null;
@@ -26,6 +31,11 @@ export class RoundController {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
+  /**
+   * Validates and normalizes a URL string.
+   * @param value - The value to validate.
+   * @returns A trimmed URL string or null if invalid or not starting with http/https.
+   */
   private static parseRequiredUrl(value: unknown): string | null {
     if (typeof value !== 'string') {
       return null;
@@ -39,12 +49,22 @@ export class RoundController {
     return trimmed;
   }
 
+  /**
+   * Checks if a given date is before today in UTC.
+   * @param value - The date to check.
+   * @returns True if the date is before today, false otherwise.
+   */
   private static isBeforeTodayUtc(value: Date): boolean {
     const todayUtc = new Date().toISOString().split('T')[0];
     const valueUtc = value.toISOString().split('T')[0];
     return valueUtc < todayUtc;
   }
 
+  /**
+   * Retrieves the minimum round number where each reviewer completed a review for a specific paper.
+   * @param paperId - The ID of the paper.
+   * @returns A Map of reviewer IDs to their minimum completed round number.
+   */
   private static async getReviewerMinRoundCompletedForPaper(paperId: string): Promise<Map<string, number>> {
     const rows = await AppDataSource.getRepository(Assignment)
       .createQueryBuilder('assignment')
@@ -67,6 +87,13 @@ export class RoundController {
     return map;
   }
 
+  /**
+   * Formats a list of users as reviewers with additional context about their previous reviews for a paper.
+   * @param users - The list of users to format.
+   * @param reviewerMinRoundCompleted - Map of reviewer IDs to their min completed round number.
+   * @param currentRoundNumber - The current round number.
+   * @returns A formatted list of reviewers.
+   */
   private static formatReviewersWithReviewContext(users: User[], reviewerMinRoundCompleted: Map<string, number>, currentRoundNumber: number) {
     return users.map(u => ({
       id: u.id,
@@ -76,6 +103,12 @@ export class RoundController {
     }));
   }
 
+  /**
+   * Creates a new review round for a paper.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async createReviewRound(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -190,6 +223,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Edits the deadline of an existing round and updates associated assignments.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async editRoundDeadline(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -267,6 +306,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Updates details of a round (venue, URL, category, submission deadline).
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async updateRoundDetails(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -371,6 +416,11 @@ export class RoundController {
     }
   }
 
+  /**
+   * Starts a round by transitioning its status from Draft to Open.
+   * @param req - The request object.
+   * @param res - The response object.
+   */
   static async startRound(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -391,6 +441,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Suggests eligible reviewers for a round based on lab associations and topics.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async suggestReviewers(req: AuthenticatedRequest, res: Response) {
     try {
       const requesterBase = req.user;
@@ -518,6 +574,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Adds a user to the proposed reviewers list for a round.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async addProposeReviewer(req: AuthenticatedRequest, res: Response) {
     try {
       const requesterBase = req.user;
@@ -602,6 +664,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Removes a user from the proposed reviewers list for a round.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async removeProposedReviewer(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -639,6 +707,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Retrieves the list of proposed reviewers for a round.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getProposeReviewers(req: AuthenticatedRequest, res: Response) {
     try {
       const requesterBase = req.user;
@@ -681,6 +755,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Approves a round and its proposed reviewers, starting the review process.
+   * Requires Coordinator role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async approveRound(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;
@@ -706,6 +786,13 @@ export class RoundController {
     }
   }
 
+  /**
+   * Retrieves all rounds for a paper from the author's perspective.
+   * Includes AI reports, compliance reports, and assignments.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getAuthorRounds(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -817,6 +904,12 @@ export class RoundController {
       return res.status(500).json({ message: 'Internal server error' });
     }
   }
+  /**
+   * Retrieves all rounds for a paper with detailed assignment information.
+   * Requires Coordinator or Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getRoundsWithAssignments(req: AuthenticatedRequest, res: Response) {
     try {
       const requesterBase = req.user;
@@ -920,6 +1013,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Tracks the status of reviews for a specific round, providing summaries and overdue alerts.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async trackReviewStatus(req: AuthenticatedRequest, res: Response) {
     try {
       const requesterBase = req.user;
@@ -1026,11 +1125,22 @@ export class RoundController {
       return res.status(500).json({ message: 'Internal server error' });
     }
   }
+  /**
+   * Endpoint for closing a round (currently handled automatically).
+   * @param req - The request object.
+   * @param res - The response object.
+   */
   static async closeRound(req: Request, res: Response) {
     // Rounds complete automatically when all assignment deadlines pass — no manual close needed.
     res.status(410).json({ message: 'Rounds are completed automatically. Use POST /rounds/:id/start to start a round.' });
   }
 
+  /**
+   * Triggers an AI review for a started round.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async startAIReview(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
@@ -1087,6 +1197,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Triggers a peer review pipeline via AI for a started round.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async startAIReviewEndpoint(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
@@ -1185,6 +1301,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Triggers AI-based checklist analysis for a started round.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async startAIChecklist(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
@@ -1265,6 +1387,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Confirms the checklist standards selection for a round.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async confirmChecklistSelection(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
@@ -1315,6 +1443,11 @@ export class RoundController {
     }
   }
 
+  /**
+   * Retrieves rules associated with the target venue of a round.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getVenueRules(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
@@ -1334,6 +1467,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Runs a compliance check against submission rules for a started round.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async runComplianceCheck(req: AuthenticatedRequest, res: Response) {
     try {
       const { id } = req.params;
@@ -1405,16 +1544,31 @@ export class RoundController {
     }
   }
 
+  /**
+   * Placeholder for adding a checklist item.
+   */
   static async addChecklistItem(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
+  /**
+   * Placeholder for removing a checklist item.
+   */
   static async removeChecklistItem(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
+  /**
+   * Placeholder for updating a checklist item.
+   */
   static async updateChecklistItem(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
 
+  /**
+   * Runs a combined AI review and compliance check pipeline.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async runAIReviewWithCompliance(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -1602,6 +1756,12 @@ export class RoundController {
     }
   }
 
+  /**
+   * Runs a compliance check using specifically linked rules for a round.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async runComplianceCheckWithRules(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -1670,6 +1830,11 @@ export class RoundController {
     }
   }
 
+  /**
+   * Executes the empirical checklist answering agent.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static runEmpiricalChecklistAnswering = async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;
@@ -1709,6 +1874,11 @@ export class RoundController {
     }
   };
 
+  /**
+   * Retrieves stored empirical checklist answers.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static getEmpiricalChecklistAnswers = async (req: AuthenticatedRequest, res: Response) => {
     try {
       const { id } = req.params;

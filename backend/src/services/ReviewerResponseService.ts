@@ -19,10 +19,16 @@ interface ReviewerResponseContext {
   labId: string;
 }
 
+/**
+ * Normalizes an ID string.
+ */
 function normalizeId(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
+/**
+ * Parses and validates a date value.
+ */
 function parseDate(value: unknown, fieldName: string): Date {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value;
@@ -46,6 +52,12 @@ interface ReviewerResponseCompatibilityUpdate {
 }
 
 export class ReviewerResponseService {
+  /**
+   * Accepts a review invitation.
+   * @param id - The ID of the assignment or reviewer response.
+   * @param context - The reviewer context (user ID and lab ID).
+   * @returns The updated assignment entity.
+   */
   static async acceptAssignment(id: string, context: ReviewerResponseContext): Promise<Assignment> {
     const assignment = await this.findAssignmentByAssignmentOrResponseId(id);
     this.assertReviewerAndLabAccess(assignment, context);
@@ -64,6 +76,13 @@ export class ReviewerResponseService {
     return this.loadAssignmentForResponse(savedAssignment.id);
   }
 
+  /**
+   * Submits a decline request for an assignment.
+   * @param id - The ID of the assignment or reviewer response.
+   * @param declineReason - The reason for declining.
+   * @param context - The reviewer context.
+   * @returns The updated assignment entity.
+   */
   static async requestDecline(
     id: string,
     declineReason: string,
@@ -99,6 +118,14 @@ export class ReviewerResponseService {
     return this.loadAssignmentForResponse(savedAssignment.id);
   }
 
+  /**
+   * Submits a deadline extension request.
+   * @param id - The ID of the assignment or reviewer response.
+   * @param extensionReason - The reason for the extension.
+   * @param proposedDeadline - The new proposed deadline.
+   * @param context - The reviewer context.
+   * @returns The updated assignment entity.
+   */
   static async requestExtension(
     id: string,
     extensionReason: string,
@@ -144,6 +171,10 @@ export class ReviewerResponseService {
     });
   }
 
+  /**
+   * Processes a decline request (Approve/Reject).
+   * delegates to CoordinatorService.
+   */
   static async processDeclineRequest(
     id: string,
     isApproved: boolean,
@@ -156,6 +187,10 @@ export class ReviewerResponseService {
     );
   }
 
+  /**
+   * Processes an extension request (Approve/Reject).
+   * delegates to CoordinatorService.
+   */
   static async processExtensionRequest(
     id: string,
     isApproved: boolean,
@@ -185,6 +220,9 @@ export class ReviewerResponseService {
     );
   }
 
+  /**
+   * Helper to find an assignment by either its own ID or an associated response ID.
+   */
   private static async findAssignmentByAssignmentOrResponseId(id: string): Promise<Assignment> {
     const normalizedId = normalizeId(id);
     if (!normalizedId) {
@@ -223,6 +261,9 @@ export class ReviewerResponseService {
     return response.assignment;
   }
 
+  /**
+   * Asserts that a reviewer has access to a specific assignment and lab.
+   */
   private static assertReviewerAndLabAccess(assignment: Assignment, context: ReviewerResponseContext): void {
     if (assignment.reviewer.id !== context.userId) {
       throw new ReviewerResponseServiceError(403, 'Only the assigned reviewer can respond to this invitation');
@@ -239,6 +280,9 @@ export class ReviewerResponseService {
     }
   }
 
+  /**
+   * Updates or creates a ReviewerResponse for backward compatibility.
+   */
   private static async upsertCompatibilityResponse(
     assignment: Assignment,
     status: ReviewerResponseStatus,
@@ -270,6 +314,9 @@ export class ReviewerResponseService {
     return responseRepository.save(response);
   }
 
+  /**
+   * Updates or creates a ReviewerResponse using a provided transaction manager.
+   */
   private static async upsertCompatibilityResponseWithManager(
     manager: EntityManager,
     assignment: Assignment,
@@ -302,10 +349,16 @@ export class ReviewerResponseService {
     return responseRepository.save(response);
   }
 
+  /**
+   * Helper to convert boolean approval to CoordinatorDecision.
+   */
   private static toCoordinatorDecision(isApproved: boolean): CoordinatorDecision {
     return isApproved ? 'Approve' : 'Reject';
   }
 
+  /**
+   * Reloads an assignment with all necessary relations.
+   */
   private static async loadAssignmentForResponse(id: string): Promise<Assignment> {
     const assignmentRepository = AppDataSource.getRepository(Assignment);
     const assignment = await assignmentRepository.findOne({
@@ -320,6 +373,9 @@ export class ReviewerResponseService {
     return assignment;
   }
 
+  /**
+   * Reloads an assignment using a transaction manager.
+   */
   private static async loadAssignmentForResponseWithManager(
     manager: EntityManager,
     id: string,

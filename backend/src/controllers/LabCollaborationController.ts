@@ -12,7 +12,14 @@ import { TemplateName } from '../entities/Template';
 
 export class LabCollaborationController {
 
-  // POST /papers/:id/collaboration-invitations   body: { labIds: string[] }
+  /**
+   * Sends collaboration invitations to multiple labs for a specific paper.
+   * Requires Coordinator or Admin role.
+   * 
+   * @param req - The authenticated request object containing paper ID in params and labIds array in body.
+   * @param res - The express response object.
+   * @returns 201 with lists of successfully invited labs and errors, or error status.
+   */
   static async sendInvitations(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
     if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
@@ -130,7 +137,14 @@ export class LabCollaborationController {
     }
   }
 
-  // GET /papers/:id/collaboration-invitations
+  /**
+   * Retrieves all collaboration invitations associated with a specific paper.
+   * Requires Coordinator or Admin role.
+   * 
+   * @param req - The authenticated request object containing paper ID in params.
+   * @param res - The express response object.
+   * @returns 200 with a list of invitations, or error status.
+   */
   static async getInvitationsForPaper(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
     if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
@@ -171,7 +185,14 @@ export class LabCollaborationController {
     }
   }
 
-  // GET /collaboration-invitations/pending
+  /**
+   * Retrieves all pending collaboration invitations for the current user's lab.
+   * Requires Coordinator or Admin role.
+   * 
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   * @returns 200 with a list of pending invitations, or error status.
+   */
   static async getPendingInvitations(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
     if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
@@ -209,7 +230,15 @@ export class LabCollaborationController {
     }
   }
 
-  // PATCH /collaboration-invitations/:id/accept
+  /**
+   * Accepts a collaboration invitation.
+   * Adds the invited lab and its coordinator to the paper's collaborators and authors.
+   * Requires the user to be the coordinator of the invited lab.
+   * 
+   * @param req - The authenticated request object containing invitation ID in params.
+   * @param res - The express response object.
+   * @returns 200 on success, or error status.
+   */
   static async acceptInvitation(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
     if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
@@ -296,7 +325,14 @@ export class LabCollaborationController {
     }
   }
 
-  // PATCH /collaboration-invitations/:id/reject
+  /**
+   * Rejects a collaboration invitation.
+   * Requires the user to be the coordinator of the invited lab.
+   * 
+   * @param req - The authenticated request object containing invitation ID in params.
+   * @param res - The express response object.
+   * @returns 200 on success, or error status.
+   */
   static async rejectInvitation(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
     if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {
@@ -338,7 +374,14 @@ export class LabCollaborationController {
     }
   }
 
-  // PATCH /collaboration-invitations/:id/cancel
+  /**
+   * Cancels a pending collaboration invitation.
+   * Can be performed by the inviting lab coordinator, a paper coordinator, or an admin.
+   * 
+   * @param req - The authenticated request object containing invitation ID in params.
+   * @param res - The express response object.
+   * @returns 200 on success, or error status.
+   */
   static async cancelInvitation(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
     if (!user || (user.role !== UserRole.Coordinator && user.role !== UserRole.Admin)) {

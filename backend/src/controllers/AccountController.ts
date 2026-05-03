@@ -28,6 +28,12 @@ import { generateAuthToken } from '../services/tokenService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class AccountController {
+  /**
+   * Handles user signup requests.
+   * Creates a new user with 'Pending' status.
+   * @param req - The request object containing name, email, password, and labId.
+   * @param res - The express response object.
+   */
   static async signUp(req: Request, res: Response) {
     const { name, email, password, labId } = req.body ?? {};
 
@@ -103,6 +109,12 @@ export class AccountController {
       user: AccountController.serializeAccount(savedMember),
     });
   }
+  /**
+   * Handles user login.
+   * Verifies credentials, checks for account lockout, and generates an auth token.
+   * @param req - The request object containing email and password.
+   * @param res - The express response object.
+   */
   static async login(req: Request, res: Response) {
     const { email, password } = req.body ?? {};
 
@@ -181,9 +193,19 @@ export class AccountController {
       user: AccountController.serializeAccount(savedUser),
     });
   }
+  /**
+   * Handles user logout.
+   * @param req - The request object.
+   * @param res - The express response object.
+   */
   static async logout(req: Request, res: Response) {
     return res.status(200).json({ message: 'Logout successful' });
   }
+  /**
+   * Changes the password of the currently authenticated user.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async changePassword(req: AuthenticatedRequest, res: Response) {
     const authenticatedUser = req.user;
     const { currentPassword, newPassword, confirmNewPassword } = req.body ?? {};
@@ -235,11 +257,21 @@ export class AccountController {
 
     return res.status(200).json({ message: 'Password changed successfully' });
   }
+  /**
+   * Retrieves all available labs.
+   * @param req - The request object.
+   * @param res - The express response object.
+   */
   static async getAllLabs(req: Request, res: Response) {
     const labRepo = AppDataSource.getRepository(Lab);
     const labs = await labRepo.find({ select: ['id', 'name', 'description'] });
     return res.status(200).json(labs);
   }
+  /**
+   * Initiates a password reset process by sending an email with a reset link.
+   * @param req - The request object containing the user's email.
+   * @param res - The express response object.
+   */
   static async sendPasswordReset(req: Request, res: Response) {
     const { email } = req.body ?? {};
 
@@ -299,6 +331,11 @@ export class AccountController {
 
     return AccountController.passwordResetRequestAccepted(res);
   }
+  /**
+   * Resets a user's password using a valid reset token.
+   * @param req - The request object containing the token and newPassword.
+   * @param res - The express response object.
+   */
   static async resetPassword(req: Request, res: Response) {
     const { token, newPassword } = req.body ?? {};
 
@@ -331,6 +368,11 @@ export class AccountController {
 
     return res.status(200).json({ message: 'Password reset successful' });
   }
+  /**
+   * Retrieves the profile details of the currently authenticated user.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getProfile(req: AuthenticatedRequest, res: Response) {
     const authenticatedUser = req.user;
 
@@ -352,6 +394,12 @@ export class AccountController {
       user: AccountController.serializeAccount(user, { includeInterests: true }),
     });
   }
+  /**
+   * Retrieves signups that are pending approval for the labs visible to the requester.
+   * Requires Coordinator role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getPendingSignUps(req: AuthenticatedRequest, res: Response) {
     const authenticatedUser = req.user;
 
@@ -388,6 +436,12 @@ export class AccountController {
       })),
     });
   }
+  /**
+   * Retrieves signups that have already been reviewed (Approved/Rejected).
+   * Requires Coordinator role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getReviewedSignUps(req: AuthenticatedRequest, res: Response) {
     const authenticatedUser = req.user;
 
@@ -429,6 +483,11 @@ export class AccountController {
       })),
     });
   }
+  /**
+   * Retrieves all approved members of the labs visible to the requester.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getLabMembers(req: AuthenticatedRequest, res: Response) {
     const authenticatedUser = req.user;
 
@@ -479,6 +538,11 @@ export class AccountController {
       frozenUsers: visibleUsers.filter(u => !!u.frozenAt).map(serializeUser),
     });
   }
+  /**
+   * Updates the profile information of the currently authenticated user.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async updateProfile(req: AuthenticatedRequest, res: Response) {
     const { name, email } = req.body ?? {};
     const rawCurrentPosition = req.body?.currentPosition;
@@ -545,6 +609,11 @@ export class AccountController {
       throw error;
     }
   }
+  /**
+   * Updates the research interests (topics) of the currently authenticated user.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async setInterests(req: AuthenticatedRequest, res: Response) {
     const { topicIds, otherInterests } = req.body ?? {};
     const authenticatedUser = req.user;
@@ -617,9 +686,18 @@ export class AccountController {
       user: AccountController.serializeAccount(savedUser, { includeInterests: true }),
     });
   }
+  /**
+   * Placeholder for setting blackout periods.
+   */
   static async setBlackoutPeriods(req: Request, res: Response) {
     res.status(501).json({ message: 'Not Implemented' });
   }
+  /**
+   * Approves a pending user signup.
+   * Requires Coordinator role and lab ownership.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async approveSignUp(req: AuthenticatedRequest, res: Response) {
     const authenticatedUser = req.user;
 
@@ -704,6 +782,12 @@ export class AccountController {
       user: AccountController.serializeAccount(savedMember),
     });
   }
+  /**
+   * Rejects a pending user signup.
+   * Requires Coordinator role and lab ownership.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async rejectSignUp(req: AuthenticatedRequest, res: Response) {
     const authenticatedUser = req.user;
 
@@ -766,6 +850,12 @@ export class AccountController {
     });
   }
 
+  /**
+   * Freezes a lab member's account.
+   * Cancels active assignments and prevents further review activities.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async freezeMember(req: AuthenticatedRequest, res: Response) {
     const authenticatedUser = req.user;
 
@@ -828,6 +918,11 @@ export class AccountController {
     });
   }
 
+  /**
+   * Unfreezes a frozen lab member's account.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async unfreezeMember(req: AuthenticatedRequest, res: Response) {
     const authenticatedUser = req.user;
 
@@ -865,6 +960,9 @@ export class AccountController {
     return res.status(200).json({ message: 'Account unfrozen successfully' });
   }
 
+  /**
+   * Sanitizes and parses an approval/rejection note.
+   */
   private static parseApprovalNote(note: unknown): string | null {
     if (typeof note !== 'string') {
       return null;
@@ -874,6 +972,9 @@ export class AccountController {
     return trimmedNote ? trimmedNote : null;
   }
 
+  /**
+   * Sanitizes and parses a route parameter ID.
+   */
   private static parseRouteId(id: unknown): string | null {
     if (typeof id !== 'string') {
       return null;
@@ -883,10 +984,16 @@ export class AccountController {
     return trimmedId ? trimmedId : null;
   }
 
+  /**
+   * Checks if a user has Coordinator role.
+   */
   private static isCoordinatorOrAdmin(user: User) {
     return user.role === UserRole.Coordinator;
   }
 
+  /**
+   * Retrieves the IDs of all labs visible to a specific user (coordinator).
+   */
   private static async getVisibleLabIds(user: User): Promise<string[]> {
     if (user.role === UserRole.Coordinator) {
       const coordinator = await AppDataSource.getRepository(Coordinator).findOne({
@@ -909,6 +1016,9 @@ export class AccountController {
     return [...new Set((fullUser?.labs ?? []).map(lab => lab.id))];
   }
 
+  /**
+   * Checks if a coordinator has permission to review/freeze/unfreeze a specific member.
+   */
   private static async canReviewSignup(reviewer: User, member: User): Promise<boolean> {
     const visibleLabIds = await AccountController.getVisibleLabIds(reviewer);
     
@@ -926,6 +1036,9 @@ export class AccountController {
     return false;
   }
 
+  /**
+   * Formats a user entity for API response.
+   */
   private static serializeAccount(member: User, options: { includeInterests?: boolean } = {}) {
     const labs = [...(member.labs || [])];
     
@@ -965,16 +1078,25 @@ export class AccountController {
     return account;
   }
 
+  /**
+   * Standardized response for authentication failure.
+   */
   private static authenticationFailed(res: Response) {
     return res.status(401).json({ message: 'Invalid email or password' });
   }
 
+  /**
+   * Standardized response for password reset request.
+   */
   private static passwordResetRequestAccepted(res: Response) {
     return res.status(200).json({
       message: 'If an account exists for that email, a password reset link will be sent',
     });
   }
 
+  /**
+   * Checks if an error is a database unique constraint violation.
+   */
   private static isUniqueConstraintError(error: unknown): boolean {
     return error instanceof Error && error.message.includes('UNIQUE constraint failed');
   }

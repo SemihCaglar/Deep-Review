@@ -14,6 +14,12 @@ import { RoundService } from '../services/RoundService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class AssignmentController {
+  /**
+   * Assigns multiple reviewers to a round.
+   * Requires Coordinator or Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async assignReviewers(req: AuthenticatedRequest, res: Response) {
     try {
       const requesterBase = req.user;
@@ -121,6 +127,12 @@ export class AssignmentController {
     }
   }
 
+  /**
+   * Sends review invitation emails to all reviewers in a round who haven't received one yet.
+   * Requires Coordinator role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async sendInvitations(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;
@@ -180,6 +192,11 @@ export class AssignmentController {
     }
   }
 
+  /**
+   * Retrieves all assignments for the currently authenticated reviewer.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getMyAssignments(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -272,6 +289,11 @@ export class AssignmentController {
     }
   }
 
+  /**
+   * Dismisses (hides) resolved decline or extension request decisions from the reviewer's dashboard.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async dismissRequestDecisions(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -331,6 +353,12 @@ export class AssignmentController {
     }
   }
 
+  /**
+   * Reassigns a review assignment from one reviewer to another.
+   * Requires Coordinator role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async reassignReviewer(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;
@@ -386,6 +414,12 @@ export class AssignmentController {
     }
   }
 
+  /**
+   * Sends manual reminders to a specific list of assignments.
+   * Requires Coordinator role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async sendReminders(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;
@@ -445,6 +479,12 @@ export class AssignmentController {
     }
   }
 
+  /**
+   * Sends manual reminders to all active reviewers for a specific paper.
+   * Requires Coordinator or Author role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async sendPaperReminders(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -504,6 +544,12 @@ export class AssignmentController {
     }
   }
 
+  /**
+   * Cancels an existing review assignment.
+   * Requires Coordinator role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async cancelAssignment(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;
@@ -571,6 +617,12 @@ export class AssignmentController {
     }
   }
 
+  /**
+   * Updates the deadline for a specific review assignment.
+   * Requires Coordinator role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async updateAssignmentDeadline(req: AuthenticatedRequest, res: Response) {
     try {
       const coordinator = req.user;
