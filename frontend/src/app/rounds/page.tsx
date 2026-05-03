@@ -1511,7 +1511,7 @@ export default function RoundsPage() {
   const selectedPaper = papers.find(p => p.id === selectedPaperId);
 
   const latestRound = rounds.length > 0 ? rounds[0] : null;
-  const canCreateNextRound = !latestRound || latestRound.status === 'Completed';
+  const canCreateNextRound = (!latestRound || latestRound.status === 'Completed') && selectedPaper?.status !== 'Accepted';
 
   return (
     <div className="max-w-5xl mx-auto py-6 space-y-8 animate-in fade-in duration-500 mb-20">
