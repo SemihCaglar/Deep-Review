@@ -113,6 +113,7 @@ async function runAgentInBatches(
 
 export async function runChecklistAnswers(
   paperId: string,
+  roundId: string,
   standards: string[],
   role: string,
   pdfBuffer: Buffer
@@ -125,23 +126,24 @@ export async function runChecklistAnswers(
   // Step 2: Find or scrape items (always reuse scraped items)
   const items = await getOrScrapeItems(configuration);
 
-  // Step 3: Delete any existing answers for this paper + configuration (always overwrite)
-  const existing = await answerRepo.find({ where: { paperId, configurationId: configuration.id } });
+  // Step 3: Delete any existing answers for this round + configuration (always overwrite)
+  const existing = await answerRepo.find({ where: { paperId, roundId, configurationId: configuration.id } });
   if (existing.length > 0) {
     await answerRepo.remove(existing);
-    console.log(`[EmpiricalChecklistOrchestrationService] Deleted ${existing.length} existing answers for paper ${paperId}`);
+    console.log(`[EmpiricalChecklistOrchestrationService] Deleted ${existing.length} existing answers for paper ${paperId}, round ${roundId}`);
   }
 
   // Step 4: Upload PDF once, then run agent in batches
-  console.log(`[EmpiricalChecklistOrchestrationService] Running checklist answer agent for paper ${paperId} (${items.length} items, batch size ${BATCH_SIZE})`);
+  console.log(`[EmpiricalChecklistOrchestrationService] Running checklist answer agent for paper ${paperId}, round ${roundId} (${items.length} items, batch size ${BATCH_SIZE})`);
   const agentService = new EmpiricalChecklistAnswerAgentService();
-  const fileId = await agentService.uploadPdf(pdfBuffer, `paper_${paperId}.pdf`);
+  const fileId = await agentService.uploadPdf(pdfBuffer, `paper_${paperId}_round_${roundId}.pdf`);
   const allAnswers = await runAgentInBatches(agentService, fileId, items);
 
   // Step 5: Save all answers
   const answerEntities = answerRepo.create(
     allAnswers.map(v => ({
       paperId,
+      roundId,
       configurationId: configuration.id,
       checklistItemId: v.itemId,
       answer: v.answer,
@@ -157,6 +159,7 @@ export async function runChecklistAnswers(
 
 export async function getStoredChecklistAnswers(
   paperId: string,
+  roundId: string,
   standards: string[],
   role: string
 ): Promise<EmpiricalChecklistResult | null> {
@@ -171,7 +174,7 @@ export async function getStoredChecklistAnswers(
   if (items.length === 0) return null;
 
   const answers = await AppDataSource.getRepository(EmpiricalChecklistAnswer).find({
-    where: { paperId, configurationId: configuration.id },
+    where: { paperId, roundId, configurationId: configuration.id },
   });
   if (answers.length === 0) return null;
 

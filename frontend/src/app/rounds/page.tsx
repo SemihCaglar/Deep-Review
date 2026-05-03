@@ -45,6 +45,7 @@ import {
 } from '@/lib/api';
 import { confirmCancel, customConfirm } from '@/lib/confirmAction';
 import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download, Search } from 'lucide-react';
+import AIToolsModal from '@/components/papers/AIToolsModal';
 
 // ── Status badge ─────────────────────────────────────────────────────────────
 
@@ -438,16 +439,19 @@ function RoundCard({
   round,
   onRefresh,
   coordinatorId,
+  paperId,
   paperHasOverleafLink,
   isLatestRound,
 }: {
   round: RoundWithAssignments;
   onRefresh: () => void;
   coordinatorId: string;
+  paperId: string;
   paperHasOverleafLink: boolean;
   isLatestRound: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const [aiToolsOpen, setAiToolsOpen] = useState(false);
 
   // Add Reviewer / Reassign panel
   const [showAddPanel, setShowAddPanel] = useState(false);
@@ -1145,6 +1149,15 @@ function RoundCard({
 
           {/* Action bar */}
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setAiToolsOpen(true)}
+              disabled={round.status === 'Draft'}
+              title={round.status === 'Draft' ? 'AI tools can be used after the round has started' : undefined}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-indigo-500/10"
+            >
+              <Cpu className="w-4 h-4" />
+              AI Tools
+            </button>
             {canAddReviewer && (
               <button
                 onClick={() => showAddPanel ? setShowAddPanel(false) : openAddPanel()}
@@ -1270,6 +1283,13 @@ function RoundCard({
 
         </div>
       )}
+      <AIToolsModal
+        isOpen={aiToolsOpen}
+        onClose={() => setAiToolsOpen(false)}
+        round={round}
+        paperId={paperId}
+        onRefresh={onRefresh}
+      />
     </div>
   );
 }
@@ -1714,6 +1734,7 @@ export default function RoundsPage() {
                 round={round}
                 onRefresh={handleRefresh}
                 coordinatorId={user.id}
+                paperId={selectedPaper.id}
                 paperHasOverleafLink={!!selectedPaper?.overleafLink?.trim()}
                 isLatestRound={round.roundNumber === Math.max(...rounds.map(r => r.roundNumber))}
               />

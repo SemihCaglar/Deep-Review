@@ -456,6 +456,7 @@ export type AuthorRound = {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
     aiReviewReports: AIReviewReportHistory[];
   };
+  assignments?: RoundAssignment[];
 };
 
 export type CoordinatedPaper = {
