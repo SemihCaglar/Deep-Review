@@ -65,22 +65,39 @@ export class AIRelevanceService {
           ourAbstract,
           batch.map(b => ({ candidateId: b.candidateId, title: b.title, abstract: b.abstract }))
         );
+        console.log(`[AIRelevanceService]   ✓ Batch returned: ${batchResults.length} recommendations`);
         rawResults.push(...batchResults);
       } catch (err) {
         console.error(`[AIRelevanceService] Batch failed:`, err);
       }
     }
 
+    console.log(`[AIRelevanceService] Total GPT results: ${rawResults.length}`);
+
     // Map results back to full recommendation objects
     const idToInput = new Map(inputs.map(i => [i.candidateId, i]));
     const recommendations: RelatedWorkRecommendation[] = [];
 
+    let filteredRelevant = 0;
+    let filteredLowConf = 0;
+    let filteredUnrelated = 0;
+
     for (const raw of rawResults) {
       const input = idToInput.get(raw.candidateId);
       if (!input) continue;
-      if (!raw.relevant) continue;
-      if (raw.confidence === 'low') continue;
-      if (raw.relationshipType === 'unrelated') continue;
+
+      if (!raw.relevant) {
+        filteredRelevant++;
+        continue;
+      }
+      if (raw.confidence === 'low') {
+        filteredLowConf++;
+        continue;
+      }
+      if (raw.relationshipType === 'unrelated') {
+        filteredUnrelated++;
+        continue;
+      }
 
       recommendations.push({
         pcMemberName: input.paper.pcMemberName,
@@ -96,6 +113,12 @@ export class AIRelevanceService {
         recommendationReason: raw.reason,
       });
     }
+
+    console.log(`[AIRelevanceService] Filtering summary:`);
+    console.log(`  Filtered (not relevant): ${filteredRelevant}`);
+    console.log(`  Filtered (low confidence): ${filteredLowConf}`);
+    console.log(`  Filtered (unrelated): ${filteredUnrelated}`);
+    console.log(`  Passed filters: ${recommendations.length}`);
 
     return recommendations;
   }

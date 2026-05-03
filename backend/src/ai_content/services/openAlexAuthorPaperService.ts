@@ -6,7 +6,7 @@ const MAILTO = process.env.OPENALEX_MAILTO || 'pug-contend-simile@duck.com';
 const TIMEOUT_MS = 15000;
 const MAX_PAPERS_PER_MEMBER = 15;
 const MIN_YEAR = new Date().getFullYear() - 10;
-const MIN_AUTHOR_CONFIDENCE = 0.45;
+const MIN_AUTHOR_CONFIDENCE = 0.35; // Lowered from 0.45 to match more authors (like Python version does)
 
 function addMailto(url: URL): void {
   if (MAILTO) url.searchParams.set('mailto', MAILTO);
@@ -87,11 +87,17 @@ async function findAuthorId(member: ProgramCommitteeMember): Promise<string | nu
   addMailto(url);
 
   const data = await fetchJson(url.toString());
-  if (!data?.results?.length) return null;
+  if (!data?.results?.length) {
+    console.log(`[OpenAlexAuthorPaper] No OpenAlex results for: ${member.name}`);
+    return null;
+  }
+
+  console.log(`[OpenAlexAuthorPaper] Found ${data.results.length} candidates for: ${member.name}`);
 
   // Score candidates by name similarity
   let best: string | null = null;
   let bestScore = MIN_AUTHOR_CONFIDENCE;
+  let bestName = '';
 
   for (const author of data.results) {
     const names = [
@@ -112,10 +118,19 @@ async function findAuthorId(member: ProgramCommitteeMember): Promise<string | nu
     }
 
     const score = nameSim * 0.7 + affSim * 0.3;
+    console.log(`[OpenAlexAuthorPaper]   "${author.display_name}": score=${score.toFixed(2)} (name=${nameSim.toFixed(2)}, aff=${affSim.toFixed(2)})`);
+
     if (score > bestScore) {
       bestScore = score;
       best = author.id ?? null;
+      bestName = author.display_name ?? '';
     }
+  }
+
+  if (best) {
+    console.log(`[OpenAlexAuthorPaper] ✓ Matched: "${member.name}" -> "${bestName}" (score=${bestScore.toFixed(2)})`);
+  } else {
+    console.log(`[OpenAlexAuthorPaper] ✗ No match above threshold (${MIN_AUTHOR_CONFIDENCE}) for: ${member.name}`);
   }
 
   return best;
