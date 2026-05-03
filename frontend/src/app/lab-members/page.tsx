@@ -70,6 +70,9 @@ export default function LabMembersPage() {
     <div className="max-w-6xl mx-auto space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-white tracking-tight">Lab Information</h1>
+        {user.labs && user.labs.length > 0 && (
+          <h2 className="text-xl font-medium text-blue-400 mt-1">{user.labs.map(l => l.name).join(', ')}</h2>
+        )}
         <p className="text-slate-400 mt-2">Browse lab members, alumni, and the topics assigned to your lab.</p>
       </div>
 

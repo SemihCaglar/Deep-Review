@@ -429,11 +429,13 @@ function RoundCard({
   onRefresh,
   coordinatorId,
   paperHasOverleafLink,
+  isLatestRound,
 }: {
   round: RoundWithAssignments;
   onRefresh: () => void;
   coordinatorId: string;
   paperHasOverleafLink: boolean;
+  isLatestRound: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -449,7 +451,7 @@ function RoundCard({
   const [assignMsg, setAssignMsg] = useState('');
   const [assignError, setAssignError] = useState('');
   const roundDeadlineHasNotPassed = round.deadline ? new Date(round.deadline).getTime() >= Date.now() : false;
-  const canAddReviewer = round.status === 'Open' || (round.status === 'Completed' && roundDeadlineHasNotPassed);
+  const canAddReviewer = isLatestRound && (round.status === 'Open' || (round.status === 'Completed' && roundDeadlineHasNotPassed));
 
   const openAddPanel = async (reassignId?: string) => {
     setShowAddPanel(true);
@@ -847,8 +849,13 @@ function RoundCard({
         onClick={() => setExpanded(v => !v)}
       >
         <div className="flex items-center gap-4">
-          <div className="w-9 h-9 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-sm font-bold">
-            {round.roundNumber}
+          <div className="relative">
+            <div className="w-9 h-9 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-sm font-bold">
+              {round.roundNumber}
+            </div>
+            {round.assignments.some(a => a.status === 'Completed' && !a.hasRating) && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-purple-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(168,85,247,0.5)]" title="Waiting rating" />
+            )}
           </div>
           <div>
             <p className="text-white font-semibold">{round.targetVenue || `Round ${round.roundNumber}`}</p>
@@ -1035,7 +1042,19 @@ function RoundCard({
                               <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
                             </div>
                             <button
-                              onClick={() => handleAddProposed(s.user.id)}
+                              onClick={async () => {
+                                if (!round.createdByCoordinator) {
+                                  try {
+                                    await assignReviewersRequest(round.id, [s.user.id]);
+                                    setProposeSuggestions(prev => prev.filter(p => p.user.id !== s.user.id));
+                                    onRefresh();
+                                  } catch (e) {
+                                    setProposeError(e instanceof ApiError ? e.message : 'Failed to add reviewer');
+                                  }
+                                } else {
+                                  handleAddProposed(s.user.id);
+                                }
+                              }}
                               className="ml-2 flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 transition-colors shrink-0"
                             >
                               <Plus className="w-3 h-3" /> Add
@@ -1315,20 +1334,22 @@ function RoundCard({
             <>
               {/* AI Tools */}
               <div className="pt-3 border-t border-white/5 space-y-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => aiFileRef.current?.click()}
-                    disabled={runningAI}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {runningAI ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
-                    {runningAI ? 'Running…' : 'Run AI Review'}
-                  </button>
-                  {aiStatus && (
-                    <span className="text-xs text-indigo-300 animate-pulse">{aiStatus}</span>
-                  )}
-                  {aiError && <p className="text-xs text-red-400">{aiError}</p>}
-                </div>
+                {isLatestRound && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => aiFileRef.current?.click()}
+                      disabled={runningAI}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {runningAI ? <Loader2 className="w-3 h-3 animate-spin" /> : <Cpu className="w-3 h-3" />}
+                      {runningAI ? 'Running…' : 'Run AI Review'}
+                    </button>
+                    {aiStatus && (
+                      <span className="text-xs text-indigo-300 animate-pulse">{aiStatus}</span>
+                    )}
+                    {aiError && <p className="text-xs text-red-400">{aiError}</p>}
+                  </div>
+                )}
 
                 {/* AI Review History */}
                 {(() => {
@@ -1963,7 +1984,7 @@ export default function RoundsPage() {
             {selectedPaper.overleafLink ? (
               <a href={selectedPaper.overleafLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
                 <ExternalLink className="w-4 h-4" />
-                Open Overleaf Manuscript
+                Open Overleaf
               </a>
             ) : (
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/[0.02] text-sm text-slate-500">
@@ -2073,6 +2094,7 @@ export default function RoundsPage() {
                 onRefresh={handleRefresh}
                 coordinatorId={user.id}
                 paperHasOverleafLink={!!selectedPaper?.overleafLink?.trim()}
+                isLatestRound={round.roundNumber === Math.max(...rounds.map(r => r.roundNumber))}
               />
             ))
           )}

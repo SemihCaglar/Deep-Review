@@ -258,6 +258,7 @@ export type AuthoredPaper = Paper & {
   latestRoundDeadline?: string | null;
   completedAssignments?: number;
   totalAssignments?: number;
+  waitingRatingsCount?: number;
 };
 
 export type PaperHistoryDeclineRequest = {

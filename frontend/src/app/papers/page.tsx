@@ -112,7 +112,7 @@ export default function PapersList() {
     const hasActiveFilters = searchQuery.trim() || authorFilter.trim() || statusFilter;
     const clearFilters = () => { setSearchQuery(''); setAuthorFilter(''); setStatusFilter(''); };
 
-    const STATUSES = ['Draft', 'In Review', 'Completed', 'Accepted', 'Archived'];
+    const STATUSES = ['Draft', 'In Review', 'Completed', 'Accepted'];
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -120,7 +120,6 @@ export default function PapersList() {
             case 'In Review': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
             case 'Completed': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
             case 'Accepted': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-            case 'Archived': return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
             default: return 'bg-white/10 text-slate-300 border-white/20';
         }
     };
@@ -244,6 +243,12 @@ export default function PapersList() {
                                                 <span>Deadline: {formatDate(paper.latestRoundDeadline)}</span>
                                                 {typeof paper.totalAssignments === 'number' && (
                                                     <span>{paper.completedAssignments || 0}/{paper.totalAssignments} reviews completed</span>
+                                                )}
+                                                {typeof paper.waitingRatingsCount === 'number' && paper.waitingRatingsCount > 0 && (
+                                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">
+                                                        <FileText className="w-3.5 h-3.5" />
+                                                        {paper.waitingRatingsCount} waiting rating{paper.waitingRatingsCount !== 1 ? 's' : ''}
+                                                    </span>
                                                 )}
                                             </div>
                                         )}
