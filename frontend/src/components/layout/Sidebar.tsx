@@ -6,7 +6,12 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
 import { Home, FileText, CheckCircle, LogOut, PlusSquare, UserCheck, Users, Shield, ClipboardList } from 'lucide-react';
 import ProfileModal from './ProfileModal';
-import { getPendingCollaborationInvitationsRequest, getPendingSignupsRequest } from '@/lib/api';
+import {
+    getMyCoordinatedPapersRequest,
+    getPaperRoundsRequest,
+    getPendingCollaborationInvitationsRequest,
+    getPendingSignupsRequest,
+} from '@/lib/api';
 
 export default function Sidebar() {
     const { user, logout } = useUser();
@@ -15,6 +20,7 @@ export default function Sidebar() {
     const router = useRouter();
     const [isProfileOpen, setIsProfileOpen] = React.useState(false);
     const [hasPendingApprovals, setHasPendingApprovals] = React.useState(false);
+    const [hasPendingRoundRequests, setHasPendingRoundRequests] = React.useState(false);
 
     const handleLogout = () => {
         logout();
@@ -59,6 +65,7 @@ export default function Sidebar() {
     React.useEffect(() => {
         if (!user.isCoordinator || user.isAdmin || user.isFrozen) {
             setHasPendingApprovals(false);
+            setHasPendingRoundRequests(false);
             return;
         }
 
@@ -77,12 +84,37 @@ export default function Sidebar() {
             setHasPendingApprovals(pendingSignupCount + pendingCollabCount > 0);
         };
 
-        loadPendingIndicator();
-        window.addEventListener('focus', loadPendingIndicator);
+        const loadRoundRequestIndicator = async () => {
+            try {
+                const papers = await getMyCoordinatedPapersRequest();
+                const roundsByPaper = await Promise.all(
+                    papers.map(paper => getPaperRoundsRequest(paper.id)),
+                );
+
+                if (!isMounted) return;
+
+                const hasPendingRequest = roundsByPaper.some(rounds =>
+                    rounds.some(round => round.status === 'Draft' && !round.createdByCoordinator),
+                );
+                setHasPendingRoundRequests(hasPendingRequest);
+            } catch {
+                if (isMounted) {
+                    setHasPendingRoundRequests(false);
+                }
+            }
+        };
+
+        const loadIndicators = () => {
+            loadPendingIndicator();
+            loadRoundRequestIndicator();
+        };
+
+        loadIndicators();
+        window.addEventListener('focus', loadIndicators);
 
         return () => {
             isMounted = false;
-            window.removeEventListener('focus', loadPendingIndicator);
+            window.removeEventListener('focus', loadIndicators);
         };
     }, [pathname, user.isAdmin, user.isCoordinator, user.isFrozen]);
 
@@ -151,6 +183,9 @@ export default function Sidebar() {
                             <span className="flex-1 truncate">{item.name}</span>
                             {item.href === '/pending-approvals' && hasPendingApprovals ? (
                                 <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_0_3px_rgba(52,211,153,0.16)]" />
+                            ) : null}
+                            {item.href === '/rounds' && hasPendingRoundRequests ? (
+                                <span className="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_0_3px_rgba(251,191,36,0.16)]" />
                             ) : null}
                         </Link>
                     );

@@ -139,17 +139,19 @@ Reason examples:
 
 ---
 
-## 8) “Different people each round” rule (final)
+## 8) Reviewer reuse across rounds (final)
 
-Goal: assign different reviewers each round for the same paper.
+Goal: allow the same reviewer to review the same paper in multiple rounds when needed.
 
 **Final policy chosen:**
-- A reviewer becomes **ineligible in future rounds** for the same paper **only if they SUBMITTED a review** in a previous round.
+- A reviewer who **submitted a review** in a previous round **can still be assigned** in later rounds of the same paper.
 - If they accepted but **did not submit**, they **can still be assigned** in later rounds.
-- Declined / no-response do not make them ineligible.
+- Declined / no-response do not make them ineligible in later rounds.
+- The same reviewer should not be assigned twice within the same round.
 
 Optional (soft) reliability tracking:
 - “Accepted but did not submit” should be recorded as a reliability flag; used for informational warnings (not a hard ban).
+- “Previously submitted a review for this paper” may be shown as informational context only; it is not a hard ban.
 
 ---
 

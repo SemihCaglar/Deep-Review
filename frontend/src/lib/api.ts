@@ -424,6 +424,13 @@ export function getLabsRequest() {
 
 // ==== ROUND MANAGEMENT TYPES ====
 
+export type ProposedReviewer = {
+  id: string;
+  name: string;
+  email: string;
+  hasPreviouslyCompletedReview?: boolean;
+};
+
 export type AuthorRound = {
   id: string;
   roundNumber: number;
@@ -435,7 +442,7 @@ export type AuthorRound = {
   deadline: string | null;
   startedAt: string | null;
   completedAt: string | null;
-  proposedReviewers: { id: string; name: string; email: string }[];
+  proposedReviewers: ProposedReviewer[];
   aiReviewReport?: AIReviewReport | null;
   aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
@@ -483,6 +490,7 @@ export type RoundAssignment = {
   deadline: string | null;
   invitationSent: boolean;
   reviewer: { id: string; name: string; email: string };
+  hasPreviouslyCompletedReview?: boolean;
   pendingDeclineRequest: PendingDeclineRequest | null;
   pendingExtensionRequest: PendingExtensionRequest | null;
   reviewSummary: { text: string | null; submittedAt: string } | null;
@@ -540,6 +548,7 @@ export type MyAssignment = {
 
 export type SuggestedReviewer = {
   user: { id: string; name: string; email: string; role: string };
+  hasPreviouslyCompletedReview?: boolean;
   reasons: string[];
 };
 
@@ -695,18 +704,18 @@ export function getAuthorRoundsRequest(paperId: string) {
 }
 
 export function getProposedReviewersRequest(roundId: string) {
-  return apiRequest<{ id: string; name: string; email: string }[]>(`/rounds/${roundId}/propose`);
+  return apiRequest<ProposedReviewer[]>(`/rounds/${roundId}/propose`);
 }
 
 export function addProposedReviewerRequest(roundId: string, reviewerId: string) {
-  return apiRequest<{ id: string; name: string; email: string }[]>(`/rounds/${roundId}/propose`, {
+  return apiRequest<ProposedReviewer[]>(`/rounds/${roundId}/propose`, {
     method: 'POST',
     body: { reviewerId },
   });
 }
 
 export function removeProposedReviewerRequest(roundId: string, userId: string) {
-  return apiRequest<{ id: string; name: string; email: string }[]>(`/rounds/${roundId}/propose/${userId}`, {
+  return apiRequest<ProposedReviewer[]>(`/rounds/${roundId}/propose/${userId}`, {
     method: 'DELETE',
   });
 }
@@ -714,6 +723,7 @@ export function removeProposedReviewerRequest(roundId: string, userId: string) {
 export type RoundStatusAlert = {
   id: string;
   reviewer: { id: string; name: string; email: string };
+  hasPreviouslyCompletedReview?: boolean;
   status: string;
   deadline: string | null;
 };

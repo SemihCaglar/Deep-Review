@@ -74,9 +74,9 @@ The following candidates are excluded from `GET /rounds/:id/suggest`:
 | `role = Coordinator` or `role = Admin` | These roles cannot act as reviewers |
 | Not sharing a lab with the paper | Intra-lab scope (Issue #20) |
 | Is an author of the paper | Hard COI (Issue #20) |
-| Has an active (non-`Cancelled`) assignment in the current round | Already assigned |
-| Has a `Completed` assignment or `submittedAt` set in any prior round for this paper | Permanently disqualified from later rounds |
+| Has any assignment in the current round | Already assigned in this round |
 
+Reviewers with a prior `Completed` assignment or `submittedAt` set in an earlier round for this paper remain eligible in later rounds and may appear with informational context.
 Reviewers with a prior `Accepted` but not submitted assignment appear with a warning reason ("Previously accepted but did not submit") rather than being excluded.
 
 ---
@@ -89,7 +89,7 @@ Reviewers with a prior `Accepted` but not submitted assignment appear with a war
 4. **Coverage (15 sections, ~45 tests):**
    - Authentication (login success/fail)
    - Paper & Round views (coordinator vs reviewer access control)
-   - Reviewer suggestions (coordinator excluded, already-assigned excluded, completed excluded)
+   - Reviewer suggestions (coordinator excluded, current-round already-assigned excluded, prior completed reviewers allowed in later rounds)
    - Assign reviewers (success, idempotency, coordinator role rejected, reviewer forbidden)
    - Send invitations (idempotency — second call does not re-send)
    - My assignments (reviewer sees their data)
@@ -98,8 +98,8 @@ Reviewers with a prior `Accepted` but not submitted assignment appear with a war
    - Deadline extension request (past date rejected, valid request, overwrite pending)
    - Process extension (reviewer forbidden, approve, double-approve error)
    - Complete review (with summary, double-complete error)
-   - Suggestions after completion (completed reviewer excluded)
-   - Cancel and re-assign (cancelled reviewer reappears in suggestions, new assignment created)
+   - Suggestions with current-round assignments (current-round assigned reviewer excluded)
+   - Cancel and re-assign (cancelled reviewer stays excluded within the same round, new reviewer assignment created)
    - Decline invitation (without reason → 400, with reason → pending, coordinator sees it, assignment moves to PendingDecline)
    - Late decline from Accepted (reviewer accepted then requests decline → PendingDecline, submission still allowed, completing auto-rejects pending decline)
-   - Process decline (reviewer forbidden, approve → Declined, reject from pre-accept → Invited, reject from post-accept → Accepted, double-process error, Declined excluded from suggestions)
+   - Process decline (reviewer forbidden, approve → Declined, reject from pre-accept → Invited, reject from post-accept → Accepted, double-process error, Declined excluded from same-round suggestions)

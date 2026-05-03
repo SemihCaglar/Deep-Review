@@ -441,7 +441,7 @@ export default function DashboardPage() {
   const stats: DashboardStat[] = user.isCoordinator
     ? [
         { label: 'Pending Approvals', value: isLoadingPending ? '...' : pendingCount, icon: UserCheck, color: 'text-blue-400', bg: 'bg-blue-500/10', href: '/pending-approvals' },
-        { label: 'Round Requests', value: roundStartRequests.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '/rounds' },
+        { label: 'Round Requests', value: roundStartRequests.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '#round-requests' },
         { label: 'Collaboration Invitations', value: collabInvitationCount, icon: FileText, color: 'text-indigo-400', bg: 'bg-indigo-500/10', href: '/pending-approvals' },
       ]
     : user.isFrozen
@@ -595,7 +595,7 @@ export default function DashboardPage() {
               Pending Requests
             </h2>
 
-            <section className="glass rounded-2xl border border-white/5 p-6">
+            <section id="round-requests" className="glass rounded-2xl border border-white/5 p-6 scroll-mt-6">
               {reviewerRequestsError ? (
                 <p className="text-sm text-red-400">{reviewerRequestsError}</p>
               ) : roundStartRequests.length === 0 ? (

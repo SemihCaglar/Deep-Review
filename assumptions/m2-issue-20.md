@@ -10,7 +10,7 @@ _(Carried over from original assumptions — not changed)_
 
 1. **Intra-Lab Scope Exclusivity:** The backend restricts reviewer candidates to users who share at least one Lab link with the requested Paper. Cross-lab candidates are excluded from suggestions.
 2. **Hard COI Protection:** No author of the targeted Paper can be suggested or assigned as a reviewer. The query drops any User overlapping `paper.authors`.
-3. **Prior Round Disqualification:** A candidate is disqualified from a new round only if they have an existing Assignment with a `submittedAt` timestamp set, or with `status = Completed`. Partial or inactive prior assignments do not disqualify.
+3. **Reviewer Reuse Across Rounds:** A candidate can be suggested and assigned in a later round even if they submitted a review or have `status = Completed` in an earlier round for the same paper. Prior-round activity may be shown as context, but it is not a hard exclusion.
 
 ---
 
