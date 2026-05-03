@@ -11,6 +11,7 @@ import { AIReviewReport } from '../entities/AIReviewReport';
 import { RoundService, RoundServiceError } from '../services/RoundService';
 import { sendEmail } from '../services/emailService';
 import { ComplianceCheckAgentService } from '../ai_content/services/ComplianceCheckAgentService';
+import { runChecklistAnswers, getStoredChecklistAnswers } from '../ai_content/services/EmpiricalChecklistOrchestrationService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class RoundController {
@@ -1505,4 +1506,69 @@ export class RoundController {
       });
     }
   }
+
+  static runEmpiricalChecklistAnswering = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const pdfBuffer = req.file?.buffer;
+
+      if (!pdfBuffer) {
+        return res.status(400).json({ message: 'PDF file is required' });
+      }
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper'],
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      const confirmed = round.confirmedChecklistJson;
+      if (!confirmed || !Array.isArray(confirmed.selectedStandards) || confirmed.selectedStandards.length === 0) {
+        return res.status(400).json({
+          message: 'No confirmed checklist standards found. Please confirm the checklist selection first.',
+        });
+      }
+
+      const paperId = round.paper.id;
+      const standards: string[] = confirmed.selectedStandards;
+      const role = 'author';
+
+      console.log(`[RoundController] Running empirical checklist answering for paper ${paperId}, standards: ${standards.join(', ')}`);
+
+      const result = await runChecklistAnswers(paperId, standards, role, pdfBuffer);
+
+      return res.status(200).json({ success: true, data: result });
+    } catch (err: any) {
+      console.error('[RoundController] Error in runEmpiricalChecklistAnswering:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Internal server error' });
+    }
+  };
+
+  static getEmpiricalChecklistAnswers = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper'],
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      const confirmed = round.confirmedChecklistJson;
+      if (!confirmed || !Array.isArray(confirmed.selectedStandards) || confirmed.selectedStandards.length === 0) {
+        return res.status(200).json({ success: true, data: null });
+      }
+
+      const result = await getStoredChecklistAnswers(round.paper.id, confirmed.selectedStandards, 'author');
+
+      return res.status(200).json({ success: true, data: result });
+    } catch (err: any) {
+      console.error('[RoundController] Error in getEmpiricalChecklistAnswers:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Internal server error' });
+    }
+  };
 }
