@@ -15,7 +15,7 @@ import { useUser } from '@/components/context/UserContext';
 import { confirmCancel } from '@/lib/confirmAction';
 import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Users, Search } from 'lucide-react';
 
-const ACTIVE_ASSIGNMENT_STATUSES = ['Invited', 'Accepted', 'PendingDecline', 'PendingExtension', 'Overdue'];
+const ACTIVE_ASSIGNMENT_STATUSES = ['Invited', 'Accepted', 'PendingDecline', 'PendingExtension'];
 
 function formatDate(d: string | null) {
   if (!d) return '—';

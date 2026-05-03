@@ -163,7 +163,7 @@ const ANALYTICS_PERIODS: { label: string; value: AnalyticsPeriod }[] = [
   { label: 'Overall', value: 'overall' },
 ];
 
-const ACTIVE_REVIEW_STATUSES = ['Invited', 'Accepted', 'PendingDecline', 'PendingExtension', 'Overdue'];
+const ACTIVE_REVIEW_STATUSES = ['Invited', 'Accepted', 'PendingDecline', 'PendingExtension'];
 
 function assignmentStatusLabel(status: string) {
   switch (status) {
