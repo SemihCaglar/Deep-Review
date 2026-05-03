@@ -381,6 +381,11 @@ export class CoordinatorService {
     assignment: Assignment,
     context: CoordinatorContext,
   ): Promise<void> {
+    const admin = await manager.getRepository(User).findOne({ where: { id: context.coordinatorId } });
+    if (admin?.role === UserRole.Admin) {
+      return; // Admins have global access
+    }
+
     const assignmentLabIds = assignment.round.paper.labs?.map((lab) => lab.id) || [];
     if (!assignmentLabIds.includes(context.labId)) {
       throw new CoordinatorServiceError(403, 'Assignment does not belong to the provided lab');

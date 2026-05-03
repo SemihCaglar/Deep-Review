@@ -13,7 +13,7 @@ import {
 } from '@/lib/api';
 import { useUser } from '@/components/context/UserContext';
 import { confirmCancel } from '@/lib/confirmAction';
-import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Users } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, FileText, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Users, Search } from 'lucide-react';
 
 const ACTIVE_ASSIGNMENT_STATUSES = ['Invited', 'Accepted', 'PendingDecline', 'PendingExtension', 'Overdue'];
 
@@ -182,18 +182,11 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap mb-2">
               <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${statusColor(assignment.status)}`}>
-                {assignment.status === 'PendingDecline'
-                  ? 'Decline Requested'
-                  : assignment.status === 'PendingExtension'
-                    ? 'Extension Requested'
-                    : assignment.status}
+                {assignment.status === 'PendingExtension'
+                  ? 'Extension Requested'
+                  : assignment.status}
               </span>
               <span className="text-xs text-slate-500">Round {assignment.round.roundNumber}</span>
-              {assignment.pendingDeclineRequest && (
-                <span className="px-2.5 py-1 rounded-full text-xs font-medium border bg-amber-500/10 text-amber-400 border-amber-500/20">
-                  Decline Pending Approval
-                </span>
-              )}
               {assignment.pendingExtensionRequest && (
                 <span className="px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-500/10 text-blue-400 border-blue-500/20">
                   Extension Pending Approval
@@ -487,6 +480,7 @@ export default function MyReviewsPage() {
   const [assignments, setAssignments] = useState<MyAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (user.isFrozen) {
@@ -510,8 +504,18 @@ export default function MyReviewsPage() {
     load();
   }, [user.id, load]);
 
-  const active = assignments.filter(a => ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));
-  const past = assignments.filter(a => !ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));
+  const filteredAssignments = assignments.filter(a => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      a.paper.title.toLowerCase().includes(q) ||
+      (a.round.targetVenue && a.round.targetVenue.toLowerCase().includes(q)) ||
+      (a.paper.authors && a.paper.authors.some(author => author.name.toLowerCase().includes(q)))
+    );
+  });
+
+  const active = filteredAssignments.filter(a => ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));
+  const past = filteredAssignments.filter(a => !ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));
 
   return (
     <div className="max-w-3xl mx-auto py-6 space-y-8 animate-in fade-in duration-500 mb-20">
@@ -523,6 +527,17 @@ export default function MyReviewsPage() {
         <p className="text-slate-400 mt-2">Respond to invitations, submit reviews, and manage deadlines.</p>
       </div>
 
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+        <input
+          type="text"
+          placeholder="Search by paper title, venue, or author..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+        />
+      </div>
+
       {loading ? (
         <div className="flex items-center gap-3 text-slate-400">
           <div className="w-4 h-4 border-2 border-slate-400/30 border-t-slate-400 rounded-full animate-spin" />
@@ -530,13 +545,17 @@ export default function MyReviewsPage() {
         </div>
       ) : error ? (
         <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
-      ) : assignments.length === 0 ? (
+      ) : filteredAssignments.length === 0 ? (
         <div className="glass rounded-2xl border border-white/5 p-12 text-center">
           <CheckCircle className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-400 text-sm">No review assignments yet.</p>
-          <p className="text-slate-500 text-xs mt-2">
-            Invited papers will appear here after a coordinator assigns you to a review round.
+          <p className="text-slate-400 text-sm">
+            {searchQuery.trim() ? 'No assignments match your search.' : 'No review assignments yet.'}
           </p>
+          {!searchQuery.trim() && (
+            <p className="text-slate-500 text-xs mt-2">
+              Invited papers will appear here after a coordinator assigns you to a review round.
+            </p>
+          )}
         </div>
       ) : (
         <>
