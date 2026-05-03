@@ -404,6 +404,7 @@ export class RoundController {
         where: { id: id as string },
         relations: [
           'paper',
+          'paper.topics',
           'paper.authors',
           'paper.coordinators',
           'paper.labs',
@@ -428,7 +429,7 @@ export class RoundController {
       const authorIds = paper.authors?.map(a => a.id) || [];
 
       const candidates = await userRepo.find({
-        relations: ['labs']
+        relations: ['labs', 'interests']
       });
       const reviewerMinRoundCompleted = await RoundController.getReviewerMinRoundCompletedForPaper(paper.id);
 
@@ -487,6 +488,11 @@ export class RoundController {
           reasons.push("Warning: Previously accepted but did not submit");
         } else {
           reasons.push("Eligible Lab Member");
+        }
+
+        const sharedTopics = user.interests?.filter(ui => paper.topics?.some(pt => pt.id === ui.id)) || [];
+        if (sharedTopics.length > 0) {
+          reasons.push(`Topic Match: ${sharedTopics.map(t => t.name).join(', ')}`);
         }
 
         suggestions.push({

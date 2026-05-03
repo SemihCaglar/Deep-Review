@@ -26,10 +26,26 @@ export class TopicController {
     return res.status(200).json(lab.topics);
   }
 
-  static async getAllTopics(req: Request, res: Response) {
-    const topicRepo = AppDataSource.getRepository(Topic);
-    const topics = await topicRepo.find();
-    return res.status(200).json(topics);
+  static async getAllTopics(req: AuthenticatedRequest, res: Response) {
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: 'Authentication required' });
+
+    const userRepo = AppDataSource.getRepository(User);
+    const fullUser = await userRepo.findOne({
+      where: { id: user.id },
+      relations: ['labs', 'labs.topics'],
+    });
+
+    if (!fullUser) return res.status(404).json({ message: 'User not found' });
+
+    const topicMap = new Map<string, Topic>();
+    for (const lab of fullUser.labs || []) {
+      for (const topic of lab.topics || []) {
+        topicMap.set(topic.id, topic);
+      }
+    }
+
+    return res.status(200).json(Array.from(topicMap.values()));
   }
 
   static async addTopicToLab(req: AuthenticatedRequest, res: Response) {

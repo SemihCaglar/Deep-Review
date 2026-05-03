@@ -1190,7 +1190,7 @@ function RoundCard({
           {showAddPanel && (
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                {reassigningForId ? 'Select Replacement Reviewer' : 'Select reviewers to assign'}
+                Select reviewers to assign
               </p>
               {loadingSuggestions ? (
                 <div className="flex items-center gap-2 text-slate-400 text-sm py-2">
@@ -1225,7 +1225,7 @@ function RoundCard({
                             }`}
                         >
                           <input
-                            type={reassigningForId ? "radio" : "checkbox"}
+                            type="checkbox"
                             name="reviewerSelect"
                             checked={selectedIds.has(s.user.id)}
                             onChange={() => toggleSelect(s.user.id)}
@@ -1237,6 +1237,13 @@ function RoundCard({
                               {s.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
                             </div>
                             <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
+                            {s.reasons && s.reasons.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {s.reasons.map((reason, idx) => (
+                                  <span key={idx} className={`text-[10px] px-1.5 py-0.5 rounded ${reason.includes('Warning') ? 'bg-red-500/10 text-red-400 border border-red-500/20' : reason.includes('Topic Match') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-slate-500/10 text-slate-400 border border-white/10'}`}>{reason}</span>
+                                ))}
+                              </div>
+                            )}
                             {s.workload && (
                               <WorkloadBar
                                 workloadPct={s.workload.workloadPct}
@@ -1260,7 +1267,7 @@ function RoundCard({
                   className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                  {reassigningForId ? 'Reassign' : `Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ''}`}
+                  Assign {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
                 </button>
                 <button
                   onClick={async () => {
