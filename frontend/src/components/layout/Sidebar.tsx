@@ -15,7 +15,7 @@ import {
 } from '@/lib/api';
 
 export default function Sidebar() {
-    const { user, logout } = useUser();
+    const { user, logout, isLoggingOut } = useUser();
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const router = useRouter();
@@ -26,7 +26,7 @@ export default function Sidebar() {
 
     const handleLogout = () => {
         logout();
-        window.location.href = '/login';
+        router.replace('/login');
     };
 
     const getNavItems = () => {
@@ -216,6 +216,7 @@ export default function Sidebar() {
             <div className="px-4 mt-auto pt-4 border-t border-white/5">
                 <button
                     onClick={handleLogout}
+                    disabled={isLoggingOut}
                     className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 >
                     <LogOut className="w-5 h-5" />
