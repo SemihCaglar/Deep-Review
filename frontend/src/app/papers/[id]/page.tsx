@@ -991,7 +991,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 {topicsError && <p className="text-xs text-red-400">{topicsError}</p>}
                                 <div className="flex justify-end gap-2">
                                     <button
-                                        onClick={async () => { if (await confirmCancel()) { setLocalTopics(paper.topics?.map(t => t.id) || []); setTopicsError(''); setIsEditingTopics(false); } }}
+                                        onClick={() => { setLocalTopics(paper.topics?.map(t => t.id) || []); setTopicsError(''); setIsEditingTopics(false); }}
                                         className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
                                     >
                                         Cancel
@@ -1051,8 +1051,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 {linksError && <p className="text-xs text-red-400">{linksError}</p>}
                                 <div className="flex justify-end gap-2">
                                     <button
-                                        onClick={async () => {
-                                            if (!(await confirmCancel())) return;
+                                        onClick={() => {
                                             setLocalOverleafLink(paper.overleafLink || '');
                                             setLinksError('');
                                             setIsEditingLinks(false);
@@ -1362,7 +1361,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                 {abstractError && <p className="text-xs text-red-400">{abstractError}</p>}
                                 <div className="flex justify-end gap-2">
                                     <button
-                                        onClick={async () => { if (await confirmCancel()) { setLocalAbstract(paper.abstractText || ''); setAbstractError(''); setIsEditingAbstract(false); } }}
+                                        onClick={() => { setLocalAbstract(paper.abstractText || ''); setAbstractError(''); setIsEditingAbstract(false); }}
                                         className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors"
                                     >
                                         Cancel
@@ -1923,7 +1922,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
 
                                     {authorsError && <p className="text-xs text-red-400">{authorsError}</p>}
                                     <div className="flex gap-2 pt-2">
-                                        <button onClick={async () => { if (await confirmCancel()) { setLocalAuthors(orderedPaperAuthorIds); setIsEditingAuthors(false); setAuthorsError(''); } }} className="flex-1 py-2 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
+                                        <button onClick={() => { setLocalAuthors(orderedPaperAuthorIds); setIsEditingAuthors(false); setAuthorsError(''); }} className="flex-1 py-2 text-xs text-slate-400 hover:text-white transition-colors">Cancel</button>
                                         <button onClick={handleSaveAuthors} className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors">Save</button>
                                     </div>
                                 </div>
