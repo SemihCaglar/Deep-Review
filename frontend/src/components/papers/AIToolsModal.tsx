@@ -1,19 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import { 
   Cpu, Loader2, Download, ChevronDown, CheckCircle, 
   XCircle, AlertCircle, Search, ExternalLink, Edit2, X 
 } from 'lucide-react';
-import { 
-  startAIReviewRequest, 
-  runComplianceCheckRequest, 
-  runReferenceVerificationRequest, 
-  getEmpiricalChecklistAnswersRequest, 
-  confirmChecklistSelectionRequest, 
+import {
+  startAIReviewRequest,
+  runComplianceCheckRequest,
+  runReferenceVerificationRequest,
+  getEmpiricalChecklistAnswersRequest,
+  confirmChecklistSelectionRequest,
   runEmpiricalChecklistAnsweringRequest,
+  getPCRelatedWorkRecommendations,
+  getPaperByIdRequest,
   RoundWithAssignments,
   AuthorRound,
-  ReferenceVerificationReport
+  ReferenceVerificationReport,
+  PCRelatedWorkResponse
 } from '@/lib/api';
 
 interface AIToolsModalProps {
@@ -60,6 +64,15 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
   const [expandedChecklistStandards, setExpandedChecklistStandards] = useState<Set<string>>(new Set());
   const [checklistAnswerFilter, setChecklistAnswerFilter] = useState<'no' | 'unknown' | 'yes' | null>(null);
 
+  // --- PC Related Work State ---
+  const [venueUrl, setVenueUrl] = useState('');
+  const [committeeMembers, setCommitteeMembers] = useState('');
+  const [runningPCRelated, setRunningPCRelated] = useState(false);
+  const [pcRelatedError, setPcRelatedError] = useState('');
+  const [localPCRelatedResult, setLocalPCRelatedResult] = useState<PCRelatedWorkResponse | null>(null);
+  const [pcRelatedExpanded, setPcRelatedExpanded] = useState(false);
+  const [paperData, setPaperData] = useState<{ title: string; abstractText: string | null } | null>(null);
+
   const STANDARDS_BY_CATEGORY = {
     General: ['Engineering Research', 'Multimethodology or mixed methods'],
     Qualitative: ['Action Research', 'Case Study', 'Grounded Theory', 'Qualitative Survey'],
@@ -80,6 +93,31 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     { at: 32, msg: 'Downloading annotated PDF…' },
     { at: 42, msg: 'Almost done…' },
   ];
+
+  useEffect(() => {
+    if (!isOpen || !round?.id) return;
+    setLocalAiResult(null);
+    setLocalComplianceResult(null);
+    setLocalRefVerifResult(null);
+    setChecklistAnswerData(null);
+    setChecklistAnswerError('');
+    setChecklistAnswerFilter(null);
+    setFinalizedChecklist(null);
+    setConfirmedStandards(new Set());
+    setExpandedChecklistStandards(new Set());
+    setVenueUrl(round.targetVenueUrl || '');
+    setCommitteeMembers('');
+    setPcRelatedError('');
+    setLocalPCRelatedResult(null);
+  }, [isOpen, round?.id, round?.targetVenueUrl]);
+
+  // Fetch paper data (title + abstract) for PC Related Work feature
+  useEffect(() => {
+    if (!isOpen || !paperId) return;
+    getPaperByIdRequest(paperId)
+      .then(paper => setPaperData({ title: paper.title, abstractText: paper.abstractText ?? null }))
+      .catch(() => {}); // Silent fail, paper data is optional
+  }, [isOpen, paperId]);
 
   const handleAIFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -165,6 +203,88 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     }
   };
 
+  const handlePCRelatedWork = async () => {
+    if (!venueUrl.trim()) {
+      setPcRelatedError('Venue URL is required');
+      return;
+    }
+
+    if (!/^https?:\/\/.+/i.test(venueUrl.trim())) {
+      setPcRelatedError('Please enter a valid HTTP/HTTPS URL');
+      return;
+    }
+
+    if (!paperData?.title) {
+      setPcRelatedError('Paper title is required');
+      return;
+    }
+
+    setRunningPCRelated(true);
+    setPcRelatedError('');
+
+    try {
+      console.log('[Frontend] Starting PC Related Work recommendation...');
+      console.log('[Frontend] Venue:', venueUrl);
+      console.log('[Frontend] Paper:', paperData.title);
+
+      const startTime = Date.now();
+      const res = await getPCRelatedWorkRecommendations(
+        venueUrl.trim(),
+        paperData.title,
+        paperData.abstractText || '',
+        round.id,
+        committeeMembers.trim() || undefined
+      ) as PCRelatedWorkResponse;
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
+      console.log('[Frontend] Completed in', duration, 's');
+      console.log('[Frontend] Results:', {
+        pcMembers: res.summary.pcMembersExtracted,
+        matched: res.summary.pcMembersMatchedInOpenAlex,
+        candidates: res.summary.candidatePapersChecked,
+        recommendations: res.summary.recommendationsReturned,
+      });
+
+      setLocalPCRelatedResult(res);
+      // Auto-expand when results arrive
+      if (res.recommendations.length > 0) {
+        setPcRelatedExpanded(true);
+        console.log('[Frontend] Auto-expanded results card');
+      }
+      onRefresh();
+    } catch (err: any) {
+      console.error('[Frontend] Error:', err);
+      setPcRelatedError(err.message || 'PC Related Work recommendation failed');
+    } finally {
+      setRunningPCRelated(false);
+    }
+  };
+
+  const handleDownloadPCRelatedCSV = async () => {
+    if (!venueUrl.trim() || !paperData?.title) return;
+
+    try {
+      const blob = await getPCRelatedWorkRecommendations(
+        venueUrl.trim(),
+        paperData.title,
+        paperData.abstractText || '',
+        round.id,
+        committeeMembers.trim() || undefined,
+        'csv'
+      ) as Blob;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'pc-related-work.csv';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      setPcRelatedError(err.message || 'Failed to download CSV');
+    }
+  };
+
   useEffect(() => {
     if (!isOpen || !round) return;
     if (round.confirmedChecklistJson?.selectedStandards) {
@@ -183,6 +303,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
 
   useEffect(() => {
     if (isOpen && round?.confirmedChecklistJson?.selectedStandards) {
+      setChecklistAnswerData(null);
       getEmpiricalChecklistAnswersRequest(round.id)
         .then(res => { if (res?.data) setChecklistAnswerData(res.data); })
         .catch(() => {});
@@ -201,7 +322,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     };
   }, [isOpen]);
 
-  if (!isOpen || !round) return null;
+  if (!isOpen || !round || typeof document === 'undefined') return null;
 
   const isLatestRound = round.status !== 'Draft'; // Assume tools can run if it's not a draft, or could rely on another prop if needed.
   
@@ -210,6 +331,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
 
   const comp = localComplianceResult || round.complianceReport;
   const refReport = localRefVerifResult ?? round.referenceVerificationReport;
+  const pcRelated = localPCRelatedResult ?? round.pcRelatedWorkRecommendations;
   
   const checklist = localAiResult?.checklistJson || round.checklistJson;
   const aiSelectedMap = new Map<string, { label: string; confidence: string; evidence: string }>(
@@ -239,7 +361,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -499,6 +621,165 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
               )}
             </div>
           )}
+
+          {/* PC Related Work Recommendation */}
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 overflow-hidden">
+            <button
+              onClick={() => setPcRelatedExpanded(v => !v)}
+              className="w-full flex items-center justify-between p-4 hover:bg-cyan-500/5 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <ChevronDown className={`w-4 h-4 text-cyan-500/60 transition-transform ${pcRelatedExpanded ? '' : '-rotate-90'}`} />
+                <p className="text-sm font-bold text-cyan-400 uppercase tracking-wider">PC Related Work</p>
+              </div>
+              {pcRelated && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500">{pcRelated.summary.recommendationsReturned} recommendations</span>
+                </div>
+              )}
+            </button>
+
+            {pcRelatedExpanded && (
+              <div className="p-4 pt-2 space-y-4 border-t border-cyan-500/10 bg-slate-900/30">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-slate-300">Venue URL</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={venueUrl}
+                      onChange={(e) => setVenueUrl(e.target.value)}
+                      placeholder="e.g., https://ease.keele.ac.uk"
+                      className="flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20"
+                    />
+                    <button
+                      onClick={handlePCRelatedWork}
+                      disabled={runningPCRelated}
+                      className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+                    >
+                      {runningPCRelated ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Running…
+                        </>
+                      ) : (
+                        <>
+                          <Search className="w-4 h-4" />
+                          Find Related Work
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {pcRelatedError && <p className="text-xs text-red-400">{pcRelatedError}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-slate-300">PC Committee Members (optional)</label>
+                    <span className="text-xs text-slate-500">one per line or comma-separated</span>
+                  </div>
+                  <textarea
+                    value={committeeMembers}
+                    onChange={(e) => setCommitteeMembers(e.target.value)}
+                    placeholder="e.g., John Smith&#10;Jane Doe&#10;Robert Johnson"
+                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20 resize-none"
+                    rows={3}
+                  />
+                  <p className="text-xs text-slate-400">Leave empty to auto-scrape from venue website</p>
+                </div>
+
+                {pcRelated && (
+                  <div className="space-y-3">
+                    {/* Summary Stats */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                        <p className="text-xs text-slate-400">PC Members</p>
+                        <p className="text-lg font-bold text-slate-100">{pcRelated.summary.pcMembersExtracted}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                        <p className="text-xs text-slate-400">Matched</p>
+                        <p className="text-lg font-bold text-slate-100">{pcRelated.summary.pcMembersMatchedInOpenAlex}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                        <p className="text-xs text-slate-400">Candidates</p>
+                        <p className="text-lg font-bold text-slate-100">{pcRelated.summary.candidatePapersChecked}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                        <p className="text-xs text-slate-400">Recommendations</p>
+                        <p className="text-lg font-bold text-cyan-300">{pcRelated.summary.recommendationsReturned}</p>
+                      </div>
+                    </div>
+
+                    {/* Issues */}
+                    {pcRelated.issues.length > 0 && (
+                      <div className="p-3 rounded-lg bg-slate-800/60 border border-slate-700/50 space-y-1">
+                        {pcRelated.issues.map((issue: string, i: number) => (
+                          <p key={i} className="text-xs text-cyan-300">{issue}</p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Recommendations Table */}
+                    {pcRelated.recommendations.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-medium text-slate-400">Recommendations</p>
+                          <button
+                            onClick={handleDownloadPCRelatedCSV}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 font-medium transition-colors flex items-center gap-1"
+                          >
+                            <Download className="w-3.5 h-3.5" /> CSV
+                          </button>
+                        </div>
+                        <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-2 pr-2">
+                          {pcRelated.recommendations.map((rec: any, idx: number) => (
+                            <div key={idx} className="text-xs p-3 rounded-lg bg-slate-800/40 border border-slate-700/30 space-y-2">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-slate-100">{rec.paperTitle}</p>
+                                  <p className="text-xs text-slate-400 mt-1">{rec.pcMemberName}</p>
+                                </div>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0 uppercase tracking-wide ${
+                                  rec.confidence === 'high' ? 'bg-emerald-500/20 text-emerald-300'
+                                  : rec.confidence === 'medium' ? 'bg-amber-500/20 text-amber-300'
+                                  : 'bg-orange-500/20 text-orange-300'
+                                }`}>
+                                  {rec.confidence}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {rec.year && <span className="text-xs px-2 py-1 rounded bg-slate-700/50 text-slate-300">{rec.year}</span>}
+                                {rec.venue && <span className="text-xs px-2 py-1 rounded bg-slate-700/50 text-slate-300">{rec.venue}</span>}
+                                {rec.relationshipType && (
+                                  <span className="text-xs px-2 py-1 rounded bg-slate-700/50 text-slate-300">
+                                    {rec.relationshipType.replace(/_/g, ' ')}
+                                  </span>
+                                )}
+                                {rec.doi && (
+                                  <a
+                                    href={`https://doi.org/${rec.doi}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs px-2 py-1 rounded bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 flex items-center gap-1"
+                                  >
+                                    <ExternalLink className="w-2.5 h-2.5" /> DOI
+                                  </a>
+                                )}
+                              </div>
+                              {rec.recommendationReason && (
+                                <p className="text-xs text-slate-400 italic mt-2">{rec.recommendationReason}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 p-3 bg-slate-800/40 rounded-lg">No recommendations found</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Empirical Standards Checklist */}
           {checklist?.selectedStandards?.length > 0 && (
@@ -779,6 +1060,7 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
           />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

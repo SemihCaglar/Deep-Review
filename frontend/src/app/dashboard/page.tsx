@@ -28,6 +28,7 @@ import {
   getOverallAnalyticsRequest,
   getPendingCollaborationInvitationsRequest,
   type OverallAnalyticsResponse,
+  type AnalyticsPeriod,
   type MyAssignment,
   type ReviewerRanking,
   type PendingCollaborationInvitation,
@@ -82,9 +83,14 @@ type SortKey =
   | 'avgQualityScore'
   | 'avgQuantityScore'
   | 'avgTimeScore'
+  | 'totalAssigned'
   | 'totalCompleted'
   | 'totalIncomplete'
-  | 'totalDeclined';
+  | 'totalDeclined'
+  | 'acceptanceRate'
+  | 'rejectionRate'
+  | 'onTimeRate'
+  | 'delayedRate';
 
 function formatDate(value: string | null) {
   if (!value) return '—';
@@ -93,6 +99,10 @@ function formatDate(value: string | null) {
 
 function formatScore(value: number | null): string {
   return value !== null ? value.toFixed(2) : '–';
+}
+
+function formatPercent(value: number | null): string {
+  return value !== null ? `${value.toFixed(0)}%` : '-';
 }
 
 function SortButton({
@@ -134,9 +144,23 @@ const SCORE_COLUMNS: { label: string; key: SortKey; field: keyof ReviewerRanking
 ];
 
 const COUNT_COLUMNS: { label: string; key: SortKey; field: keyof ReviewerRanking; color: string }[] = [
+  { label: 'Assigned', key: 'totalAssigned', field: 'totalAssigned', color: 'text-blue-400' },
   { label: 'Completed', key: 'totalCompleted',  field: 'totalCompleted',  color: 'text-emerald-400' },
   { label: 'Incomplete', key: 'totalIncomplete', field: 'totalIncomplete', color: 'text-amber-400' },
   { label: 'Declined',  key: 'totalDeclined',   field: 'totalDeclined',   color: 'text-red-400' },
+];
+
+const RATE_COLUMNS: { label: string; key: SortKey; field: keyof ReviewerRanking; color: string }[] = [
+  { label: 'Accept %', key: 'acceptanceRate', field: 'acceptanceRate', color: 'text-emerald-400' },
+  { label: 'Reject %', key: 'rejectionRate', field: 'rejectionRate', color: 'text-red-400' },
+  { label: 'On-time %', key: 'onTimeRate', field: 'onTimeRate', color: 'text-sky-400' },
+  { label: 'Delayed %', key: 'delayedRate', field: 'delayedRate', color: 'text-amber-400' },
+];
+
+const ANALYTICS_PERIODS: { label: string; value: AnalyticsPeriod }[] = [
+  { label: 'Monthly', value: 'monthly' },
+  { label: 'Yearly', value: 'yearly' },
+  { label: 'Overall', value: 'overall' },
 ];
 
 const ACTIVE_REVIEW_STATUSES = ['Invited', 'Accepted', 'PendingDecline', 'PendingExtension', 'Overdue'];
@@ -193,6 +217,7 @@ export default function DashboardPage() {
   const [analytics, setAnalytics] = React.useState<OverallAnalyticsResponse | null>(null);
   const [isLoadingAnalytics, setIsLoadingAnalytics] = React.useState(false);
   const [analyticsError, setAnalyticsError] = React.useState('');
+  const [analyticsPeriod, setAnalyticsPeriod] = React.useState<AnalyticsPeriod>('monthly');
   const [sortKey, setSortKey] = React.useState<SortKey>('aggregateScore');
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc');
   const [leaderboardSearch, setLeaderboardSearch] = React.useState('');
@@ -302,14 +327,14 @@ export default function DashboardPage() {
     setIsLoadingAnalytics(true);
     setAnalyticsError('');
     try {
-      const data = await getOverallAnalyticsRequest();
+      const data = await getOverallAnalyticsRequest(analyticsPeriod);
       setAnalytics(data);
     } catch (caughtError) {
       setAnalyticsError(caughtError instanceof ApiError ? caughtError.message : 'Failed to load leaderboard.');
     } finally {
       setIsLoadingAnalytics(false);
     }
-  }, [user.isCoordinator]);
+  }, [user.isCoordinator, analyticsPeriod]);
 
   const loadRequestDecisions = React.useCallback(async () => {
     if (user.isCoordinator || user.isAdmin || user.isFrozen) return;
@@ -412,10 +437,7 @@ export default function DashboardPage() {
     const query = leaderboardSearch.trim().toLocaleLowerCase();
     if (!query) return sorted;
 
-    return [
-      ...sorted.filter(reviewer => reviewer.name.toLocaleLowerCase().includes(query)),
-      ...sorted.filter(reviewer => !reviewer.name.toLocaleLowerCase().includes(query)),
-    ];
+    return sorted.filter(reviewer => reviewer.name.toLocaleLowerCase().includes(query));
   }, [analytics, sortKey, sortDir, leaderboardSearch]);
 
   const toggleDecisionSelection = (id: string) => {
@@ -460,6 +482,9 @@ export default function DashboardPage() {
     ? [
         { label: 'Pending Approvals', value: isLoadingPending ? '...' : pendingCount, icon: UserCheck, color: 'text-blue-400', bg: 'bg-blue-500/10', href: '/pending-approvals' },
         { label: 'Round Requests', value: roundStartRequests.length, icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10', href: '#round-requests' },
+        { label: 'Assigned Reviews', value: isLoadingAnalytics ? '...' : analytics?.summary.totalAssigned ?? 0, icon: FileText, color: 'text-sky-400', bg: 'bg-sky-500/10' },
+        { label: 'Completed Reviews', value: isLoadingAnalytics ? '...' : analytics?.summary.totalCompleted ?? 0, icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+        { label: 'Avg Reviewer Score', value: isLoadingAnalytics ? '...' : formatScore(analytics?.summary.avgReviewerScore ?? null), icon: BarChart2, color: 'text-purple-400', bg: 'bg-purple-500/10' },
         { label: 'Collaboration Invitations', value: collabInvitationCount, icon: FileText, color: 'text-indigo-400', bg: 'bg-indigo-500/10', href: '/pending-approvals' },
       ]
     : user.isFrozen
@@ -524,10 +549,32 @@ export default function DashboardPage() {
           
           {/* Leaderboard */}
           <section className="space-y-4">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <BarChart2 className="w-5 h-5 text-blue-400" />
-              Reviewer Leaderboard
-            </h2>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <BarChart2 className="w-5 h-5 text-blue-400" />
+                  Reviewer Metrics
+                </h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Performance, assignment volume, acceptance/rejection, and timeliness are tracked per reviewer for the selected period.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {ANALYTICS_PERIODS.map(period => (
+                  <button
+                    key={period.value}
+                    onClick={() => setAnalyticsPeriod(period.value)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+                      analyticsPeriod === period.value
+                        ? 'border-blue-500/40 bg-blue-500/15 text-blue-300'
+                        : 'border-white/10 bg-white/[0.03] text-slate-400 hover:text-slate-200 hover:bg-white/10'
+                    }`}
+                  >
+                    {period.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
               <input
@@ -572,6 +619,11 @@ export default function DashboardPage() {
                               <SortButton label={col.label} sortKey={col.key} currentKey={sortKey} direction={sortDir} onSort={handleSort} />
                             </th>
                           ))}
+                          {RATE_COLUMNS.map(col => (
+                            <th key={col.key} className={`px-4 py-3 transition-colors ${sortKey === col.key ? 'bg-blue-500/8' : ''}`}>
+                              <SortButton label={col.label} sortKey={col.key} currentKey={sortKey} direction={sortDir} onSort={handleSort} />
+                            </th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
@@ -594,6 +646,11 @@ export default function DashboardPage() {
                               {COUNT_COLUMNS.map(col => (
                                 <td key={col.key} className={`px-4 py-3 text-right tabular-nums font-medium transition-colors ${sortKey === col.key ? 'bg-blue-500/8' : ''} ${col.color}`}>
                                   {reviewer[col.field] as number}
+                                </td>
+                              ))}
+                              {RATE_COLUMNS.map(col => (
+                                <td key={col.key} className={`px-4 py-3 text-right tabular-nums font-medium transition-colors ${sortKey === col.key ? 'bg-blue-500/8' : ''} ${col.color}`}>
+                                  {formatPercent(reviewer[col.field] as number | null)}
                                 </td>
                               ))}
                             </tr>

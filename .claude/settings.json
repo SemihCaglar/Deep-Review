@@ -13,7 +13,20 @@
       "Bash(git push *)",
       "Bash(git fetch *)",
       "Bash(npm run *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(curl -s \"https://www2.sigsoft.org/EmpiricalStandards/form_generator/result.html?standard=Engineering+Research&standard=Benchmarking&role=author\")",
+      "Bash(curl -s \"https://www2.sigsoft.org/EmpiricalStandards/form_generator/js/ReadStandards.js\")",
+      "Bash(curl -s \"https://www2.sigsoft.org/EmpiricalStandards/form_generator/js/ReadEmpiricalStandards.js\")",
+      "Bash(curl -s \"https://www2.sigsoft.org/EmpiricalStandards/docs/standards/EngineeringResearch.md\")",
+      "Bash(curl -s \"https://www2.sigsoft.org/EmpiricalStandards/docs/standards/Benchmarking.md\")",
+      "Bash(curl -s \"https://www2.sigsoft.org/EmpiricalStandards/form_generator/js/RequirementsChecklist.js\")",
+      "Bash(curl -s \"https://www2.sigsoft.org/EmpiricalStandards/form_generator/\")",
+      "Bash(curl -s \"https://www2.sigsoft.org/EmpiricalStandards/form_generator/js/PopulateChecklist.js\")",
+      "Bash(git rm *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git pull *)",
+      "Bash(git merge *)",
+      "Bash(git clone *)"
     ]
   }
 }

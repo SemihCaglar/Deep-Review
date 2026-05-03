@@ -229,7 +229,6 @@ export class RoundController {
           AssignmentStatus.Accepted,
           AssignmentStatus.PendingExtension,
           AssignmentStatus.PendingDecline,
-          AssignmentStatus.Overdue,
         ];
         const assignments = await assignmentRepo.find({
           where: { round: { id: round.id } },
@@ -677,7 +676,16 @@ export class RoundController {
 
       const rounds = await roundRepo.find({
         where: { paper: { id: paperId } },
-        relations: ['proposedReviewers', 'checklistItems', 'aiReviewReports', 'aiReviewReports.requestedBy'],
+        relations: [
+          'proposedReviewers',
+          'checklistItems',
+          'aiReviewReports',
+          'aiReviewReports.requestedBy',
+          'assignments',
+          'assignments.reviewer',
+          'assignments.reviewSummary',
+          'assignments.rating',
+        ],
         order: { roundNumber: 'DESC' },
       });
 
@@ -701,6 +709,7 @@ export class RoundController {
         aiReviewReport: r.aiReviewReport,
         complianceReport: r.complianceReport ?? null,
         referenceVerificationReport: r.referenceVerificationReport ?? null,
+        pcRelatedWorkRecommendations: r.pcRelatedWorkRecommendations ?? null,
         annotatedPdfUrl: r.annotatedPdfUrl,
         checklistJson: r.checklistJson ?? null,
         checklistUrl: r.checklistUrl ?? null,
@@ -713,7 +722,19 @@ export class RoundController {
           aiReviewReports: (r.aiReviewReports ?? [])
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
-        }
+        },
+        assignments: (r.assignments ?? []).map(a => ({
+          id: a.id,
+          status: a.status,
+          deadline: a.deadline,
+          invitationSent: a.invitationSent,
+          reviewer: { id: a.reviewer.id, name: a.reviewer.name, email: a.reviewer.email },
+          hasPreviouslyCompletedReview: submittedReviewerIds.has(a.reviewer.id),
+          pendingDeclineRequest: null,
+          pendingExtensionRequest: null,
+          reviewSummary: a.reviewSummary ? { text: a.reviewSummary.text, submittedAt: a.reviewSummary.submittedAt } : null,
+          hasRating: !!a.rating,
+        })),
       })));
     } catch (err) {
       console.error(err);
@@ -779,6 +800,7 @@ export class RoundController {
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
         complianceReport: round.complianceReport ?? null,
         referenceVerificationReport: round.referenceVerificationReport ?? null,
+        pcRelatedWorkRecommendations: round.pcRelatedWorkRecommendations ?? null,
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
@@ -1587,9 +1609,9 @@ export class RoundController {
       const standards: string[] = confirmed.selectedStandards;
       const role = 'author';
 
-      console.log(`[RoundController] Running empirical checklist answering for paper ${paperId}, standards: ${standards.join(', ')}`);
+      console.log(`[RoundController] Running empirical checklist answering for paper ${paperId}, round ${round.id}, standards: ${standards.join(', ')}`);
 
-      const result = await runChecklistAnswers(paperId, standards, role, pdfBuffer);
+      const result = await runChecklistAnswers(paperId, round.id, standards, role, pdfBuffer);
 
       return res.status(200).json({ success: true, data: result });
     } catch (err: any) {
@@ -1615,7 +1637,7 @@ export class RoundController {
         return res.status(200).json({ success: true, data: null });
       }
 
-      const result = await getStoredChecklistAnswers(round.paper.id, confirmed.selectedStandards, 'author');
+      const result = await getStoredChecklistAnswers(round.paper.id, round.id, confirmed.selectedStandards, 'author');
 
       return res.status(200).json({ success: true, data: result });
     } catch (err: any) {
