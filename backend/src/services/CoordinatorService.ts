@@ -7,7 +7,8 @@ import { Lab } from '../entities/Lab';
 import { ReviewerResponse, ReviewerResponseStatus } from '../entities/ReviewerResponse';
 import { User, UserRole } from '../entities/User';
 import { RoundStatus, VenueCategory } from '../entities/Round';
-import { sendEmail } from './emailService';
+import { sendTemplatedEmail } from './emailService';
+import { TemplateName } from '../entities/Template';
 import { RoundService } from './RoundService';
 
 export class CoordinatorServiceError extends Error {
@@ -118,17 +119,13 @@ export class CoordinatorService {
       const paperTitle = assignWithReviewer.round.paper.title;
       const roundNumber = assignWithReviewer.round.roundNumber;
       if (decision === 'Approve') {
-        sendEmail(
-          reviewer,
-          `Your decline request for "${paperTitle}" has been approved`,
-          `Hello ${reviewer.name},\n\nYour decline request for paper "${paperTitle}" (Round ${roundNumber}) has been approved. You are no longer assigned to review this paper.`,
-        ).catch(console.error);
+        sendTemplatedEmail(reviewer, TemplateName.DECLINE_APPROVED, {
+          userName: reviewer.name,
+        }).catch(console.error);
       } else {
-        sendEmail(
-          reviewer,
-          `Your decline request for "${paperTitle}" has been rejected`,
-          `Hello ${reviewer.name},\n\nYour decline request for paper "${paperTitle}" (Round ${roundNumber}) has been rejected. Your assignment remains active — please continue with the review.`,
-        ).catch(console.error);
+        sendTemplatedEmail(reviewer, TemplateName.DECLINE_REJECTED, {
+          userName: reviewer.name,
+        }).catch(console.error);
       }
     }
 

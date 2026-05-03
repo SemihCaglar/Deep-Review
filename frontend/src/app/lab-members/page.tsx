@@ -15,6 +15,8 @@ export default function LabMembersPage() {
   const [actionError, setActionError] = React.useState('');
   const [pendingId, setPendingId] = React.useState<string | null>(null);
 
+  if (!user.id) return null;
+
   const loadMembers = React.useCallback(() => {
     if (!user.id) return;
     setIsLoading(true);

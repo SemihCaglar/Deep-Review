@@ -1,4 +1,4 @@
-import { PdfAgentService } from "./services/PdfAgentService";
+import { PdfAgentService } from "../../backend/src/ai_content/services/PdfAgentService";
 import path from "node:path";
 import fs from "node:fs";
 

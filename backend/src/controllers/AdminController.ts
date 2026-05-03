@@ -8,14 +8,14 @@ import { Admin } from '../entities/GlobalAdmin';
 import { Lab } from '../entities/Lab';
 import { AuditLog, AuditAction } from '../entities/AuditLog';
 import { SystemPolicy } from '../entities/SystemPolicy';
-import { Template } from '../entities/Template';
+import { Template, TemplateName } from '../entities/Template';
 import { LabCollaborationInvitation } from '../entities/LabCollaborationInvitation';
 import { ReviewerResponse } from '../entities/ReviewerResponse';
 import { EmailNotification } from '../entities/EmailNotification';
 import { hashPassword } from '../services/accountSecurity';
 import type { AuthenticatedRequest } from '../types/auth';
 import * as crypto from 'crypto';
-import { sendEmail } from '../services/emailService';
+import { sendTemplatedEmail } from '../services/emailService';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -181,24 +181,13 @@ export class AdminController {
 
     await AdminController.logAction(req, AuditAction.UPDATE_POLICY, 'Lab', lab.id, `Created lab: ${name} with coordinator ${coordinator.email}`);
 
-    const subject = 'Welcome to Deep Review - Coordinator Account Created';
     const loginUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const body = `Hello ${coordinator.name},
-
-An admin has created a Coordinator account and a Lab for you on the Deep Review platform.
-
-Your login credentials:
-Email: ${coordinator.email}
-Password: ${password}
-
-Please log in at: ${loginUrl}/login
-
-If you are not involved with Deep Review, please ignore this email.
-
-Best regards,
-Deep Review Admin Team`;
-
-    await sendEmail(coordinator, subject, body);
+    await sendTemplatedEmail(coordinator, TemplateName.COORDINATOR_CREATED, {
+      userName: coordinator.name,
+      email: coordinator.email,
+      password,
+      loginUrl,
+    });
 
     return res.status(201).json(lab);
   }

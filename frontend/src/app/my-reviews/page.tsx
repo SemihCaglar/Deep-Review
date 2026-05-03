@@ -482,6 +482,8 @@ export default function MyReviewsPage() {
     }
   }, [user.isFrozen, router]);
 
+  if (!user.id) return null;
+
   const load = useCallback(() => {
     setLoading(true);
     setError('');
@@ -491,7 +493,10 @@ export default function MyReviewsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!user.id) return;
+    load();
+  }, [user.id, load]);
 
   const active = assignments.filter(a => ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));
   const past = assignments.filter(a => !ACTIVE_ASSIGNMENT_STATUSES.includes(a.status));

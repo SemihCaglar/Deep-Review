@@ -1,4 +1,4 @@
-import { SubmissionRuleExtractionService } from './src/ai_content/services/SubmissionRuleExtractionService';
+import { SubmissionRuleExtractionService } from '../../backend/src/ai_content/services/SubmissionRuleExtractionService';
 
 async function testExtractEaseRules() {
   const url = 'https://conf.researchr.org/track/ease-2026/ease-2026-research-papers';

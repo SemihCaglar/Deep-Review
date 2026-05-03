@@ -9,7 +9,8 @@ import { ExtensionStatus } from '../entities/Extension';
 import { SubmissionRuleSet } from '../entities/SubmissionRuleSet';
 import { AIReviewReport } from '../entities/AIReviewReport';
 import { RoundService, RoundServiceError } from '../services/RoundService';
-import { sendEmail } from '../services/emailService';
+import { sendTemplatedEmail } from '../services/emailService';
+import { TemplateName } from '../entities/Template';
 import { ComplianceCheckAgentService } from '../ai_content/services/ComplianceCheckAgentService';
 import { runChecklistAnswers, getStoredChecklistAnswers } from '../ai_content/services/EmpiricalChecklistOrchestrationService';
 import type { AuthenticatedRequest } from '../types/auth';
@@ -240,11 +241,12 @@ export class RoundController {
 
           const formattedDeadline = newDeadline.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
           await Promise.allSettled(toUpdate.map(a =>
-            sendEmail(
-              a.reviewer,
-              `Review deadline updated — ${round.paper.title}`,
-              `Hello ${a.reviewer.name},\n\nThe review deadline for the paper "${round.paper.title}" (${round.targetVenue}) has been updated.\n\nNew deadline: ${formattedDeadline}\n\nPlease log in to check your assignment.`,
-            )
+            sendTemplatedEmail(a.reviewer, TemplateName.REVIEW_DEADLINE_UPDATED, {
+              userName: a.reviewer.name,
+              paperTitle: round.paper.title,
+              venue: round.targetVenue,
+              newDeadline: formattedDeadline,
+            })
           ));
         }
       }
@@ -337,11 +339,12 @@ export class RoundController {
         ].filter((u, idx, arr) => u.id !== user.id && arr.findIndex(x => x.id === u.id) === idx);
 
         await Promise.allSettled(recipients.map(recipient =>
-          sendEmail(
-            recipient,
-            `Submission deadline updated — ${round.paper.title}`,
-            `Hello ${recipient.name},\n\nThe conference submission deadline for the paper "${round.paper.title}" (${round.targetVenue}) has been updated.\n\nNew submission deadline: ${formattedDeadline}\n\nPlease log in to review the updated timeline.`,
-          )
+          sendTemplatedEmail(recipient, TemplateName.SUBMISSION_DEADLINE_UPDATED, {
+            userName: recipient.name,
+            paperTitle: round.paper.title,
+            venue: round.targetVenue,
+            newDeadline: formattedDeadline,
+          })
         ));
       }
 

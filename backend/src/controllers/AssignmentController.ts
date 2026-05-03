@@ -7,7 +7,8 @@ import { Extension, ExtensionStatus } from '../entities/Extension';
 import { Round, RoundStatus } from '../entities/Round';
 import { Paper, PaperStatus } from '../entities/Paper';
 import { UserRole } from '../entities/User';
-import { sendEmail } from '../services/emailService';
+import { sendTemplatedEmail } from '../services/emailService';
+import { TemplateName } from '../entities/Template';
 import { CoordinatorService, CoordinatorServiceError } from '../services/CoordinatorService';
 import { RoundService } from '../services/RoundService';
 import type { AuthenticatedRequest } from '../types/auth';
@@ -133,15 +134,16 @@ export class AssignmentController {
       const assignRepo = AppDataSource.getRepository(Assignment);
       const pendingInvitations = await assignRepo.find({
         where: { round: { id: roundId }, status: AssignmentStatus.Invited, invitationSent: false },
-        relations: ['reviewer'],
+        relations: ['reviewer', 'round', 'round.paper'],
       });
 
       for (const a of pendingInvitations) {
-        await sendEmail(
-          a.reviewer,
-          'You have been invited to review a paper',
-          `Hello ${a.reviewer.name},\n\nYou have been invited to review a paper. Please log in to accept or decline.\n\nDeadline: ${a.deadline?.toISOString() ?? 'TBD'}`
-        );
+        await sendTemplatedEmail(a.reviewer, TemplateName.REVIEW_INVITATION, {
+          userName: a.reviewer.name,
+          paperTitle: a.round?.paper?.title ?? '',
+          roundNumber: String(a.round?.roundNumber ?? ''),
+          deadline: a.deadline?.toISOString().split('T')[0] ?? 'TBD',
+        });
         a.invitationSent = true;
       }
 
@@ -349,11 +351,12 @@ export class AssignmentController {
 
       // Send the invite email immediately (reassign = cancel + re-invite atomically)
       if (newAssignment.reviewer) {
-        await sendEmail(
-          newAssignment.reviewer,
-          'You have been invited to review a paper',
-          `Hello ${newAssignment.reviewer.name},\n\nYou have been invited to review a paper. Please log in to accept or decline.\n\nDeadline: ${newAssignment.deadline?.toISOString() ?? 'TBD'}`,
-        );
+        await sendTemplatedEmail(newAssignment.reviewer, TemplateName.REVIEW_INVITATION, {
+          userName: newAssignment.reviewer.name,
+          paperTitle: (newAssignment as any).round?.paper?.title ?? '',
+          roundNumber: String((newAssignment as any).round?.roundNumber ?? ''),
+          deadline: newAssignment.deadline?.toISOString().split('T')[0] ?? 'TBD',
+        });
         const assignRepo = AppDataSource.getRepository(Assignment);
         await assignRepo.update(newAssignment.id, { invitationSent: true });
         newAssignment.invitationSent = true;
@@ -408,11 +411,12 @@ export class AssignmentController {
         const deadline = assignment.deadline?.toISOString().split('T')[0] ?? 'N/A';
 
         try {
-          await sendEmail(
-            assignment.reviewer,
-            `Reminder: Review pending for "${paperTitle}"`,
-            `Hello ${assignment.reviewer.name},\n\nThis is a reminder from the coordinator that your review for paper "${paperTitle}" (Round ${assignment.round.roundNumber}) is pending.\n\nDeadline: ${deadline}\n\nPlease log in and submit your review.`,
-          );
+          await sendTemplatedEmail(assignment.reviewer, TemplateName.REVIEW_REMINDER, {
+            userName: assignment.reviewer.name,
+            paperTitle,
+            roundNumber: String(assignment.round.roundNumber),
+            deadline,
+          });
           assignment.reminderSentAt = new Date();
           await assignRepo.save(assignment);
           sent++;
@@ -467,11 +471,12 @@ export class AssignmentController {
         const paperTitle = assignment.round.paper.title;
         const deadline = assignment.deadline?.toISOString().split('T')[0] ?? 'N/A';
         try {
-          await sendEmail(
-            assignment.reviewer,
-            `Reminder: Review pending for "${paperTitle}"`,
-            `Hello ${assignment.reviewer.name},\n\nThis is a reminder that your review for paper "${paperTitle}" (Round ${assignment.round.roundNumber}) is pending.\n\nDeadline: ${deadline}\n\nPlease log in and submit your review.`,
-          );
+          await sendTemplatedEmail(assignment.reviewer, TemplateName.REVIEW_REMINDER, {
+            userName: assignment.reviewer.name,
+            paperTitle,
+            roundNumber: String(assignment.round.roundNumber),
+            deadline,
+          });
           assignment.reminderSentAt = new Date();
           await assignRepo.save(assignment);
           sent++;
@@ -537,11 +542,11 @@ export class AssignmentController {
       }
       await RoundService.completeRoundIfAllAssignmentsTerminal(assignment.round.id);
 
-      sendEmail(
-        assignment.reviewer,
-        `Your review assignment for "${assignment.round.paper.title}" has been cancelled`,
-        `Hello ${assignment.reviewer.name},\n\nYour review assignment for paper "${assignment.round.paper.title}" (Round ${assignment.round.roundNumber}) has been cancelled by the coordinator. No further action is required from you.`,
-      ).catch(console.error);
+      sendTemplatedEmail(assignment.reviewer, TemplateName.ASSIGNMENT_CANCELLED, {
+        userName: assignment.reviewer.name,
+        paperTitle: assignment.round.paper.title,
+        roundNumber: String(assignment.round.roundNumber),
+      }).catch(console.error);
 
       return res.status(200).json({
         message: 'Assignment cancelled',

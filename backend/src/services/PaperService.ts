@@ -8,7 +8,8 @@ import { In } from 'typeorm';
 import { Coordinator } from '../entities/Coordinator';
 import { Lab } from '../entities/Lab';
 import { LabCollaborationInvitation, CollaborationInvitationStatus } from '../entities/LabCollaborationInvitation';
-import { sendEmail } from './emailService';
+import { sendTemplatedEmail } from './emailService';
+import { TemplateName } from '../entities/Template';
 
 export class PaperService {
   static async getPaperById(id: string): Promise<Paper | null> {
@@ -194,11 +195,11 @@ export class PaperService {
 
       for (const invitedLab of invitedLabs) {
         if (invitedLab.coordinator) {
-          sendEmail(
-            invitedLab.coordinator,
-            `Collaboration invitation: ${savedPaper.title}`,
-            `You have been invited by the coordinator of "${coordinatorLab!.name}" to collaborate on the paper "${savedPaper.title}".\n\nPlease log in to the system to accept or reject this invitation.`,
-          ).catch(err => console.error('[PaperService] Failed to send invitation email:', err));
+          sendTemplatedEmail(invitedLab.coordinator, TemplateName.COLLABORATION_INVITATION, {
+            coordinatorName: invitedLab.coordinator.name,
+            invitingLabName: coordinatorLab!.name,
+            paperTitle: savedPaper.title,
+          }).catch(err => console.error('[PaperService] Failed to send invitation email:', err));
         }
       }
     }

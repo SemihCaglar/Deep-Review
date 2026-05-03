@@ -7,7 +7,8 @@ import { Paper } from '../entities/Paper';
 import { Lab } from '../entities/Lab';
 import { Coordinator } from '../entities/Coordinator';
 import { User, UserRole } from '../entities/User';
-import { sendEmail } from '../services/emailService';
+import { sendTemplatedEmail } from '../services/emailService';
+import { TemplateName } from '../entities/Template';
 
 export class LabCollaborationController {
 
@@ -107,11 +108,11 @@ export class LabCollaborationController {
 
       for (const inv of saved) {
         if (inv.invitedLab.coordinator) {
-          sendEmail(
-            inv.invitedLab.coordinator,
-            `Collaboration invitation: ${paper.title}`,
-            `You have been invited by the coordinator of "${invitingLab.name}" to collaborate on the paper "${paper.title}".\n\nPlease log in to the system to accept or reject this invitation.`,
-          ).catch(err => console.error('[LabCollaboration] Failed to send invitation email:', err));
+          sendTemplatedEmail(inv.invitedLab.coordinator, TemplateName.COLLABORATION_INVITATION, {
+            coordinatorName: inv.invitedLab.coordinator.name,
+            invitingLabName: invitingLab.name,
+            paperTitle: paper.title,
+          }).catch(err => console.error('[LabCollaboration] Failed to send invitation email:', err));
         }
         results.push({
           id: inv.id,
@@ -216,7 +217,7 @@ export class LabCollaborationController {
 
     const invitationId = String(req.params.id);
     try {
-      let emailTarget: { coordinator: Coordinator; paperTitle: string; invitedLabName: string } | null = null;
+      let emailTarget: any = null;
       let resultId: string;
       let resultStatus: CollaborationInvitationStatus;
 
@@ -277,12 +278,12 @@ export class LabCollaborationController {
       });
 
       if (emailTarget) {
-        const { coordinator, paperTitle, invitedLabName } = emailTarget;
-        sendEmail(
-          coordinator,
-          `Collaboration accepted: ${paperTitle}`,
-          `The coordinator of "${invitedLabName}" has accepted your collaboration invitation for the paper "${paperTitle}".`,
-        ).catch(err => console.error('[LabCollaboration] Failed to send acceptance email:', err));
+        const { coordinator: targetCoordinator, paperTitle, invitedLabName } = emailTarget;
+        sendTemplatedEmail(targetCoordinator, TemplateName.COLLABORATION_ACCEPTED, {
+          coordinatorName: targetCoordinator.name,
+          acceptingLabName: invitedLabName,
+          paperTitle,
+        }).catch(err => console.error('[LabCollaboration] Failed to send acceptance email:', err));
       }
 
       return res.status(200).json({ message: 'Invitation accepted', id: resultId!, status: resultStatus! });
@@ -322,11 +323,11 @@ export class LabCollaborationController {
       await invitationRepo.save(invitation);
 
       if (invitation.invitingLab?.coordinator) {
-        sendEmail(
-          invitation.invitingLab.coordinator,
-          `Collaboration declined: ${invitation.paper.title}`,
-          `The coordinator of "${invitation.invitedLab.name}" has declined your collaboration invitation for the paper "${invitation.paper.title}".`,
-        ).catch(err => console.error('[LabCollaboration] Failed to send rejection email:', err));
+        sendTemplatedEmail(invitation.invitingLab.coordinator, TemplateName.COLLABORATION_REJECTED, {
+          coordinatorName: invitation.invitingLab.coordinator.name,
+          decliningLabName: invitation.invitedLab.name,
+          paperTitle: invitation.paper.title,
+        }).catch(err => console.error('[LabCollaboration] Failed to send rejection email:', err));
       }
 
       return res.status(200).json({ message: 'Invitation rejected', id: invitation.id, status: invitation.status });
