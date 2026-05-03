@@ -75,7 +75,6 @@ export class PCRelatedWorkRecommendationService {
     let pcKey = '';
     if (committeeMembers) {
       // Parse manually entered committee members
-      console.log(`[PCRelatedWork] Using manually entered committee members`);
       const names = committeeMembers
         .split(/[\n,]+/)
         .map(n => n.trim())
@@ -87,13 +86,11 @@ export class PCRelatedWorkRecommendationService {
         role: null,
         sourceUrl: 'manual-input',
       }));
-      console.log(`[PCRelatedWork] Parsed ${members.length} committee members from manual input`);
     } else {
       // Scrape from venue URL
       pcKey = pcMembersCacheKey(venueUrl);
       if (pcMembersCache.has(pcKey)) {
         members = pcMembersCache.get(pcKey)!;
-        console.log(`[PCRelatedWork] PC members from cache: ${members.length}`);
       } else {
         const scraped = await PCMemberScraperService.scrape(venueUrl);
         if (scraped.issues.length) issues.push(...scraped.issues);
@@ -112,37 +109,27 @@ export class PCRelatedWorkRecommendationService {
       };
     }
 
-    console.log(`[PCRelatedWork] Processing ${members.length} PC members`);
-
     // Step 2: Fetch papers for each member (cached by authorId)
     let matchedCount = 0;
     const allPapers: PCMemberPaper[] = [];
 
     for (let i = 0; i < members.length; i++) {
       const member = members[i];
-      console.log(`[PCRelatedWork] [${i + 1}/${members.length}] Fetching papers for: ${member.name}`);
-
       const paperKey = authorPapersCacheKey(member.id);
       let papers: PCMemberPaper[];
 
       if (authorPapersCache.has(paperKey)) {
         papers = authorPapersCache.get(paperKey)!;
-        console.log(`[PCRelatedWork]   ✓ From cache: ${papers.length} papers`);
       } else {
-        console.log(`[PCRelatedWork]   ⏳ Querying OpenAlex...`);
         const result = await OpenAlexAuthorPaperService.fetchMemberPapers(member);
         papers = result.papers;
         if (result.matched) {
           matchedCount++;
-          console.log(`[PCRelatedWork]   ✓ Matched: ${papers.length} papers fetched`);
-        } else {
-          console.log(`[PCRelatedWork]   ✗ Not matched in OpenAlex`);
         }
         authorPapersCache.set(paperKey, papers);
       }
 
       allPapers.push(...papers);
-      console.log(`[PCRelatedWork]   Total candidates so far: ${allPapers.length}`);
 
       if (allPapers.length >= MAX_TOTAL_CANDIDATES) {
         console.warn(`[PCRelatedWork] Candidate cap (${MAX_TOTAL_CANDIDATES}) reached, stopping early`);
@@ -165,7 +152,6 @@ export class PCRelatedWorkRecommendationService {
       return true;
     });
     const candidates = dedupedPapers.slice(0, MAX_TOTAL_CANDIDATES);
-    console.log(`[PCRelatedWork] Total candidates: ${candidates.length}`);
 
     if (candidates.length === 0) {
       issues.push('Could not retrieve any papers from OpenAlex for the extracted PC members.');
@@ -174,15 +160,12 @@ export class PCRelatedWorkRecommendationService {
     // Step 3: GPT relevance judgment
     let recommendations: RelatedWorkRecommendation[] = [];
     if (candidates.length > 0) {
-      console.log(`[PCRelatedWork] Starting GPT relevance judgment on ${candidates.length} candidates...`);
+      console.log(`[PCRelatedWork] Starting GPT batch judgment on ${candidates.length} candidates...`);
       const judgmentStart = Date.now();
       const raw = await AIRelevanceService.judgeRelevance(paperTitle, paperAbstract, candidates);
       const judgmentTime = ((Date.now() - judgmentStart) / 1000).toFixed(2);
-      console.log(`[PCRelatedWork] GPT judgment complete in ${judgmentTime}s - ${raw.length} relevant papers found`);
+      console.log(`[PCRelatedWork] Batch judgment complete in ${judgmentTime}s - ${raw.length} relevant papers found`);
       recommendations = rankRecommendations(raw).slice(0, MAX_RECOMMENDATIONS);
-      console.log(`[PCRelatedWork] Ranked top ${recommendations.length} recommendations`);
-    } else {
-      console.log(`[PCRelatedWork] No candidates to judge`);
     }
 
     const response: PCRelatedWorkResponse = {
