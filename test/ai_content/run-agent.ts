@@ -21,7 +21,7 @@ async function runAgentConversation() {
   // Resolve PDF path
   let pdfPath = secrets.PDF_PATH;
   if (pdfPath.startsWith("./")) {
-    pdfPath = path.resolve(__dirname, "../../", pdfPath);
+    pdfPath = path.resolve(__dirname, pdfPath);
   } else if (!path.isAbsolute(pdfPath)) {
     pdfPath = path.resolve(__dirname, pdfPath);
   }
