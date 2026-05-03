@@ -690,17 +690,18 @@ export class RoundController {
           submittedReviewerIds,
         ),
         aiReviewReport: r.aiReviewReport,
-        complianceReport: r.complianceReportsByUser?.[user.id]?.report ?? (r.complianceReportsByUser ? null : r.complianceReport),
+        complianceReport: r.complianceReport ?? null,
         referenceVerificationReport: r.referenceVerificationReport ?? null,
         annotatedPdfUrl: r.annotatedPdfUrl,
+        checklistJson: r.checklistJson ?? null,
+        checklistUrl: r.checklistUrl ?? null,
+        confirmedChecklistJson: r.confirmedChecklistJson ?? null,
         aiReviewReports: (r.aiReviewReports ?? [])
-          .filter(ar => !ar.requestedBy || ar.requestedBy.id === user.id)
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt })),
         artifacts: {
           checklistItems: (r.checklistItems ?? []).map(ci => ({ id: ci.id, description: ci.description, isChecked: ci.isChecked })),
           aiReviewReports: (r.aiReviewReports ?? [])
-            .filter(ar => !ar.requestedBy || ar.requestedBy.id === user.id)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
         }
@@ -767,13 +768,12 @@ export class RoundController {
         createdByCoordinator: round.createdByCoordinator ?? false,
         aiReviewReport: round.aiReviewReport ?? null,
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
-        complianceReport: round.complianceReportsByUser?.[coordinator.id]?.report ?? (round.complianceReportsByUser ? null : round.complianceReport ?? null),
+        complianceReport: round.complianceReport ?? null,
         referenceVerificationReport: round.referenceVerificationReport ?? null,
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
         aiReviewReports: (round.aiReviewReports ?? [])
-          .filter(ar => !ar.requestedBy || ar.requestedBy.id === coordinator.id)
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .map(ar => ({
             id: ar.id,
@@ -1420,6 +1420,16 @@ export class RoundController {
       // Update round with latest data
       round.aiReviewReport = aiReviewResult.summaryReport;
       round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+
+      if (complianceReport) {
+        round.complianceReportsByUser = {
+          ...(round.complianceReportsByUser ?? {}),
+          [user.id]: {
+            report: complianceReport,
+            createdAt: new Date().toISOString(),
+          },
+        };
+      }
 
       if (aiReviewResult.referenceVerificationReport) {
         round.referenceVerificationReport = aiReviewResult.referenceVerificationReport;
