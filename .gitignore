@@ -51,3 +51,33 @@ db/test.sqlite
 semih/
 backend/src/ai_content/secrets.yaml
 db/esra_m1.sqlite
+
+# Test files
+backend/test_*.ts
+backend/test_*.pdf
+backend/test_*.log
+backend/test_*.txt
+
+# Debug/development scripts
+backend/src/debug_endpoint.ts
+backend/src/debug_endpoint.js
+backend/src/run-agent.ts
+backend/src/test_agent.ts
+backend/src/list_assistants.js
+
+# Test/debug files in src
+backend/src/testAnalytics.ts
+backend/src/testComplianceCheck.ts
+backend/src/testRating.ts
+backend/src/testSubmissionRules.ts
+
+# AI content debug files
+backend/src/ai_content/debug_endpoint.ts
+backend/src/ai_content/debug_endpoint.js
+backend/src/ai_content/run-agent.ts
+backend/src/ai_content/test_agent.ts
+backend/src/ai_content/list_assistants.js
+backend/src/ai_content/ease_paper.pdf
+
+# Generated PDFs
+backend/downloads/
