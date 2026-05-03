@@ -1251,22 +1251,22 @@ export class RoundController {
         return res.status(400).json({ message: 'No PDF file uploaded. Please attach a PDF to run the compliance check.' });
       }
 
-      // We expect the frontend to pass the manually approved/corrected venue rules
-      let venueRules = {};
-      if (req.body.venueRules) {
-        try {
-          venueRules = JSON.parse(req.body.venueRules);
-        } catch (e) {
-          return res.status(400).json({ message: 'Invalid venueRules format. Expected JSON string.' });
-        }
+      if (!round.submissionRuleSetId) {
+        return res.status(400).json({ message: 'No submission rules linked to this round. Add a rule set first.' });
       }
 
-      const { ComplianceService } = require('../ai_content/services/ComplianceService');
-      const complianceReport = await ComplianceService.verifyCompliance(
-        round.paper.id,
-        file.buffer,
-        venueRules
-      );
+      const ruleSetRepo = AppDataSource.getRepository(SubmissionRuleSet);
+      const ruleSet = await ruleSetRepo.findOne({ where: { id: round.submissionRuleSetId } });
+      if (!ruleSet) {
+        return res.status(404).json({ message: 'Submission rule set not found.' });
+      }
+
+      const complianceService = new ComplianceCheckAgentService();
+      const fileId = await complianceService.uploadPdf(file.buffer, `round_${id}_compliance.pdf`);
+      const { complianceReport } = await complianceService.runComplianceCheck(fileId, {
+        sourceUrl: ruleSet.sourceUrl,
+        rules: ruleSet.rules,
+      });
 
       // Persist results per requesting user so authors/coordinators do not overwrite each other's reports.
       round.complianceReportsByUser = {
