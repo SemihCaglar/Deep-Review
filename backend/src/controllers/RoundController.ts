@@ -9,6 +9,7 @@ import { ExtensionStatus } from '../entities/Extension';
 import { SubmissionRuleSet } from '../entities/SubmissionRuleSet';
 import { AIReviewReport } from '../entities/AIReviewReport';
 import { RoundService, RoundServiceError } from '../services/RoundService';
+import { computeWorkloadBatch } from '../services/workloadService';
 import { sendTemplatedEmail } from '../services/emailService';
 import { TemplateName } from '../entities/Template';
 import { ComplianceCheckAgentService } from '../ai_content/services/ComplianceCheckAgentService';
@@ -473,11 +474,16 @@ export class RoundController {
         suggestions.push({
           user: { id: user.id, name: user.name, email: user.email, role: user.role },
           hasPreviouslyCompletedReview: hasSubmittedReviewForPaper,
-          reasons
+          reasons,
         });
       }
 
-      return res.status(200).json(suggestions);
+      const workloadMap = await computeWorkloadBatch(suggestions.map(s => s.user.id));
+      const suggestionsWithWorkload = suggestions
+        .map(s => ({ ...s, workload: workloadMap.get(s.user.id)! }))
+        .sort((a, b) => a.workload.workloadPct - b.workload.workloadPct);
+
+      return res.status(200).json(suggestionsWithWorkload);
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });

@@ -7,6 +7,7 @@ import { useUser } from '@/components/context/UserContext';
 import { MOCK_ROUNDS, MOCK_ASSIGNMENTS } from '@/lib/mockData';
 import { confirmCancel, customConfirm } from '@/lib/confirmAction';
 import { ArrowLeft, UserPlus, CheckCircle2, Clock, XCircle, Play, Archive, Edit, ExternalLink, Loader2, ArrowUp, ArrowDown, Plus, ChevronDown, ChevronUp, Star, Search, FlaskConical, X, Cpu, Download, AlertCircle } from 'lucide-react';
+import WorkloadBar from '@/components/WorkloadBar';
 import {
   getPaperByIdRequest, updatePaperAbstractRequest, updatePaperTopicsRequest,
   getLabTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
@@ -1738,7 +1739,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                                     ) : (
                                                                         <div className="space-y-1 max-h-48 overflow-y-auto">
                                                                             {suggestions.map(s => (
-                                                                                <div key={s.user.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
+                                                                                <div key={s.user.id} className="flex items-start justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
                                                                                     <div className="flex-1 min-w-0">
                                                                                         <div className="flex items-center gap-1.5 min-w-0">
                                                                                             <p className="text-sm text-white truncate">{s.user.name}</p>
@@ -1752,6 +1753,15 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                                                             )}
                                                                                         </div>
                                                                                         <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
+                                                                                        {s.workload && (
+                                                                                            <WorkloadBar
+                                                                                                workloadPct={s.workload.workloadPct}
+                                                                                                openRounds={s.workload.openAuthorRounds}
+                                                                                                activeReviews={s.workload.activeReviewAssignments}
+                                                                                                draftRounds={s.workload.draftAuthorRounds}
+                                                                                                completedLastMonth={s.workload.completedLastMonth}
+                                                                                            />
+                                                                                        )}
                                                                                     </div>
                                                                                     <button onClick={() => handleAddProposed(round.id, s.user.id)}
                                                                                         className="ml-2 flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 transition-colors shrink-0">

@@ -589,6 +589,13 @@ export type SuggestedReviewer = {
   user: { id: string; name: string; email: string; role: string };
   hasPreviouslyCompletedReview?: boolean;
   reasons: string[];
+  workload: {
+    workloadPct: number;
+    openAuthorRounds: number;
+    activeReviewAssignments: number;
+    draftAuthorRounds: number;
+    completedLastMonth: number;
+  };
 };
 
 // ==== ROUND MANAGEMENT API FUNCTIONS ====
