@@ -9,6 +9,7 @@ import { ExtensionStatus } from '../entities/Extension';
 import { SubmissionRuleSet } from '../entities/SubmissionRuleSet';
 import { AIReviewReport } from '../entities/AIReviewReport';
 import { RoundService, RoundServiceError } from '../services/RoundService';
+import { computeWorkloadBatch } from '../services/workloadService';
 import { sendTemplatedEmail } from '../services/emailService';
 import { TemplateName } from '../entities/Template';
 import { ComplianceCheckAgentService } from '../ai_content/services/ComplianceCheckAgentService';
@@ -383,8 +384,13 @@ export class RoundController {
 
   static async suggestReviewers(req: AuthenticatedRequest, res: Response) {
     try {
-      const user = req.user;
-      if (!user) return res.status(401).json({ message: 'Authentication required' });
+      const requesterBase = req.user;
+      if (!requesterBase) return res.status(401).json({ message: 'Authentication required' });
+
+      // Explicitly load labs for the requester to ensure filtering works
+      const userRepo = AppDataSource.getRepository<User>('User');
+      const requester = await userRepo.findOne({ where: { id: requesterBase.id }, relations: ['labs'] });
+      if (!requester) return res.status(401).json({ message: 'Authentication required' });
 
       const { id } = req.params;
       const roundRepo = AppDataSource.getRepository(Round);
@@ -406,8 +412,8 @@ export class RoundController {
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
 
-      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
-      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === requester.id);
+      const isAuthor = round.paper.authors?.some(a => a.id === requester.id);
       if (!isCoordinator && !isAuthor) {
         return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
       }
@@ -416,7 +422,6 @@ export class RoundController {
       const paperLabIds = paper.labs?.map(l => l.id) || [];
       const authorIds = paper.authors?.map(a => a.id) || [];
 
-      const userRepo = AppDataSource.getRepository<User>('User');
       const candidates = await userRepo.find({
         relations: ['labs']
       });
@@ -431,10 +436,20 @@ export class RoundController {
         // Frozen (alumni) members cannot be reviewers
         if (user.frozenAt) continue;
 
-        // Enforce Intra-Lab boundaries
+        // Enforce Lab boundaries:
+        // Coordinators and Authors should only see members of THEIR labs that are also linked to the paper.
+        // Admins can see all members of the paper's labs.
         const userLabIds = user.labs?.map(l => l.id) || [];
-        const sharesLab = userLabIds.some(lid => paperLabIds.includes(lid));
-        if (!sharesLab) continue;
+        const requesterLabIds = requester.labs?.map(l => l.id) || [];
+        const isRequesterAdmin = requester.role === UserRole.Admin;
+
+        const sharesLabWithPaper = userLabIds.some(lid => paperLabIds.includes(lid));
+        if (!sharesLabWithPaper) continue;
+
+        if (!isRequesterAdmin) {
+          const sharesLabWithRequester = userLabIds.some(lid => requesterLabIds.includes(lid));
+          if (!sharesLabWithRequester) continue;
+        }
 
         // Hard COI: Author
         if (authorIds.includes(user.id)) continue;
@@ -472,11 +487,16 @@ export class RoundController {
         suggestions.push({
           user: { id: user.id, name: user.name, email: user.email, role: user.role },
           hasPreviouslyCompletedReview: hasSubmittedReviewForPaper,
-          reasons
+          reasons,
         });
       }
 
-      return res.status(200).json(suggestions);
+      const workloadMap = await computeWorkloadBatch(suggestions.map(s => s.user.id));
+      const suggestionsWithWorkload = suggestions
+        .map(s => ({ ...s, workload: workloadMap.get(s.user.id)! }))
+        .sort((a, b) => a.workload.workloadPct - b.workload.workloadPct);
+
+      return res.status(200).json(suggestionsWithWorkload);
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -485,8 +505,13 @@ export class RoundController {
 
   static async addProposeReviewer(req: AuthenticatedRequest, res: Response) {
     try {
-      const user = req.user;
-      if (!user) return res.status(401).json({ message: 'Authentication required' });
+      const requesterBase = req.user;
+      if (!requesterBase) return res.status(401).json({ message: 'Authentication required' });
+
+      // Explicitly load labs for the requester to ensure filtering works
+      const userRepo = AppDataSource.getRepository<User>('User');
+      const requester = await userRepo.findOne({ where: { id: requesterBase.id }, relations: ['labs'] });
+      if (!requester) return res.status(401).json({ message: 'Authentication required' });
 
       const { id } = req.params;
       const { reviewerId } = req.body;
@@ -503,9 +528,11 @@ export class RoundController {
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
 
-      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
-      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
-      if (!isCoordinator && !isAuthor) {
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === requester.id);
+      const isAuthor = round.paper.authors?.some(a => a.id === requester.id);
+      const isAdmin = requester.role === UserRole.Admin;
+
+      if (!isCoordinator && !isAuthor && !isAdmin) {
         return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
       }
 
@@ -518,7 +545,6 @@ export class RoundController {
         return res.status(400).json({ message: 'Cannot propose author (Conflict of interest)' });
       }
 
-      const userRepo = AppDataSource.getRepository<User>('User');
       const reviewer = await userRepo.findOne({ where: { id: reviewerId }, relations: ['labs'] });
       if (!reviewer) return res.status(404).json({ message: 'Reviewer not found' });
       
@@ -532,9 +558,19 @@ export class RoundController {
 
       const paperLabIds = round.paper.labs?.map(l => l.id) || [];
       const reviewerLabIds = reviewer.labs?.map(l => l.id) || [];
-      const sharesLab = reviewerLabIds.some(lid => paperLabIds.includes(lid));
-      if (!sharesLab) {
+      const requesterLabIds = requester.labs?.map(l => l.id) || [];
+      const isRequesterAdmin = requester.role === UserRole.Admin;
+
+      const sharesLabWithPaper = reviewerLabIds.some(lid => paperLabIds.includes(lid));
+      if (!sharesLabWithPaper) {
         return res.status(400).json({ message: 'Reviewer must belong to a lab associated with this paper' });
+      }
+
+      if (!isRequesterAdmin) {
+        const sharesLabWithRequester = reviewerLabIds.some(lid => requesterLabIds.includes(lid));
+        if (!sharesLabWithRequester) {
+          return res.status(400).json({ message: 'Reviewer must belong to your own lab' });
+        }
       }
 
       if (!round.proposedReviewers) round.proposedReviewers = [];
@@ -568,7 +604,8 @@ export class RoundController {
 
       const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
       const isAuthor = round.paper.authors?.some(a => a.id === user.id);
-      if (!isCoordinator && !isAuthor) {
+      const isAdmin = user.role === UserRole.Admin;
+      if (!isCoordinator && !isAuthor && !isAdmin) {
         return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
       }
 
@@ -589,26 +626,40 @@ export class RoundController {
 
   static async getProposeReviewers(req: AuthenticatedRequest, res: Response) {
     try {
-      const user = req.user;
-      if (!user) return res.status(401).json({ message: 'Authentication required' });
+      const requesterBase = req.user;
+      if (!requesterBase) return res.status(401).json({ message: 'Authentication required' });
+
+      // Explicitly load labs for the requester to ensure filtering works
+      const userRepo = AppDataSource.getRepository<User>('User');
+      const requester = await userRepo.findOne({ where: { id: requesterBase.id }, relations: ['labs'] });
+      if (!requester) return res.status(401).json({ message: 'Authentication required' });
 
       const { id } = req.params;
       const roundRepo = AppDataSource.getRepository(Round);
       const round = await roundRepo.findOne({
         where: { id: id as string },
-        relations: ['proposedReviewers', 'paper', 'paper.authors', 'paper.coordinators'],
+        relations: ['proposedReviewers', 'proposedReviewers.labs', 'paper', 'paper.authors', 'paper.coordinators'],
       });
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
 
-      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
-      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
-      if (!isCoordinator && !isAuthor) {
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === requester.id);
+      const isAuthor = round.paper.authors?.some(a => a.id === requester.id);
+      const isAdmin = requester.role === UserRole.Admin;
+
+      if (!isCoordinator && !isAuthor && !isAdmin) {
         return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
       }
 
+      const filteredProposed = (round.proposedReviewers ?? []).filter(p => {
+        if (isAdmin) return true;
+        const reviewerLabIds = p.labs?.map(l => l.id) || [];
+        const requesterLabIds = requester.labs?.map(l => l.id) || [];
+        return reviewerLabIds.some(id => requesterLabIds.includes(id));
+      });
+
       const submittedReviewerIds = await RoundController.getReviewerIdsWithSubmittedReviewForPaper(round.paper.id);
-      return res.status(200).json(RoundController.formatReviewersWithReviewContext(round.proposedReviewers ?? [], submittedReviewerIds));
+      return res.status(200).json(RoundController.formatReviewersWithReviewContext(filteredProposed, submittedReviewerIds));
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -653,9 +704,16 @@ export class RoundController {
       });
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isCoordinator = paper.coordinators?.some(c => c.id === user.id);
-      const isAuthor = paper.authors?.some(a => a.id === user.id);
-      if (!isCoordinator && !isAuthor) {
+      // Explicitly load labs for the requester to ensure filtering works
+      const userRepo = AppDataSource.getRepository<User>('User');
+      const requester = await userRepo.findOne({ where: { id: user.id }, relations: ['labs'] });
+      if (!requester) return res.status(401).json({ message: 'Authentication required' });
+
+      const isCoordinator = paper.coordinators?.some(c => c.id === requester.id);
+      const isAuthor = paper.authors?.some(a => a.id === requester.id);
+      const isAdmin = requester.role === UserRole.Admin;
+
+      if (!isCoordinator && !isAuthor && !isAdmin) {
         return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
       }
 
@@ -672,11 +730,13 @@ export class RoundController {
         where: { paper: { id: paperId } },
         relations: [
           'proposedReviewers',
+          'proposedReviewers.labs',
           'checklistItems',
           'aiReviewReports',
           'aiReviewReports.requestedBy',
           'assignments',
           'assignments.reviewer',
+          'assignments.reviewer.labs',
           'assignments.reviewSummary',
           'assignments.rating',
         ],
@@ -697,12 +757,18 @@ export class RoundController {
         startedAt: r.startedAt,
         completedAt: r.completedAt,
         proposedReviewers: RoundController.formatReviewersWithReviewContext(
-          r.proposedReviewers ?? [],
+          (r.proposedReviewers ?? []).filter(p => {
+            if (isAdmin) return true;
+            const reviewerLabIds = p.labs?.map(l => l.id) || [];
+            const requesterLabIds = requester.labs?.map(l => l.id) || [];
+            return reviewerLabIds.some(id => requesterLabIds.includes(id));
+          }),
           submittedReviewerIds,
         ),
         aiReviewReport: r.aiReviewReport,
         complianceReport: r.complianceReport ?? null,
         referenceVerificationReport: r.referenceVerificationReport ?? null,
+        pcRelatedWorkRecommendations: r.pcRelatedWorkRecommendations ?? null,
         annotatedPdfUrl: r.annotatedPdfUrl,
         checklistJson: r.checklistJson ?? null,
         checklistUrl: r.checklistUrl ?? null,
@@ -716,7 +782,14 @@ export class RoundController {
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .map(ar => ({ id: ar.id, reviewText: ar.reviewText, annotatedPdfUrl: ar.annotatedPdfUrl, venue: ar.venue, createdAt: ar.createdAt }))
         },
-        assignments: (r.assignments ?? []).map(a => ({
+        assignments: (r.assignments ?? [])
+          .filter(a => {
+            if (isAdmin) return true;
+            const reviewerLabIds = a.reviewer.labs?.map(l => l.id) || [];
+            const requesterLabIds = requester.labs?.map(l => l.id) || [];
+            return reviewerLabIds.some(id => requesterLabIds.includes(id));
+          })
+          .map(a => ({
           id: a.id,
           status: a.status,
           deadline: a.deadline,
@@ -736,9 +809,16 @@ export class RoundController {
   }
   static async getRoundsWithAssignments(req: AuthenticatedRequest, res: Response) {
     try {
-      const coordinator = req.user;
-      if (!coordinator || coordinator.role !== UserRole.Coordinator) {
-        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator role' });
+      const requesterBase = req.user;
+      if (!requesterBase) return res.status(401).json({ message: 'Authentication required' });
+
+      // Explicitly load labs for the requester to ensure filtering works
+      const userRepo = AppDataSource.getRepository<User>('User');
+      const requester = await userRepo.findOne({ where: { id: requesterBase.id }, relations: ['labs'] });
+      if (!requester) return res.status(401).json({ message: 'Authentication required' });
+
+      if (requester.role !== UserRole.Coordinator && requester.role !== UserRole.Admin) {
+        return res.status(403).json({ message: 'Forbidden: Action requires Coordinator or Admin role' });
       }
 
       const paperId = req.params.id as string;
@@ -749,7 +829,7 @@ export class RoundController {
       });
       if (!paper) return res.status(404).json({ message: 'Paper not found' });
 
-      const isOwner = paper.coordinators?.some(c => c.id === coordinator.id);
+      const isOwner = paper.coordinators?.some(c => c.id === requester.id) || requester.role === UserRole.Admin;
       if (!isOwner) return res.status(403).json({ message: 'Forbidden: You are not a coordinator of this paper' });
 
       const roundRepo = AppDataSource.getRepository(Round);
@@ -768,9 +848,11 @@ export class RoundController {
           'aiReviewReports.requestedBy',
           'assignments',
           'assignments.reviewer',
+          'assignments.reviewer.labs',
           'assignments.declineRequests',
           'assignments.extensions',
           'assignments.reviewSummary',
+          'assignments.rating',
         ],
         order: { roundNumber: 'DESC' },
       });
@@ -793,6 +875,7 @@ export class RoundController {
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
         complianceReport: round.complianceReport ?? null,
         referenceVerificationReport: round.referenceVerificationReport ?? null,
+        pcRelatedWorkRecommendations: round.pcRelatedWorkRecommendations ?? null,
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
@@ -805,17 +888,25 @@ export class RoundController {
             venue: ar.venue,
             createdAt: ar.createdAt,
           })),
-        assignments: (round.assignments ?? []).map(a => ({
-          id: a.id,
-          status: a.status,
-          deadline: a.deadline,
-          invitationSent: a.invitationSent,
-          reviewer: { id: a.reviewer.id, name: a.reviewer.name, email: a.reviewer.email },
-          hasPreviouslyCompletedReview: submittedReviewerIds.has(a.reviewer.id),
-          pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
-          pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
-          reviewSummary: a.reviewSummary ? { text: a.reviewSummary.text, submittedAt: a.reviewSummary.submittedAt } : null,
-        })),
+        assignments: (round.assignments ?? [])
+          .filter(a => {
+            if (requester.role === UserRole.Admin) return true;
+            const reviewerLabIds = a.reviewer.labs?.map(l => l.id) || [];
+            const requesterLabIds = requester.labs?.map(l => l.id) || [];
+            return reviewerLabIds.some(id => requesterLabIds.includes(id));
+          })
+          .map(a => ({
+            id: a.id,
+            status: a.status,
+            deadline: a.deadline,
+            invitationSent: a.invitationSent,
+            reviewer: { id: a.reviewer.id, name: a.reviewer.name, email: a.reviewer.email },
+            hasPreviouslyCompletedReview: submittedReviewerIds.has(a.reviewer.id),
+            pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
+            pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
+            reviewSummary: a.reviewSummary ? { text: a.reviewSummary.text, submittedAt: a.reviewSummary.submittedAt } : null,
+            hasRating: !!a.rating,
+          })),
       }));
 
       return res.status(200).json(formatted);
@@ -827,8 +918,13 @@ export class RoundController {
 
   static async trackReviewStatus(req: AuthenticatedRequest, res: Response) {
     try {
-      const user = req.user;
-      if (!user) return res.status(401).json({ message: 'Authentication required' });
+      const requesterBase = req.user;
+      if (!requesterBase) return res.status(401).json({ message: 'Authentication required' });
+
+      // Explicitly load labs for the requester to ensure filtering works
+      const userRepo = AppDataSource.getRepository<User>('User');
+      const requester = await userRepo.findOne({ where: { id: requesterBase.id }, relations: ['labs'] });
+      if (!requester) return res.status(401).json({ message: 'Authentication required' });
 
       const roundId = req.params.id as string;
       const roundRepo = AppDataSource.getRepository(Round);
@@ -840,6 +936,7 @@ export class RoundController {
           'paper.authors',
           'assignments',
           'assignments.reviewer',
+          'assignments.reviewer.labs',
           'assignments.declineRequests',
           'assignments.extensions',
         ],
@@ -847,29 +944,30 @@ export class RoundController {
 
       if (!round) return res.status(404).json({ message: 'Round not found' });
 
-      const isCoordinator = round.paper.coordinators?.some(c => c.id === user.id);
-      const isAuthor = round.paper.authors?.some(a => a.id === user.id);
-      if (!isCoordinator && !isAuthor) {
+      const isCoordinator = round.paper.coordinators?.some(c => c.id === requester.id);
+      const isAuthor = round.paper.authors?.some(a => a.id === requester.id);
+      const isAdmin = requester.role === UserRole.Admin;
+
+      if (!isCoordinator && !isAuthor && !isAdmin) {
         return res.status(403).json({ message: 'Forbidden: You are not associated with this paper' });
       }
 
-      const now = new Date();
-      const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-
-      const activeStatuses = new Set([
-        AssignmentStatus.Invited,
-        AssignmentStatus.Accepted,
-        AssignmentStatus.PendingExtension,
-        AssignmentStatus.PendingDecline,
-        AssignmentStatus.Overdue,
-      ]);
-
-      const assignments = round.assignments ?? [];
+      // Filter assignments by lab
+      const assignments = (round.assignments ?? []).filter(a => {
+        if (isAdmin) return true;
+        const reviewerLabIds = a.reviewer.labs?.map(l => l.id) || [];
+        const requesterLabIds = requester.labs?.map(l => l.id) || [];
+        return reviewerLabIds.some(id => requesterLabIds.includes(id));
+      });
       const submittedReviewerIds = await RoundController.getReviewerIdsWithSubmittedReviewForPaper(round.paper.id);
 
       const statusCounts: Record<string, number> = {};
       for (const s of Object.values(AssignmentStatus)) statusCounts[s] = 0;
       for (const a of assignments) statusCounts[a.status]++;
+
+      const now = new Date();
+      const threeDaysFromNow = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000));
+      const activeStatuses = new Set([AssignmentStatus.Accepted, AssignmentStatus.Invited, AssignmentStatus.PendingExtension, AssignmentStatus.Overdue]);
 
       const overdueAssignments = assignments
         .filter(a => activeStatuses.has(a.status) && a.deadline && a.deadline < now)

@@ -81,3 +81,6 @@ backend/src/ai_content/ease_paper.pdf
 
 # Generated PDFs
 backend/downloads/
+
+# Reference repositories
+easypaper-reference/

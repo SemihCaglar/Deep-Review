@@ -204,7 +204,7 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
   };
 
   return (
-    <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+    <>
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl relative">
@@ -275,7 +275,8 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
         </div>
       )}
 
-      <div className="p-6 border-b border-white/5">
+      <div className="glass rounded-2xl border border-white/10 overflow-hidden">
+        <div className="p-6 border-b border-white/5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">System Users</h2>
           <button 
@@ -363,6 +364,7 @@ function UsersTab({ users, refresh }: { users: any[]; refresh: () => void }) {
         </table>
       </div>
     </div>
+    </>
   );
 }
 

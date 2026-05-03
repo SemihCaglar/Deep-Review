@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/components/context/UserContext';
-import { BookOpen, CheckCircle2, Users, ArrowUp, ArrowDown, Search, X } from 'lucide-react';
-import { ApiError, getLabMembersRequest, getLabTopicsRequest, registerPaperRequest, LabMember, TopicOption } from '@/lib/api';
+import { BookOpen, CheckCircle2, Users, ArrowUp, ArrowDown, Search, X, PlusSquare } from 'lucide-react';
+import { ApiError, getLabMembersRequest, getLabTopicsRequest, addTopicToLabRequest, registerPaperRequest, LabMember, TopicOption } from '@/lib/api';
 
 export default function RegisterPaper() {
     const { user } = useUser();
@@ -14,6 +14,7 @@ export default function RegisterPaper() {
 
     const [availableUsers, setAvailableUsers] = useState<LabMember[]>([]);
     const [topicsList, setTopicsList] = useState<TopicOption[]>([]);
+    const [isCreatingTopic, setIsCreatingTopic] = useState(false);
 
     // Form state
     const [title, setTitle] = useState('');
@@ -93,6 +94,27 @@ export default function RegisterPaper() {
             setSelectedTopics(selectedTopics.filter(t => t !== topicId));
         } else {
             setSelectedTopics([...selectedTopics, topicId]);
+        }
+    };
+
+    const handleCreateTopic = async () => {
+        if (!topicSearch.trim() || isCreatingTopic) return;
+        if (!currentLabId) {
+            alert('You must be associated with at least one lab to create new topics.');
+            return;
+        }
+        
+        setIsCreatingTopic(true);
+        try {
+            const newTopic = await addTopicToLabRequest(currentLabId, topicSearch.trim());
+            setTopicsList(prev => [...prev, newTopic]);
+            setSelectedTopics(prev => [...prev, newTopic.id]);
+            setTopicSearch('');
+        } catch (err) {
+            console.error('Failed to create topic', err);
+            alert(err instanceof ApiError ? err.message : 'Failed to create topic');
+        } finally {
+            setIsCreatingTopic(false);
         }
     };
 
@@ -306,7 +328,14 @@ export default function RegisterPaper() {
                             </div>
 
                             <div className="pt-6 border-t border-white/5">
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Topics & Keywords</label>
+                                <div className="flex items-center justify-between mb-4">
+                                    <label className="block text-sm font-medium text-slate-300">Topics & Keywords</label>
+                                    {!currentLabId && (
+                                        <p className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-1 rounded border border-amber-400/20 max-w-[200px]">
+                                            Note: You are not in a lab. You can select existing topics but cannot create new ones.
+                                        </p>
+                                    )}
+                                </div>
                                 <p className="text-slate-500 text-sm mb-4">Select relevant areas to help assign appropriate reviewers.</p>
 
                                 <div className="relative mb-4">
@@ -330,19 +359,36 @@ export default function RegisterPaper() {
                                 </div>
 
                                 <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                                    {filteredTopics.length === 0 ? (
+                                    {filteredTopics.length === 0 && !topicSearch.trim() ? (
                                         <p className="w-full text-center py-4 text-slate-500 text-sm italic">No matching topics found.</p>
                                     ) : (
-                                        filteredTopics.map(topic => (
-                                            <button
-                                                key={topic.id}
-                                                type="button"
-                                                onClick={() => toggleTopic(topic.id)}
-                                                className={`px-4 py-2 rounded-full border text-sm font-medium transition-all ${selectedTopics.includes(topic.id) ? 'bg-blue-600/20 border-blue-500/50 text-blue-300' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}
-                                            >
-                                                {topic.name}
-                                            </button>
-                                        ))
+                                        <>
+                                            {filteredTopics.map(topic => (
+                                                <button
+                                                    key={topic.id}
+                                                    type="button"
+                                                    onClick={() => toggleTopic(topic.id)}
+                                                    className={`px-4 py-2 rounded-full border text-sm font-medium transition-all ${selectedTopics.includes(topic.id) ? 'bg-blue-600/20 border-blue-500/50 text-blue-300' : 'border-white/10 bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                                                >
+                                                    {topic.name}
+                                                </button>
+                                            ))}
+                                            {topicSearch.trim() && !topicsList.some(t => t.name.toLowerCase() === topicSearch.trim().toLowerCase()) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCreateTopic}
+                                                    disabled={isCreatingTopic}
+                                                    className="px-4 py-2 rounded-full border border-dashed border-blue-500/50 bg-blue-500/5 text-blue-400 text-sm font-medium hover:bg-blue-500/10 transition-all flex items-center gap-2"
+                                                >
+                                                    {isCreatingTopic ? (
+                                                        <div className="w-3 h-3 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
+                                                    ) : (
+                                                        <PlusSquare className="w-4 h-4" />
+                                                    )}
+                                                    Add "{topicSearch.trim()}"
+                                                </button>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -363,6 +409,8 @@ export default function RegisterPaper() {
                                     : 'Once it is registered, the first review round can be initialized by a Coordinator from the paper details page.'}
                                 <br /><br />
                                 {selectedAuthors.length > 0 && <span className="text-blue-400">{selectedAuthors.length} author(s) will be notified by the Email Service.</span>}
+                                <br />
+                                Topics: {selectedTopics.length > 0 ? topicsList.filter(t => selectedTopics.includes(t.id)).map(t => t.name).join(', ') : 'None'}
                             </p>
                         </div>
                     )}
