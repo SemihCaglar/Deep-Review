@@ -12,7 +12,7 @@ import {
   getLabTopicsRequest, getPaperHistoryRequest, TopicOption, Paper, PaperHistory,
   getLabMembersRequest, ApiError, LabMember, Lab,
   AuthorRound, getAuthorRoundsRequest, createRoundRequest, editRoundDeadlineRequest, editSubmissionDeadlineRequest,
-  getSuggestedReviewersRequest, SuggestedReviewer,
+  getSuggestedReviewersRequest, SuggestedReviewer, ProposedReviewer,
   getProposedReviewersRequest, addProposedReviewerRequest, removeProposedReviewerRequest,
   updateOverleafLinkRequest, updatePaperStatusRequest,
   submitRatingRequest,
@@ -161,7 +161,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
     const [createRoundError, setCreateRoundError] = useState('');
     // Per-round proposal panel state (keyed by round id)
     const [expandedRound, setExpandedRound] = useState<string | null>(null);
-    const [proposedMap, setProposedMap] = useState<Record<string, { id: string; name: string; email: string }[]>>({});
+    const [proposedMap, setProposedMap] = useState<Record<string, ProposedReviewer[]>>({});
     const [suggestionsMap, setSuggestionsMap] = useState<Record<string, SuggestedReviewer[]>>({});
     const [loadingSuggestions, setLoadingSuggestions] = useState<Record<string, boolean>>({});
     const [showSuggestPanel, setShowSuggestPanel] = useState<Record<string, boolean>>({});
@@ -815,7 +815,13 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                         const extensionCategoryKey = `${assignmentKey}:extensions`;
                                         const isDeclinesExpanded = expandedHistoryCategories.has(declineCategoryKey);
                                         const isExtensionsExpanded = expandedHistoryCategories.has(extensionCategoryKey);
-                                        const declineItemCount = assignment.declineRequests.length + (assignment.declineReason ? 1 : 0);
+                                        const hasStandaloneDeclineReason = Boolean(
+                                            assignment.declineReason &&
+                                            !assignment.declineRequests.some(request =>
+                                                request.reason.trim() === assignment.declineReason?.trim()
+                                            )
+                                        );
+                                        const declineItemCount = assignment.declineRequests.length + (hasStandaloneDeclineReason ? 1 : 0);
 
                                         return (
                                         <div key={assignment.assignmentId} className="p-5">
@@ -874,7 +880,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     </button>
                                                     {isDeclinesExpanded && (
                                                     <div className="space-y-2">
-                                                    {assignment.declineReason && (
+                                                    {hasStandaloneDeclineReason && assignment.declineReason && (
                                                         <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
                                                             <p className="text-xs font-semibold text-red-300">Decline reason</p>
                                                             <p className="text-sm text-slate-300 mt-1">{assignment.declineReason}</p>
@@ -1676,7 +1682,17 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                                             {r.name.charAt(0)}
                                                                         </div>
                                                                         <div className="min-w-0">
-                                                                            <p className="text-sm text-white truncate">{r.name}</p>
+                                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                                <p className="text-sm text-white truncate">{r.name}</p>
+                                                                                {r.hasPreviouslyCompletedReview && (
+                                                                                    <span
+                                                                                        title="This reviewer has previously completed a review for this paper."
+                                                                                        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-[10px] font-bold text-amber-300"
+                                                                                    >
+                                                                                        !
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
                                                                             <p className="text-xs text-slate-500 truncate">{r.email}</p>
                                                                         </div>
                                                                     </div>
@@ -1701,11 +1717,18 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                                             {suggestions.map(s => (
                                                                                 <div key={s.user.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
                                                                                     <div className="flex-1 min-w-0">
-                                                                                        <p className="text-sm text-white truncate">{s.user.name}</p>
+                                                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                                                            <p className="text-sm text-white truncate">{s.user.name}</p>
+                                                                                            {s.hasPreviouslyCompletedReview && (
+                                                                                                <span
+                                                                                                    title="This reviewer has previously completed a review for this paper."
+                                                                                                    className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-[10px] font-bold text-amber-300"
+                                                                                                >
+                                                                                                    !
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </div>
                                                                                         <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
-                                                                                        {s.reasons[0]?.startsWith('Warning') && (
-                                                                                            <p className="text-xs text-amber-400 mt-0.5">{s.reasons[0]}</p>
-                                                                                        )}
                                                                                     </div>
                                                                                     <button onClick={() => handleAddProposed(round.id, s.user.id)}
                                                                                         className="ml-2 flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 transition-colors shrink-0">

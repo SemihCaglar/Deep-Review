@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import { useUser } from '@/components/context/UserContext';
 import {
@@ -11,6 +11,7 @@ import {
   RoundAssignment,
   RoundStatusSummary,
   SuggestedReviewer,
+  ProposedReviewer,
   ApiError,
   startAIReviewRequest,
   runComplianceCheckRequest,
@@ -72,6 +73,17 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+function PriorReviewIndicator() {
+  return (
+    <span
+      title="This reviewer has previously completed a review for this paper."
+      className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-[10px] font-bold text-amber-300"
+    >
+      !
+    </span>
+  );
+}
+
 function formatDate(d: string | null) {
   if (!d) return '—';
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -102,14 +114,12 @@ function AssignmentRow({
   assignment,
   roundDeadline,
   roundStatus,
-  repeatedInRounds,
   onRefresh,
   onReassign
 }: {
   assignment: RoundAssignment;
   roundDeadline: string | null;
   roundStatus: RoundWithAssignments['status'];
-  repeatedInRounds: number[];
   onRefresh: () => void;
   onReassign: (id: string) => void;
 }) {
@@ -193,15 +203,7 @@ function AssignmentRow({
           <div className="min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <p className="text-sm font-medium text-white truncate">{assignment.reviewer.name}</p>
-              {repeatedInRounds.length > 0 && (
-                <span
-                  title={`Also assigned in round(s): ${repeatedInRounds.join(', ')}`}
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-[10px] font-medium text-amber-300 shrink-0"
-                >
-                  <AlertCircle className="w-3 h-3" />
-                  R{repeatedInRounds.join(', R')}
-                </span>
-              )}
+              {assignment.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
             </div>
             <p className="text-xs text-slate-500 truncate">{assignment.reviewer.email}</p>
           </div>
@@ -427,13 +429,11 @@ function RoundCard({
   onRefresh,
   coordinatorId,
   paperHasOverleafLink,
-  reviewerRoundNumbers,
 }: {
   round: RoundWithAssignments;
   onRefresh: () => void;
   coordinatorId: string;
   paperHasOverleafLink: boolean;
-  reviewerRoundNumbers: Record<string, number[]>;
 }) {
   const [expanded, setExpanded] = useState(true);
 
@@ -511,9 +511,7 @@ function RoundCard({
   };
 
   // Proposed reviewer management (Draft rounds)
-  const [proposedReviewers, setProposedReviewers] = useState(
-    round.assignments.length === 0 ? [] as { id: string; name: string }[] : []
-  );
+  const [proposedReviewers, setProposedReviewers] = useState<ProposedReviewer[]>([]);
   const [loadingProposed, setLoadingProposed] = useState(false);
   const [showProposePanel, setShowProposePanel] = useState(false);
   const [proposeSuggestions, setProposeSuggestions] = useState<SuggestedReviewer[]>([]);
@@ -987,7 +985,10 @@ function RoundCard({
                       <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-xs font-bold shrink-0">
                         {r.name.charAt(0)}
                       </div>
-                      <span className="text-sm text-white">{r.name}</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-sm text-white truncate">{r.name}</span>
+                        {r.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       {!round.createdByCoordinator && (
@@ -1027,7 +1028,10 @@ function RoundCard({
                         {proposeSuggestions.map(s => (
                           <div key={s.user.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-white/5 bg-white/[0.02]">
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm text-white truncate">{s.user.name}</p>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <p className="text-sm text-white truncate">{s.user.name}</p>
+                                {s.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
+                              </div>
                               <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
                             </div>
                             <button
@@ -1166,7 +1170,10 @@ function RoundCard({
                       {statusSummary.overdueAssignments.map(a => (
                         <div key={a.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-red-500/20 bg-red-500/5 text-xs">
                           <div>
-                            <span className="text-white font-medium">{a.reviewer.name}</span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="text-white font-medium">{a.reviewer.name}</span>
+                              {a.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
+                            </span>
                             <span className="text-slate-500 ml-2">{a.reviewer.email}</span>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
@@ -1185,7 +1192,10 @@ function RoundCard({
                       {statusSummary.approachingDeadline.map(a => (
                         <div key={a.id} className="flex items-center justify-between px-3 py-2 rounded-lg border border-amber-500/20 bg-amber-500/5 text-xs">
                           <div>
-                            <span className="text-white font-medium">{a.reviewer.name}</span>
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="text-white font-medium">{a.reviewer.name}</span>
+                              {a.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
+                            </span>
                             <span className="text-slate-500 ml-2">{a.reviewer.email}</span>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
@@ -1254,15 +1264,11 @@ function RoundCard({
                         className="accent-blue-500 w-4 h-4 shrink-0"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white">{s.user.name}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="text-sm font-medium text-white truncate">{s.user.name}</p>
+                          {s.hasPreviouslyCompletedReview && <PriorReviewIndicator />}
+                        </div>
                         <p className="text-xs text-slate-500 truncate">{s.user.email}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-1 shrink-0">
-                        {s.reasons.map((r, i) => (
-                          <span key={i} className={`text-xs px-2 py-0.5 rounded-full border ${r.startsWith('Warning') ? 'text-amber-400 border-amber-500/20 bg-amber-500/5' : 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5'}`}>
-                            {r}
-                          </span>
-                        ))}
                       </div>
                     </label>
                   ))}
@@ -1298,7 +1304,6 @@ function RoundCard({
                   assignment={a}
                   roundDeadline={round.deadline}
                   roundStatus={round.status}
-                  repeatedInRounds={(reviewerRoundNumbers[a.reviewer.id] ?? []).filter(roundNumber => roundNumber !== round.roundNumber)}
                   onRefresh={onRefresh}
                   onReassign={openAddPanel}
                 />
@@ -1630,7 +1635,9 @@ function RoundCard({
 
 export default function RoundsPage() {
   const { user } = useUser();
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const manualPaperSelectionRef = useRef(false);
   const [papers, setPapers] = useState<CoordinatedPaper[]>([]);
   const [paperSearch, setPaperSearch] = useState('');
   const [selectedPaperId, setSelectedPaperId] = useState<string | null>(null);
@@ -1715,7 +1722,9 @@ export default function RoundsPage() {
   }, []);
 
   const handleSelectPaper = (paperId: string) => {
+    manualPaperSelectionRef.current = true;
     if (selectedPaperId === paperId) {
+      router.replace('/rounds', { scroll: false });
       setSelectedPaperId(null);
       setRounds([]);
       setEditingOverleaf(false);
@@ -1724,6 +1733,7 @@ export default function RoundsPage() {
       return;
     }
 
+    router.replace(`/rounds?paper=${paperId}`, { scroll: false });
     setSelectedPaperId(paperId);
     setRounds([]);
     setEditingOverleaf(false);
@@ -1734,7 +1744,16 @@ export default function RoundsPage() {
 
   useEffect(() => {
     const paperId = searchParams.get('paper');
-    if (!paperId || loadingPapers || selectedPaperId === paperId) return;
+    if (manualPaperSelectionRef.current) {
+      if (paperId === selectedPaperId || (!paperId && selectedPaperId === null)) {
+        manualPaperSelectionRef.current = false;
+      }
+      return;
+    }
+    if (!paperId) {
+      return;
+    }
+    if (loadingPapers || selectedPaperId === paperId) return;
     if (!papers.some(paper => paper.id === paperId)) return;
 
     setSelectedPaperId(paperId);
@@ -1825,27 +1844,8 @@ export default function RoundsPage() {
 
   const selectedPaper = papers.find(p => p.id === selectedPaperId);
   
-  const latestRound = rounds.length > 0 ? rounds[rounds.length - 1] : null;
+  const latestRound = rounds.length > 0 ? rounds[0] : null;
   const canCreateNextRound = !latestRound || latestRound.status === 'Completed';
-  const reviewerRoundNumbers = React.useMemo(() => {
-    const byReviewer: Record<string, Set<number>> = {};
-
-    rounds.forEach(round => {
-      round.assignments.forEach(assignment => {
-        if (!byReviewer[assignment.reviewer.id]) {
-          byReviewer[assignment.reviewer.id] = new Set<number>();
-        }
-        byReviewer[assignment.reviewer.id].add(round.roundNumber);
-      });
-    });
-
-    return Object.fromEntries(
-      Object.entries(byReviewer).map(([reviewerId, roundNumbers]) => [
-        reviewerId,
-        Array.from(roundNumbers).sort((a, b) => a - b),
-      ]),
-    );
-  }, [rounds]);
 
   return (
     <div className="max-w-5xl mx-auto py-6 space-y-8 animate-in fade-in duration-500 mb-20">
@@ -2073,7 +2073,6 @@ export default function RoundsPage() {
                 onRefresh={handleRefresh}
                 coordinatorId={user.id}
                 paperHasOverleafLink={!!selectedPaper?.overleafLink?.trim()}
-                reviewerRoundNumbers={reviewerRoundNumbers}
               />
             ))
           )}

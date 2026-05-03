@@ -42,6 +42,32 @@ export class RoundController {
     return valueUtc < todayUtc;
   }
 
+  private static async getReviewerIdsWithSubmittedReviewForPaper(paperId: string): Promise<Set<string>> {
+    const rows = await AppDataSource.getRepository(Assignment)
+      .createQueryBuilder('assignment')
+      .innerJoin('assignment.round', 'round')
+      .innerJoin('round.paper', 'paper')
+      .innerJoin('assignment.reviewer', 'reviewer')
+      .select('reviewer.id', 'reviewerId')
+      .distinct(true)
+      .where('paper.id = :paperId', { paperId })
+      .andWhere('(assignment.status = :completed OR assignment.submittedAt IS NOT NULL)', {
+        completed: AssignmentStatus.Completed,
+      })
+      .getRawMany<{ reviewerId: string }>();
+
+    return new Set(rows.map(row => row.reviewerId));
+  }
+
+  private static formatReviewersWithReviewContext(users: User[], submittedReviewerIds: Set<string>) {
+    return users.map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      hasPreviouslyCompletedReview: submittedReviewerIds.has(u.id),
+    }));
+  }
+
   static async createReviewRound(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;
@@ -383,6 +409,7 @@ export class RoundController {
       const candidates = await userRepo.find({
         relations: ['labs']
       });
+      const submittedReviewerIds = await RoundController.getReviewerIdsWithSubmittedReviewForPaper(paper.id);
 
       let suggestions = [];
 
@@ -405,8 +432,9 @@ export class RoundController {
         const hasAnyAssignment = round.assignments?.some(a => a.reviewer.id === user.id);
         if (hasAnyAssignment) continue;
 
-        // Rule #8: Completed a review in a previous round → permanently ineligible for this paper
-        let hasSubmittedPrior = false;
+        // Previous rounds do not make someone ineligible for this paper.
+        // They only add context for the coordinator/author while choosing reviewers.
+        const hasSubmittedReviewForPaper = submittedReviewerIds.has(user.id);
         let didNotSubmitPrior = false;
 
         if (paper.rounds) {
@@ -414,19 +442,17 @@ export class RoundController {
             if (r.id === round.id) continue;
             const assignment = r.assignments?.find(a => a.reviewer.id === user.id);
             if (assignment) {
-              if (assignment.status === AssignmentStatus.Completed || assignment.submittedAt) {
-                hasSubmittedPrior = true;
-              } else if ([AssignmentStatus.Accepted, AssignmentStatus.Overdue, AssignmentStatus.PendingExtension].includes(assignment.status) && !assignment.submittedAt) {
+              if ([AssignmentStatus.Accepted, AssignmentStatus.Overdue, AssignmentStatus.PendingExtension].includes(assignment.status) && !assignment.submittedAt) {
                 didNotSubmitPrior = true;
               }
             }
           }
         }
 
-        if (hasSubmittedPrior) continue;
-
         const reasons: string[] = [];
-        if (didNotSubmitPrior) {
+        if (hasSubmittedReviewForPaper) {
+          reasons.push("Warning: Previously completed a review for this paper");
+        } else if (didNotSubmitPrior) {
           reasons.push("Warning: Previously accepted but did not submit");
         } else {
           reasons.push("Eligible Lab Member");
@@ -434,6 +460,7 @@ export class RoundController {
 
         suggestions.push({
           user: { id: user.id, name: user.name, email: user.email, role: user.role },
+          hasPreviouslyCompletedReview: hasSubmittedReviewForPaper,
           reasons
         });
       }
@@ -505,7 +532,8 @@ export class RoundController {
         await roundRepo.save(round);
       }
 
-      return res.status(200).json(round.proposedReviewers.map(u => ({ id: u.id, name: u.name, email: u.email })));
+      const submittedReviewerIds = await RoundController.getReviewerIdsWithSubmittedReviewForPaper(round.paper.id);
+      return res.status(200).json(RoundController.formatReviewersWithReviewContext(round.proposedReviewers, submittedReviewerIds));
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -540,7 +568,8 @@ export class RoundController {
       round.proposedReviewers = (round.proposedReviewers ?? []).filter(r => r.id !== userId);
       await roundRepo.save(round);
 
-      return res.status(200).json(round.proposedReviewers.map(u => ({ id: u.id, name: u.name, email: u.email })));
+      const submittedReviewerIds = await RoundController.getReviewerIdsWithSubmittedReviewForPaper(round.paper.id);
+      return res.status(200).json(RoundController.formatReviewersWithReviewContext(round.proposedReviewers, submittedReviewerIds));
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -567,7 +596,8 @@ export class RoundController {
         return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
       }
 
-      return res.status(200).json(round.proposedReviewers.map(u => ({ id: u.id, name: u.name, email: u.email })));
+      const submittedReviewerIds = await RoundController.getReviewerIdsWithSubmittedReviewForPaper(round.paper.id);
+      return res.status(200).json(RoundController.formatReviewersWithReviewContext(round.proposedReviewers ?? [], submittedReviewerIds));
     } catch (err) {
       console.error(err);
       return res.status(500).json({ message: 'Internal server error' });
@@ -633,6 +663,8 @@ export class RoundController {
         order: { roundNumber: 'DESC' },
       });
 
+      const submittedReviewerIds = await RoundController.getReviewerIdsWithSubmittedReviewForPaper(paperId);
+
       return res.status(200).json(rounds.map(r => ({
         id: r.id,
         roundNumber: r.roundNumber,
@@ -644,7 +676,10 @@ export class RoundController {
         deadline: r.deadline,
         startedAt: r.startedAt,
         completedAt: r.completedAt,
-        proposedReviewers: (r.proposedReviewers ?? []).map(u => ({ id: u.id, name: u.name, email: u.email })),
+        proposedReviewers: RoundController.formatReviewersWithReviewContext(
+          r.proposedReviewers ?? [],
+          submittedReviewerIds,
+        ),
         aiReviewReport: r.aiReviewReport,
         complianceReport: r.complianceReportsByUser?.[user.id]?.report ?? (r.complianceReportsByUser ? null : r.complianceReport),
         annotatedPdfUrl: r.annotatedPdfUrl,
@@ -706,6 +741,8 @@ export class RoundController {
         order: { roundNumber: 'DESC' },
       });
 
+      const submittedReviewerIds = await RoundController.getReviewerIdsWithSubmittedReviewForPaper(paperId);
+
       const formatted = rounds.map(round => ({
         id: round.id,
         roundNumber: round.roundNumber,
@@ -740,6 +777,7 @@ export class RoundController {
           deadline: a.deadline,
           invitationSent: a.invitationSent,
           reviewer: { id: a.reviewer.id, name: a.reviewer.name, email: a.reviewer.email },
+          hasPreviouslyCompletedReview: submittedReviewerIds.has(a.reviewer.id),
           pendingDeclineRequest: a.declineRequests?.find(d => d.status === DeclineRequestStatus.Pending) ?? null,
           pendingExtensionRequest: a.extensions?.find(e => e.status === ExtensionStatus.Pending) ?? null,
           reviewSummary: a.reviewSummary ? { text: a.reviewSummary.text, submittedAt: a.reviewSummary.submittedAt } : null,
@@ -793,6 +831,7 @@ export class RoundController {
       ]);
 
       const assignments = round.assignments ?? [];
+      const submittedReviewerIds = await RoundController.getReviewerIdsWithSubmittedReviewForPaper(round.paper.id);
 
       const statusCounts: Record<string, number> = {};
       for (const s of Object.values(AssignmentStatus)) statusCounts[s] = 0;
@@ -803,6 +842,7 @@ export class RoundController {
         .map(a => ({
           id: a.id,
           reviewer: { id: a.reviewer.id, name: a.reviewer.name, email: a.reviewer.email },
+          hasPreviouslyCompletedReview: submittedReviewerIds.has(a.reviewer.id),
           status: a.status,
           deadline: a.deadline,
         }));
@@ -812,6 +852,7 @@ export class RoundController {
         .map(a => ({
           id: a.id,
           reviewer: { id: a.reviewer.id, name: a.reviewer.name, email: a.reviewer.email },
+          hasPreviouslyCompletedReview: submittedReviewerIds.has(a.reviewer.id),
           status: a.status,
           deadline: a.deadline,
         }));

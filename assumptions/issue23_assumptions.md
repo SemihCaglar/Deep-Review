@@ -120,4 +120,6 @@ Both paths lead directly into the reassignment flow without an extra step.
 
 ## Suggest Reviewers
 
-**A23.** In `suggestReviewers`, reviewers who accepted an assignment in a previous round but did not submit a review (e.g., status is `Accepted`, `PendingExtension`, or `Overdue`) are not permanently excluded but are flagged with a warning: *"Warning: Previously accepted but did not submit"*.
+**A22.** A reviewer may be assigned to the same paper across multiple rounds. Completing a review in a previous round does **not** block them from later rounds; it may only be shown as informational context.
+
+**A23.** In `suggestReviewers`, reviewers who accepted an assignment in a previous round but did not submit a review (e.g., status is `Accepted`, `PendingExtension`, or `Overdue`) remain eligible but are flagged with a warning: *"Warning: Previously accepted but did not submit"*.

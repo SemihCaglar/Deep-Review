@@ -503,11 +503,11 @@ describe('11 · Complete review', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 12. SUGGESTIONS AFTER COMPLETION
+// 12. SUGGESTIONS WITH CURRENT-ROUND ASSIGNMENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('12 · Suggestions after completion', () => {
-    test('reviewer2 excluded from suggestions after completing review', async () => {
+describe('12 · Suggestions with current-round assignments', () => {
+    test('reviewer2 excluded from suggestions because they already have an assignment in this round', async () => {
         const res = await api(coordinatorToken).get(`/api/rounds/${roundId}/suggest`);
         expect(res.status).toBe(200);
         const ids = res.body.map((s: any) => s.user.id);
@@ -525,7 +525,7 @@ describe('13 · Cancel and re-assign', () => {
         expect(res.status).toBe(200);
     });
 
-    test('reviewer1 does NOT reappear in suggestions after cancel', async () => {
+    test('reviewer1 does NOT reappear in suggestions after cancel within the same round', async () => {
         const res = await api(coordinatorToken).get(`/api/rounds/${roundId}/suggest`);
         const ids = res.body.map((s: any) => s.user.id);
         expect(ids).not.toContain(reviewer1Id);
@@ -607,7 +607,7 @@ describe('15 · Process decline request', () => {
         expect(res.status).toBe(400);
     });
 
-    test('declined reviewer no longer appears in suggestions (not Cancelled)', async () => {
+    test('declined reviewer no longer appears in suggestions for the same round', async () => {
         const res = await api(coordinatorToken).get(`/api/rounds/${roundId}/suggest`);
         const ids = res.body.map((s: any) => s.user.id);
         expect(ids).not.toContain(reviewer4Id);
