@@ -1635,6 +1635,7 @@ export default function RoundsPage() {
   const [paperSearch, setPaperSearch] = useState('');
   const [selectedPaperId, setSelectedPaperId] = useState<string | null>(null);
   const [rounds, setRounds] = useState<RoundWithAssignments[]>([]);
+  const [pendingRoundRequestsByPaper, setPendingRoundRequestsByPaper] = useState<Record<string, RoundWithAssignments[]>>({});
   const [loadingPapers, setLoadingPapers] = useState(true);
   const [loadingRounds, setLoadingRounds] = useState(false);
   const [papersError, setPapersError] = useState('');
@@ -1659,7 +1660,25 @@ export default function RoundsPage() {
   useEffect(() => {
     if (!user.id) return;
     getMyCoordinatedPapersRequest()
-      .then(setPapers)
+      .then(async data => {
+        setPapers(data);
+
+        const pendingEntries = await Promise.all(
+          data.map(async paper => {
+            try {
+              const paperRounds = await getPaperRoundsRequest(paper.id);
+              return [
+                paper.id,
+                paperRounds.filter(round => round.status === 'Draft' && !round.createdByCoordinator),
+              ] as const;
+            } catch {
+              return [paper.id, []] as const;
+            }
+          }),
+        );
+
+        setPendingRoundRequestsByPaper(Object.fromEntries(pendingEntries));
+      })
       .catch(e => setPapersError(e instanceof ApiError ? e.message : 'Failed to load papers'))
       .finally(() => setLoadingPapers(false));
   }, [user.id]);
@@ -1684,7 +1703,13 @@ export default function RoundsPage() {
     setRoundsError('');
     setShowCreateRound(false);
     getPaperRoundsRequest(paperId)
-      .then(setRounds)
+      .then(paperRounds => {
+        setRounds(paperRounds);
+        setPendingRoundRequestsByPaper(prev => ({
+          ...prev,
+          [paperId]: paperRounds.filter(round => round.status === 'Draft' && !round.createdByCoordinator),
+        }));
+      })
       .catch(e => setRoundsError(e instanceof ApiError ? e.message : 'Failed to load rounds'))
       .finally(() => setLoadingRounds(false));
   }, []);
@@ -1883,6 +1908,12 @@ export default function RoundsPage() {
                     {paper.status}
                   </span>
                 </div>
+                {(pendingRoundRequestsByPaper[paper.id]?.length ?? 0) > 0 && (
+                  <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-300">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    {pendingRoundRequestsByPaper[paper.id].length} round request pending
+                  </div>
+                )}
               </button>
             ))}
           </div>
