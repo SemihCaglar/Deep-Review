@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
 import { Round, RoundStatus, VenueCategory } from '../entities/Round';
-import { Paper } from '../entities/Paper';
+import { Paper, PaperStatus } from '../entities/Paper';
 import { User, UserRole } from '../entities/User';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { DeclineRequestStatus } from '../entities/DeclineRequest';
@@ -130,6 +130,10 @@ export class RoundController {
       const isAuthor = paper.authors?.some(a => a.id === user.id);
       if (!isCoordinator && !isAuthor) {
         return res.status(403).json({ message: 'Forbidden: You are not a coordinator or author of this paper' });
+      }
+
+      if (paper.status === PaperStatus.Accepted) {
+        return res.status(400).json({ message: 'Cannot create a new round for an accepted paper' });
       }
 
       const activeRound = await roundRepo.findOne({

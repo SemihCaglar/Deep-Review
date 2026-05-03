@@ -752,7 +752,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                             <div>
                                             <div className="flex items-center gap-2">
                                                 <h3 className="text-white font-semibold">Round {round.roundNumber}</h3>
-                                                {round.assignments.some(a => a.status === 'Completed' && !a.hasRating) && (
+                                                {!user.isCoordinator && round.assignments.some(a => a.status === 'Completed' && !a.hasRating) && (
                                                     <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.6)] border border-purple-400/20" title="Waiting rating" />
                                                 )}
                                             </div>
@@ -1392,7 +1392,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                 <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-xs font-bold">
                                                     {latestRound.roundNumber}
                                                 </div>
-                                                {paperHistory?.rounds?.find(r => r.roundNumber === latestRound.roundNumber)?.assignments?.some(a => a.status === 'Completed' && !a.hasRating) && (
+                                                {!user.isCoordinator && paperHistory?.rounds?.find(r => r.roundNumber === latestRound.roundNumber)?.assignments?.some(a => a.status === 'Completed' && !a.hasRating) && (
                                                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(168,85,247,0.5)]" title="Waiting rating" />
                                                 )}
                                             </div>
@@ -1434,7 +1434,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-xs font-bold">
                                                         {round.roundNumber}
                                                     </div>
-                                                    {paperHistory?.rounds?.find(r => r.roundNumber === round.roundNumber)?.assignments?.some(a => a.status === 'Completed' && !a.hasRating) && (
+                                                    {!user.isCoordinator && paperHistory?.rounds?.find(r => r.roundNumber === round.roundNumber)?.assignments?.some(a => a.status === 'Completed' && !a.hasRating) && (
                                                         <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(168,85,247,0.5)]" title="Waiting rating" />
                                                     )}
                                                 </div>
@@ -1587,7 +1587,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                                                     <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-xs font-bold">
                                                         {round.roundNumber}
                                                     </div>
-                                                    {paperHistory?.rounds?.find(r => r.roundNumber === round.roundNumber)?.assignments?.some(a => a.status === 'Completed' && !a.hasRating) && (
+                                                    {!user.isCoordinator && paperHistory?.rounds?.find(r => r.roundNumber === round.roundNumber)?.assignments?.some(a => a.status === 'Completed' && !a.hasRating) && (
                                                         <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-purple-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(168,85,247,0.5)]" title="Waiting rating" />
                                                     )}
                                                 </div>

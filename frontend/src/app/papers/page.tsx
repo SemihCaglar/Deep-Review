@@ -266,7 +266,7 @@ export default function PapersList() {
                                                 {typeof paper.totalAssignments === 'number' && (
                                                     <span>{paper.completedAssignments || 0}/{paper.totalAssignments} reviews completed</span>
                                                 )}
-                                                {typeof paper.waitingRatingsCount === 'number' && paper.waitingRatingsCount > 0 && (
+                                                {!user.isCoordinator && typeof paper.waitingRatingsCount === 'number' && paper.waitingRatingsCount > 0 && (
                                                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">
                                                         <FileText className="w-3.5 h-3.5" />
                                                         {paper.waitingRatingsCount} waiting rating{paper.waitingRatingsCount !== 1 ? 's' : ''}
