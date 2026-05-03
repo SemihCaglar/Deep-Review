@@ -449,6 +449,9 @@ export type AuthorRound = {
   complianceReport?: ComplianceReport | null;
   referenceVerificationReport?: ReferenceVerificationReport | null;
   annotatedPdfUrl?: string | null;
+  checklistJson?: EmpiricalStandardsChecklist | null;
+  checklistUrl?: string | null;
+  confirmedChecklistJson?: { selectedStandards: string[]; confirmedAt: string; confirmedBy: string } | null;
   artifacts?: {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
     aiReviewReports: AIReviewReportHistory[];

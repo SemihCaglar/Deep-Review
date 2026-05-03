@@ -1421,6 +1421,16 @@ export class RoundController {
       round.aiReviewReport = aiReviewResult.summaryReport;
       round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
 
+      if (complianceReport) {
+        round.complianceReportsByUser = {
+          ...(round.complianceReportsByUser ?? {}),
+          [user.id]: {
+            report: complianceReport,
+            createdAt: new Date().toISOString(),
+          },
+        };
+      }
+
       if (aiReviewResult.referenceVerificationReport) {
         round.referenceVerificationReport = aiReviewResult.referenceVerificationReport;
       }
