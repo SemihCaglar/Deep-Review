@@ -4,14 +4,23 @@ import { Lab } from '../entities/Lab';
 import { User, UserRole } from '../entities/User';
 import { RoundStatus } from '../entities/Round';
 
+export type AnalyticsPeriod = 'monthly' | 'yearly' | 'overall';
+
 export interface UserLabStats {
   userId: string;
   name: string;
   email: string;
   totalAssigned: number;
+  totalAccepted: number;
   totalCompleted: number;
   totalIncomplete: number;
   totalDeclined: number;
+  acceptanceRate: number | null;
+  rejectionRate: number | null;
+  onTimeCompleted: number;
+  delayedCompleted: number;
+  onTimeRate: number | null;
+  delayedRate: number | null;
   ratingCount: number;
   avgQualityScore: number | null;
   avgQuantityScore: number | null;
@@ -26,7 +35,13 @@ export interface RankedReviewer extends UserLabStats {
 export interface LabRankingsResult {
   rankings: RankedReviewer[];
   summary: {
+    period: AnalyticsPeriod;
+    periodStart: string | null;
+    periodEnd: string | null;
     totalReviewers: number;
+    totalAssigned: number;
+    totalCompleted: number;
+    avgReviewerScore: number | null;
     avgAggregateScore: number | null;
     highestScore: number | null;
     lowestScore: number | null;
@@ -34,7 +49,50 @@ export interface LabRankingsResult {
   };
 }
 
-export async function computeUserLabStats(user: User, labId: string): Promise<UserLabStats> {
+type PeriodWindow = {
+  period: AnalyticsPeriod;
+  start: Date | null;
+  end: Date | null;
+};
+
+function getPeriodWindow(period: AnalyticsPeriod): PeriodWindow {
+  const now = new Date();
+  if (period === 'monthly') {
+    return {
+      period,
+      start: new Date(now.getFullYear(), now.getMonth(), 1),
+      end: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+    };
+  }
+
+  if (period === 'yearly') {
+    return {
+      period,
+      start: new Date(now.getFullYear(), 0, 1),
+      end: new Date(now.getFullYear() + 1, 0, 1),
+    };
+  }
+
+  return { period, start: null, end: null };
+}
+
+function effectiveAssignmentDeadline(assignment: Assignment): Date | null {
+  return assignment.deadline ?? assignment.round?.deadline ?? null;
+}
+
+function isWithinWindow(value: Date | string | null | undefined, window: PeriodWindow): boolean {
+  if (!window.start || !window.end) return true;
+  if (!value) return false;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  return date >= window.start && date < window.end;
+}
+
+export async function computeUserLabStats(
+  user: User,
+  labId: string,
+  window: PeriodWindow = getPeriodWindow('overall'),
+): Promise<UserLabStats> {
   const assignmentRepo = AppDataSource.getRepository(Assignment);
 
   // Fetch all assignments for this reviewer on papers belonging to this lab.
@@ -51,17 +109,36 @@ export async function computeUserLabStats(user: User, labId: string): Promise<Us
     .andWhere('lab.id = :labId', { labId })
     .getMany();
 
-  const totalAssigned = assignments.length;
-  const totalCompleted = assignments.filter(a => a.status === AssignmentStatus.Completed).length;
-  const totalDeclined = assignments.filter(a => a.status === AssignmentStatus.Declined).length;
+  const assignmentsInPeriod = assignments.filter(a => isWithinWindow(a.invitedAt, window));
+  const completedAssignmentsInPeriod = assignments.filter(a =>
+    a.status === AssignmentStatus.Completed && isWithinWindow(a.submittedAt, window),
+  );
+  const totalAssigned = assignmentsInPeriod.length;
+  const totalAccepted = assignmentsInPeriod.filter(a => a.acceptedAt != null).length;
+  const totalCompleted = completedAssignmentsInPeriod.length;
+  const totalDeclined = assignmentsInPeriod.filter(a => a.status === AssignmentStatus.Declined).length;
+  const acceptanceRate = totalAssigned > 0 ? (totalAccepted / totalAssigned) * 100 : null;
+  const rejectionRate = totalAssigned > 0 ? (totalDeclined / totalAssigned) * 100 : null;
+  const onTimeCompleted = completedAssignmentsInPeriod.filter(a => {
+    const deadline = effectiveAssignmentDeadline(a);
+    return a.submittedAt != null && deadline != null && a.submittedAt <= deadline;
+  }).length;
+  const delayedCompleted = completedAssignmentsInPeriod.filter(a => {
+    const deadline = effectiveAssignmentDeadline(a);
+    return a.submittedAt != null && (deadline == null || a.submittedAt > deadline);
+  }).length;
+  const onTimeRate = totalCompleted > 0 ? (onTimeCompleted / totalCompleted) * 100 : null;
+  const delayedRate = totalCompleted > 0 ? (delayedCompleted / totalCompleted) * 100 : null;
   // Incomplete = Overdue, or Accepted while the round is already Completed
-  const totalIncomplete = assignments.filter(
+  const totalIncomplete = assignmentsInPeriod.filter(
     a =>
       a.status === AssignmentStatus.Overdue ||
       (a.status === AssignmentStatus.Accepted && a.round?.status === RoundStatus.Completed),
   ).length;
 
-  const ratings = assignments.filter(a => a.rating != null).map(a => a.rating);
+  const ratings = assignments
+    .filter(a => a.rating != null && isWithinWindow(a.rating.createdAt, window))
+    .map(a => a.rating);
   const ratingCount = ratings.length;
 
   let avgQualityScore: number | null = null;
@@ -81,9 +158,16 @@ export async function computeUserLabStats(user: User, labId: string): Promise<Us
     name: user.name,
     email: user.email,
     totalAssigned,
+    totalAccepted,
     totalCompleted,
     totalIncomplete,
     totalDeclined,
+    acceptanceRate,
+    rejectionRate,
+    onTimeCompleted,
+    delayedCompleted,
+    onTimeRate,
+    delayedRate,
     ratingCount,
     avgQualityScore,
     avgQuantityScore,
@@ -93,7 +177,12 @@ export async function computeUserLabStats(user: User, labId: string): Promise<Us
 }
 
 export async function computeLabRankings(labId: string): Promise<LabRankingsResult> {
+  return computeLabRankingsForPeriod(labId, 'overall');
+}
+
+export async function computeLabRankingsForPeriod(labId: string, period: AnalyticsPeriod): Promise<LabRankingsResult> {
   const labRepo = AppDataSource.getRepository(Lab);
+  const window = getPeriodWindow(period);
 
   const lab = await labRepo.findOne({ where: { id: labId }, relations: ['members'] });
   if (!lab) {
@@ -103,7 +192,7 @@ export async function computeLabRankings(labId: string): Promise<LabRankingsResu
   // Only LabMembers can be reviewers — Coordinators and Admins are excluded
   const reviewers = lab.members.filter(m => m.role === UserRole.LabMember);
 
-  const allStats = await Promise.all(reviewers.map(m => computeUserLabStats(m, labId)));
+  const allStats = await Promise.all(reviewers.map(m => computeUserLabStats(m, labId, window)));
 
   // Sort descending by aggregateScore; reviewers with no ratings go to the bottom
   const sorted = [...allStats].sort((a, b) => {
@@ -120,6 +209,8 @@ export async function computeLabRankings(labId: string): Promise<LabRankingsResu
 
   const scoredReviewers = rankings.filter(r => r.aggregateScore !== null);
   const totalRatingsGiven = rankings.reduce((sum, r) => sum + r.ratingCount, 0);
+  const totalAssigned = rankings.reduce((sum, r) => sum + r.totalAssigned, 0);
+  const totalCompleted = rankings.reduce((sum, r) => sum + r.totalCompleted, 0);
 
   const avgAggregateScore =
     scoredReviewers.length > 0
@@ -135,7 +226,13 @@ export async function computeLabRankings(labId: string): Promise<LabRankingsResu
   return {
     rankings,
     summary: {
+      period,
+      periodStart: window.start ? window.start.toISOString() : null,
+      periodEnd: window.end ? window.end.toISOString() : null,
       totalReviewers: rankings.length,
+      totalAssigned,
+      totalCompleted,
+      avgReviewerScore: avgAggregateScore,
       avgAggregateScore,
       highestScore,
       lowestScore,

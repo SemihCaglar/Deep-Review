@@ -834,14 +834,27 @@ export type ReviewerRanking = {
   avgQuantityScore: number | null;
   avgTimeScore: number | null;
   totalAssigned: number;
+  totalAccepted: number;
   totalCompleted: number;
   totalIncomplete: number;
   totalDeclined: number;
+  acceptanceRate: number | null;
+  rejectionRate: number | null;
+  onTimeCompleted: number;
+  delayedCompleted: number;
+  onTimeRate: number | null;
+  delayedRate: number | null;
   ratingCount: number;
 };
 
 export type OverallAnalyticsSummary = {
+  period: 'monthly' | 'yearly' | 'overall';
+  periodStart: string | null;
+  periodEnd: string | null;
   totalReviewers: number;
+  totalAssigned: number;
+  totalCompleted: number;
+  avgReviewerScore: number | null;
   avgAggregateScore: number | null;
   highestScore: number | null;
   lowestScore: number | null;
@@ -857,8 +870,11 @@ export type UserAnalyticsResponse = ReviewerRanking & {
   totalReviewers: number;
 };
 
-export function getOverallAnalyticsRequest() {
-  return apiRequest<OverallAnalyticsResponse>('/ratings/overall');
+export type AnalyticsPeriod = 'monthly' | 'yearly' | 'overall';
+
+export function getOverallAnalyticsRequest(period: AnalyticsPeriod = 'overall') {
+  const query = new URLSearchParams({ period }).toString();
+  return apiRequest<OverallAnalyticsResponse>(`/ratings/overall?${query}`);
 }
 
 export function submitRatingRequest(assignmentId: string, qualityScore: number, quantityScore: number, timeScore: number) {

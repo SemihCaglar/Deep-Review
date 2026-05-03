@@ -4,10 +4,14 @@ import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { Coordinator } from '../entities/Coordinator';
 import { Rating } from '../entities/Rating';
 import { User } from '../entities/User';
-import { computeLabRankings } from '../services/reviewerStatsService';
+import { AnalyticsPeriod, computeLabRankings, computeLabRankingsForPeriod } from '../services/reviewerStatsService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class RatingAnalyticsController {
+  private static parseAnalyticsPeriod(value: unknown): AnalyticsPeriod {
+    return value === 'monthly' || value === 'yearly' || value === 'overall' ? value : 'overall';
+  }
+
   static async rateReviewer(req: AuthenticatedRequest, res: Response) {
     try {
       const authenticatedUser = req.user;
@@ -80,7 +84,8 @@ export class RatingAnalyticsController {
         return res.status(404).json({ message: 'No lab associated with this coordinator' });
       }
 
-      const result = await computeLabRankings(coordinator.lab.id);
+      const period = RatingAnalyticsController.parseAnalyticsPeriod(req.query.period);
+      const result = await computeLabRankingsForPeriod(coordinator.lab.id, period);
       return res.json(result);
     } catch (err) {
       console.error(err);
