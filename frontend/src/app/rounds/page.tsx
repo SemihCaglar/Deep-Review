@@ -446,6 +446,7 @@ function RoundCard({
   paperHasOverleafLink: boolean;
   isLatestRound: boolean;
 }) {
+  const { user } = useUser();
   const [expanded, setExpanded] = useState(true);
   const [aiToolsOpen, setAiToolsOpen] = useState(false);
 
@@ -732,7 +733,7 @@ function RoundCard({
             <div className="w-9 h-9 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 flex items-center justify-center text-sm font-bold">
               {round.roundNumber}
             </div>
-            {round.assignments.some(a => a.status === 'Completed' && !(a as any).hasRating) && (
+            {!user.isCoordinator && round.assignments.some(a => a.status === 'Completed' && !(a as any).hasRating) && (
               <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-purple-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(168,85,247,0.5)]" title="Waiting rating" />
             )}
           </div>
