@@ -97,12 +97,12 @@ function formatDate(value: string | null) {
   return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function formatScore(value: number | null): string {
-  return value !== null ? value.toFixed(2) : '–';
+function formatScore(value: number | null | undefined): string {
+  return (value !== null && value !== undefined) ? value.toFixed(2) : '–';
 }
 
-function formatPercent(value: number | null): string {
-  return value !== null ? `${value.toFixed(0)}%` : '-';
+function formatPercent(value: number | null | undefined): string {
+  return (value !== null && value !== undefined) ? `${value.toFixed(0)}%` : '-';
 }
 
 function SortButton({
