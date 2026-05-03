@@ -1167,7 +1167,7 @@ function RoundCard({
           {showAddPanel && (
             <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                {reassigningForId ? 'Select Replacement Reviewer' : 'Select reviewers to assign'}
+                Select reviewers to assign
               </p>
               {loadingSuggestions ? (
                 <div className="flex items-center gap-2 text-slate-400 text-sm py-2">
@@ -1202,7 +1202,7 @@ function RoundCard({
                             }`}
                         >
                           <input
-                            type={reassigningForId ? "radio" : "checkbox"}
+                            type="checkbox"
                             name="reviewerSelect"
                             checked={selectedIds.has(s.user.id)}
                             onChange={() => toggleSelect(s.user.id)}
@@ -1237,7 +1237,7 @@ function RoundCard({
                   className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {assigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                  {reassigningForId ? 'Reassign' : `Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ''}`}
+                  {`Assign ${selectedIds.size > 0 ? `(${selectedIds.size})` : ''}`}
                 </button>
                 <button
                   onClick={async () => {
@@ -1550,12 +1550,26 @@ export default function RoundsPage() {
             </div>
             {(() => {
               const q = paperSearch.trim().toLowerCase();
-              const filtered = q
+              const filtered = (q
                 ? papers.filter(p =>
                   p.title.toLowerCase().includes(q) ||
                   (p.authors ?? []).some(a => a.name.toLowerCase().includes(q))
                 )
-                : papers;
+                : [...papers]).sort((a, b) => {
+                  const priority = (s: string) => {
+                    switch (s) {
+                      case 'In Review': return 0;
+                      case 'Draft':     return 1;
+                      case 'Accepted':  return 2;
+                      case 'Completed': return 3;
+                      default:          return 4;
+                    }
+                  };
+                  const pa = priority(a.status);
+                  const pb = priority(b.status);
+                  if (pa !== pb) return pa - pb;
+                  return a.title.localeCompare(b.title);
+                });
               return filtered.length === 0 ? (
                 <p className="text-sm text-slate-500">No papers match your search.</p>
               ) : (
