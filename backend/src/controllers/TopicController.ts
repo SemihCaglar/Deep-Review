@@ -7,6 +7,11 @@ import { UserRole, User } from '../entities/User';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class TopicController {
+  /**
+   * Retrieves all topics associated with a specific lab.
+   * @param req - The authenticated request object with labId in params.
+   * @param res - The express response object.
+   */
   static async getLabTopics(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
     if (user?.frozenAt) {
@@ -26,6 +31,11 @@ export class TopicController {
     return res.status(200).json(lab.topics);
   }
 
+  /**
+   * Retrieves all topics available across all labs the user belongs to.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getAllTopics(req: AuthenticatedRequest, res: Response) {
     const user = req.user;
     if (!user) return res.status(401).json({ message: 'Authentication required' });
@@ -48,6 +58,12 @@ export class TopicController {
     return res.status(200).json(Array.from(topicMap.values()));
   }
 
+  /**
+   * Adds a topic to a lab. Creates the topic if it doesn't exist system-wide.
+   * Requires membership or coordinator role in the target lab.
+   * @param req - The authenticated request object with labId in params and name in body.
+   * @param res - The express response object.
+   */
   static async addTopicToLab(req: AuthenticatedRequest, res: Response) {
     const labId = req.params.labId as string;
     const { name } = req.body ?? {};
@@ -83,6 +99,12 @@ export class TopicController {
     return res.status(200).json(topic);
   }
 
+  /**
+   * Removes a topic from a lab.
+   * Requires membership or coordinator role in the target lab.
+   * @param req - The authenticated request object with labId and topicId in params.
+   * @param res - The express response object.
+   */
   static async removeTopicFromLab(req: AuthenticatedRequest, res: Response) {
     const labId = req.params.labId as string;
     const topicId = req.params.topicId as string;
@@ -102,6 +124,12 @@ export class TopicController {
     return res.status(200).json({ message: 'Topic removed from lab' });
   }
 
+  /**
+   * Updates a topic for a specific lab by switching it to a different (possibly new) topic.
+   * Requires membership or coordinator role in the target lab.
+   * @param req - The authenticated request object with labId and topicId in params and newName in body.
+   * @param res - The express response object.
+   */
   static async updateTopicInLab(req: AuthenticatedRequest, res: Response) {
     const labId = req.params.labId as string;
     const topicId = req.params.topicId as string;
@@ -146,6 +174,9 @@ export class TopicController {
     return res.status(200).json(nextTopic);
   }
 
+  /**
+   * Checks if a user has permission to access or modify a lab's data.
+   */
   private static async checkLabAccess(userId: string, labId: string, role: string): Promise<boolean> {
     if (role === UserRole.Admin) return true;
 

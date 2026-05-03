@@ -23,6 +23,12 @@ const ACTIVE_STATUSES = [
   AssignmentStatus.Overdue,
 ];
 
+/**
+ * Computes workload statistics for a batch of users.
+ * Calculates a weighted workload percentage based on active reviews, author rounds, and recent activity.
+ * @param userIds - List of user IDs to process.
+ * @returns A map of user IDs to their corresponding workload data.
+ */
 export async function computeWorkloadBatch(userIds: string[]): Promise<Map<string, WorkloadData>> {
   const result = new Map<string, WorkloadData>();
   if (userIds.length === 0) return result;

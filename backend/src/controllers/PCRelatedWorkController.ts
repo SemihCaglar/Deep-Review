@@ -5,6 +5,11 @@ import { PCRelatedWorkRecommendationService } from '../ai_content/services/pcRel
 import type { AuthenticatedRequest } from '../types/auth';
 import type { RelatedWorkRecommendation } from '../types/pcRelatedWork';
 
+/**
+ * Converts recommendation data into a CSV string.
+ * @param recommendations - List of related work recommendations.
+ * @returns A formatted CSV string.
+ */
 function toCSV(recommendations: RelatedWorkRecommendation[]): string {
   const headers = ['PC Member', 'Paper Title', 'Year', 'Venue', 'DOI', 'URL', 'Confidence', 'Relationship Type', 'Reason'];
   const escape = (v: string | null | number) => {
@@ -26,6 +31,13 @@ function toCSV(recommendations: RelatedWorkRecommendation[]): string {
 }
 
 export class PCRelatedWorkController {
+  /**
+   * Retrieves PC related work recommendations for a paper.
+   * Can accept a venue URL to fetch committee members or a manual list.
+   * Optionally saves the results to a specific round.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getRecommendations(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;

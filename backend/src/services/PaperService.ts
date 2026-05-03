@@ -12,6 +12,11 @@ import { sendTemplatedEmail } from './emailService';
 import { TemplateName } from '../entities/Template';
 
 export class PaperService {
+  /**
+   * Retrieves a paper by its ID, including all necessary relations and author sorting.
+   * @param id - The paper ID.
+   * @returns The paper entity or null if not found.
+   */
   static async getPaperById(id: string): Promise<Paper | null> {
     const paperRepo = AppDataSource.getRepository(Paper);
     const paper = await paperRepo.findOne({
@@ -49,7 +54,11 @@ export class PaperService {
   }
 
   /**
-   * Registers a new paper and saves it as a Draft.
+   * Registers a new paper in the system.
+   * Handles author assignment, lab mapping, topic validation, and collaboration invitations.
+   * @param dto - The registration data.
+   * @param creator - The user creating the paper.
+   * @returns The newly created paper entity.
    */
   static async registerPaper(dto: RegisterPaperDto, creator: User): Promise<Paper> {
     const paperRepo = AppDataSource.getRepository(Paper);
@@ -208,6 +217,12 @@ export class PaperService {
     return fullyHydrated!;
   }
 
+  /**
+   * Updates the abstract text of a paper.
+   * @param paperId - The ID of the paper to update.
+   * @param newAbstract - The new abstract text.
+   * @returns The updated paper entity.
+   */
   static async updateAbstract(paperId: string, newAbstract: string): Promise<Paper> {
     const paperRepo = AppDataSource.getRepository(Paper);
     const paper = await paperRepo.findOne({ where: { id: paperId } });
@@ -221,6 +236,13 @@ export class PaperService {
     return updatedPaper;
   }
 
+  /**
+   * Updates the topics associated with a paper.
+   * Validates that topics are available within the paper's labs.
+   * @param paperId - The ID of the paper to update.
+   * @param topicIds - List of topic IDs to associate.
+   * @returns The updated paper entity.
+   */
   static async updateTopics(paperId: string, topicIds: string[]): Promise<Paper> {
     const paperRepo = AppDataSource.getRepository(Paper);
 
@@ -253,6 +275,14 @@ export class PaperService {
     return updatedPaper;
   }
 
+  /**
+   * Updates the authors and their order for a paper.
+   * Enforces role-based restrictions and lab-membership constraints.
+   * @param paperId - The ID of the paper to update.
+   * @param authorIds - List of author IDs in preferred order.
+   * @param requester - The user performing the update (optional, for permission checks).
+   * @returns The updated paper entity.
+   */
   static async updateAuthors(paperId: string, authorIds: string[], requester?: User): Promise<Paper> {
     const paperRepo = AppDataSource.getRepository(Paper);
     const userRepo = AppDataSource.getRepository<User>('User');

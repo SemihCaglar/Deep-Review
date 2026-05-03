@@ -2,6 +2,12 @@ import { Request, Response } from 'express';
 import { SubmissionRuleExtractionService } from '../ai_content/services/SubmissionRuleExtractionService';
 
 export class SubmissionRuleController {
+  /**
+   * Extracts submission rules from a given URL using AI.
+   * Saves the rules to the database.
+   * @param req - The request object containing submissionUrl in body.
+   * @param res - The response object.
+   */
   static async extractRules(req: Request, res: Response): Promise<void> {
     try {
       const { submissionUrl } = req.body;
@@ -29,6 +35,11 @@ export class SubmissionRuleController {
     }
   }
 
+  /**
+   * Retrieves previously extracted rules for a specific URL from the database.
+   * @param req - The request object containing submissionUrl in query.
+   * @param res - The response object.
+   */
   static async getRules(req: Request, res: Response): Promise<void> {
     try {
       const { submissionUrl } = req.query;
@@ -64,6 +75,11 @@ export class SubmissionRuleController {
     }
   }
 
+  /**
+   * Retrieves all submission rules stored in the system.
+   * @param req - The request object.
+   * @param res - The response object.
+   */
   static async getAllRules(req: Request, res: Response): Promise<void> {
     try {
       const rules = await SubmissionRuleExtractionService.getAllRules();
@@ -81,6 +97,11 @@ export class SubmissionRuleController {
     }
   }
 
+  /**
+   * Deletes submission rules for a specific URL.
+   * @param req - The request object containing submissionUrl in body.
+   * @param res - The response object.
+   */
   static async deleteRules(req: Request, res: Response): Promise<void> {
     try {
       const { submissionUrl } = req.body;

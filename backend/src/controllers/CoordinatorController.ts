@@ -5,20 +5,40 @@ import {
   CoordinatorServiceError,
 } from '../services/CoordinatorService';
 
+/**
+ * Extracts coordinator ID from the request object.
+ * @param req - The express request object.
+ * @returns The coordinator ID or null if not found.
+ */
 function getCoordinatorId(req: Request): string | null {
   const requestWithUser = req as Request & { user?: { id?: string; userId?: string } };
   return requestWithUser.user?.id || requestWithUser.user?.userId || req.body?.coordinatorId || req.body?.userId || null;
 }
 
+/**
+ * Extracts lab ID from the request object.
+ * @param req - The express request object.
+ * @returns The lab ID or null if not found.
+ */
 function getLabId(req: Request): string | null {
   const requestWithUser = req as Request & { user?: { labId?: string } };
   return requestWithUser.user?.labId || req.body?.labId || null;
 }
 
+/**
+ * Extracts assignment ID from the request object.
+ * @param req - The express request object.
+ * @returns The assignment ID or null if not found.
+ */
 function getAssignmentId(req: Request): string | null {
   return req.params.id || req.body?.assignmentId || req.body?.responseId || null;
 }
 
+/**
+ * Parses a string value into a CoordinatorDecision.
+ * @param value - The value to parse.
+ * @returns 'Approve', 'Reject', or null if invalid.
+ */
 function parseDecision(value: unknown): CoordinatorDecision | null {
   if (typeof value !== 'string') {
     return null;
@@ -35,6 +55,11 @@ function parseDecision(value: unknown): CoordinatorDecision | null {
   return null;
 }
 
+/**
+ * Standardized error handler for coordinator-related requests.
+ * @param error - The error object.
+ * @param res - The express response object.
+ */
 function handleCoordinatorError(error: unknown, res: Response) {
   if (error instanceof CoordinatorServiceError) {
     return res.status(error.statusCode).json({ message: error.message });
@@ -45,6 +70,11 @@ function handleCoordinatorError(error: unknown, res: Response) {
 }
 
 export class CoordinatorController {
+  /**
+   * Processes a decline request from a reviewer (Approve or Reject).
+   * @param req - The request object.
+   * @param res - The response object.
+   */
   static async processDeclineRequest(req: Request, res: Response) {
     try {
       const assignmentId = getAssignmentId(req);
@@ -77,6 +107,11 @@ export class CoordinatorController {
     }
   }
 
+  /**
+   * Processes an extension request from a reviewer (Approve or Reject).
+   * @param req - The request object.
+   * @param res - The response object.
+   */
   static async processExtensionRequest(req: Request, res: Response) {
     try {
       const assignmentId = getAssignmentId(req);

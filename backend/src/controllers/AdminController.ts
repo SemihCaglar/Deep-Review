@@ -20,10 +20,16 @@ import { logAudit } from '../services/auditService';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * Trims and lowercases an email address.
+ */
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+/**
+ * Validates an email address format.
+ */
 function isValidEmail(email: string) {
   return EMAIL_PATTERN.test(email.trim());
 }
@@ -31,6 +37,13 @@ function isValidEmail(email: string) {
 export class AdminController {
   // ==== USER MANAGEMENT ====
 
+  /**
+   * Retrieves all users in the system.
+   * Also performs cleanup of orphan coordinators.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getAllUsers(req: AuthenticatedRequest, res: Response) {
     await AppDataSource.transaction(async manager => {
       await AdminController.deleteOrphanCoordinators(manager);
@@ -41,6 +54,12 @@ export class AdminController {
     return res.status(200).json(users);
   }
 
+  /**
+   * Creates a new user (Admin or LabMember).
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async createUser(req: AuthenticatedRequest, res: Response) {
     let { name, email, password, role, labId } = req.body ?? {};
 
@@ -95,6 +114,12 @@ export class AdminController {
     return res.status(201).json(user);
   }
 
+  /**
+   * Locks a user's account for a very long period.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async lockUserAccount(req: AuthenticatedRequest, res: Response) {
     const id = req.params.id as string;
     const userRepo = AppDataSource.getRepository<User>('User');
@@ -110,6 +135,12 @@ export class AdminController {
     return res.status(200).json({ message: 'User account locked' });
   }
 
+  /**
+   * Unlocks a user's account and resets failed login attempts.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async unlockUserAccount(req: AuthenticatedRequest, res: Response) {
     const id = req.params.id as string;
     const userRepo = AppDataSource.getRepository<User>('User');
@@ -126,6 +157,13 @@ export class AdminController {
     return res.status(200).json({ message: 'User account unlocked' });
   }
 
+  /**
+   * Deletes a user from the system.
+   * Only allows deletion of users who are not part of any lab.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async deleteUser(req: AuthenticatedRequest, res: Response) {
     const id = req.params.id as string;
     const userRepo = AppDataSource.getRepository<User>('User');
@@ -146,12 +184,24 @@ export class AdminController {
 
   // ==== LAB MANAGEMENT ====
 
+  /**
+   * Retrieves all labs in the system.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getAllLabs(req: AuthenticatedRequest, res: Response) {
     const labRepo = AppDataSource.getRepository(Lab);
     const labs = await labRepo.find({ relations: ['coordinator'] });
     return res.status(200).json(labs);
   }
 
+  /**
+   * Creates a new lab and an associated coordinator account.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async createLab(req: AuthenticatedRequest, res: Response) {
     const { name, description, coordinatorName, coordinatorEmail } = req.body ?? {};
     
@@ -208,6 +258,13 @@ export class AdminController {
     return res.status(201).json(lab);
   }
 
+  /**
+   * Deletes a lab and performs a full cascade of related entities.
+   * Also deletes the coordinator account if they have no other roles.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async deleteLab(req: AuthenticatedRequest, res: Response) {
     const id = req.params.id as string;
     const labRepo = AppDataSource.getRepository(Lab);
@@ -290,6 +347,12 @@ export class AdminController {
     return res.status(200).json({ message: 'Lab deleted' });
   }
 
+  /**
+   * Assigns an existing coordinator to a lab.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async assignCoordinator(req: AuthenticatedRequest, res: Response) {
     const { labId, coordinatorId } = req.body ?? {};
     const labRepo = AppDataSource.getRepository(Lab);
@@ -314,6 +377,12 @@ export class AdminController {
 
   // ==== POLICIES & TEMPLATES ====
 
+  /**
+   * Retrieves all system policies.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getPolicies(req: AuthenticatedRequest, res: Response) {
     const policyRepo = AppDataSource.getRepository(SystemPolicy);
     const policies = await policyRepo.createQueryBuilder('policy')
@@ -322,6 +391,12 @@ export class AdminController {
     return res.status(200).json(policies);
   }
 
+  /**
+   * Updates a specific system policy.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async updatePolicy(req: AuthenticatedRequest, res: Response) {
     const id = req.params.id as string;
     const { value } = req.body ?? {};
@@ -338,6 +413,12 @@ export class AdminController {
     return res.status(200).json(policy);
   }
 
+  /**
+   * Retrieves all email templates.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getTemplates(req: AuthenticatedRequest, res: Response) {
     const templateRepo = AppDataSource.getRepository(Template);
     const templates = await templateRepo.createQueryBuilder('template')
@@ -346,6 +427,12 @@ export class AdminController {
     return res.status(200).json(templates);
   }
 
+  /**
+   * Updates a specific email template.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async updateTemplate(req: AuthenticatedRequest, res: Response) {
     const id = req.params.id as string;
     const { subject, body } = req.body ?? {};
@@ -366,6 +453,12 @@ export class AdminController {
 
   // ==== AUDIT LOGS ====
 
+  /**
+   * Retrieves system-wide audit logs.
+   * Requires Admin role.
+   * @param req - The authenticated request object.
+   * @param res - The express response object.
+   */
   static async getSystemLogs(req: AuthenticatedRequest, res: Response) {
     const logRepo = AppDataSource.getRepository(AuditLog);
     const logs = await logRepo.createQueryBuilder('log')
@@ -379,10 +472,16 @@ export class AdminController {
 
   // ==== UTILS ====
 
+  /**
+   * Helper to log administrative actions to the audit log.
+   */
   private static async logAction(req: AuthenticatedRequest, action: AuditAction, entityType: string, entityId: string, details?: string) {
     await logAudit(action, { actor: req.user, entityType, entityId, details });
   }
 
+  /**
+   * Identifies and deletes coordinators who are no longer assigned to any lab.
+   */
   private static async deleteOrphanCoordinators(manager: EntityManager) {
     const orphanCoordinators = await manager
       .getRepository(Coordinator)
@@ -396,6 +495,9 @@ export class AdminController {
     }
   }
 
+  /**
+   * Performs deep deletion of a coordinator account and all its many-to-many links.
+   */
   private static async deleteCoordinatorAccount(manager: EntityManager, coordinatorId: string) {
     const coordinator = await manager.getRepository(Coordinator).findOne({
       where: { id: coordinatorId },

@@ -5,6 +5,12 @@ import { ReferenceListVerificationService } from '../ai_content/services/Referen
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class AIController {
+  /**
+   * Runs reference verification on an uploaded PDF for a specific round.
+   * Requires the user to be an author or coordinator of the paper.
+   * @param req - The authenticated request object containing the PDF file.
+   * @param res - The express response object.
+   */
   static async runReferenceVerification(req: AuthenticatedRequest, res: Response) {
     try {
       const id = req.params.id as string;

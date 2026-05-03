@@ -29,10 +29,16 @@ export class RoundService {
     AssignmentStatus.Overdue,
   ];
 
+  /**
+   * Checks if a paper has a valid Overleaf link.
+   */
   private static hasOverleafLink(paper: Paper): boolean {
     return typeof paper.overleafLink === 'string' && paper.overleafLink.trim().length > 0;
   }
 
+  /**
+   * Extracts and links submission rules from a venue URL.
+   */
   private static async extractAndLinkSubmissionRules(venueUrl: string | null): Promise<string | null> {
     if (!venueUrl || typeof venueUrl !== 'string') {
       return null;
@@ -59,6 +65,9 @@ export class RoundService {
     }
   }
 
+  /**
+   * Extracts and links rules to a specific round.
+   */
   static async extractAndLinkRules(roundId: string, venueUrl: string): Promise<void> {
     try {
       const ruleSetId = await this.extractAndLinkSubmissionRules(venueUrl);
@@ -72,6 +81,12 @@ export class RoundService {
     }
   }
 
+  /**
+   * Automatically completes a round and its associated paper if all assignments are in terminal states.
+   * @param roundId - The round ID.
+   * @param manager - Optional transaction manager.
+   * @returns True if the round was completed, false otherwise.
+   */
   static async completeRoundIfAllAssignmentsTerminal(
     roundId: string,
     manager: EntityManager = AppDataSource.manager,
@@ -129,6 +144,12 @@ export class RoundService {
     return true;
   }
 
+  /**
+   * Starts a draft round, transitioning it to 'Open' status.
+   * @param roundId - The round ID.
+   * @param coordinatorId - The ID of the coordinator initiating the start.
+   * @returns The updated round entity.
+   */
   static async startRound(roundId: string, coordinatorId: string): Promise<Round> {
     return AppDataSource.transaction(async (manager) => {
       const roundRepo = manager.getRepository(Round);
@@ -172,6 +193,12 @@ export class RoundService {
     });
   }
 
+  /**
+   * Approves a round, creating assignments for proposed reviewers and starting the round.
+   * @param roundId - The round ID.
+   * @param coordinatorId - The coordinator's ID.
+   * @returns An object containing the updated round and assignment statistics.
+   */
   static async approveRound(roundId: string, coordinatorId: string): Promise<{ round: Round; assigned: number; skipped: number }> {
     return AppDataSource.transaction(async (manager) => {
       const roundRepo = manager.getRepository(Round);
@@ -281,6 +308,10 @@ export class RoundService {
     });
   }
 
+  /**
+   * Periodically checks all active assignments and marks them as 'Overdue' if their deadline has passed.
+   * Notifies coordinators and reviewers accordingly.
+   */
   static async checkAndMarkOverdue(): Promise<void> {
     const now = new Date();
 
@@ -350,6 +381,9 @@ export class RoundService {
     }
   }
 
+  /**
+   * Periodically sends automatic deadline reminders to reviewers for upcoming deadlines.
+   */
   static async sendAutoReminders(): Promise<void> {
     const now = new Date();
     const windowEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000); // now + 25 hours

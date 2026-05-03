@@ -27,6 +27,9 @@ interface CoordinatorContext {
 
 export type CoordinatorDecision = 'Approve' | 'Reject';
 
+/**
+ * Normalizes and validates an ID string.
+ */
 function normalizeId(value: unknown, fieldName: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new CoordinatorServiceError(400, `${fieldName} is required`);
@@ -36,6 +39,14 @@ function normalizeId(value: unknown, fieldName: string): string {
 }
 
 export class CoordinatorService {
+  /**
+   * Processes a decline request for an assignment.
+   * Approves or rejects the request and updates assignment status accordingly.
+   * @param assignmentOrResponseId - The ID of the assignment or reviewer response.
+   * @param decision - 'Approve' or 'Reject'.
+   * @param context - The coordinator context (ID and lab ID).
+   * @returns The updated assignment entity.
+   */
   static async processDeclineRequest(
     assignmentOrResponseId: string,
     decision: CoordinatorDecision,
@@ -136,6 +147,15 @@ export class CoordinatorService {
     return result;
   }
 
+  /**
+   * Processes an extension request for an assignment.
+   * @param assignmentOrResponseId - The ID of the assignment or reviewer response.
+   * @param extensionId - The ID of the specific extension request.
+   * @param decision - 'Approve' or 'Reject'.
+   * @param newDeadline - The new proposed deadline.
+   * @param context - The coordinator context.
+   * @returns The updated assignment entity.
+   */
   static async processExtensionRequest(
     assignmentOrResponseId: string,
     extensionId: string,
@@ -223,6 +243,13 @@ export class CoordinatorService {
     });
   }
 
+  /**
+   * Reassigns a reviewer for a paper by canceling the old assignment and creating a new one.
+   * @param oldAssignmentId - The ID of the assignment to replace.
+   * @param newReviewerId - The ID of the new reviewer.
+   * @param context - The coordinator context.
+   * @returns The newly created assignment entity.
+   */
   static async reassignReviewer(
     oldAssignmentId: string,
     newReviewerId: string,
@@ -322,6 +349,9 @@ export class CoordinatorService {
     });
   }
 
+  /**
+   * Helper to find an assignment by either its own ID or an associated response ID.
+   */
   private static async findAssignmentByAssignmentOrResponseId(
     manager: EntityManager,
     id: string,
@@ -359,6 +389,9 @@ export class CoordinatorService {
     return response.assignment;
   }
 
+  /**
+   * Parses and validates a date value.
+   */
   private static parseDate(value: unknown, fieldName: string): Date {
     if (value instanceof Date && !Number.isNaN(value.getTime())) {
       return value;
@@ -376,6 +409,9 @@ export class CoordinatorService {
     return parsedDate;
   }
 
+  /**
+   * Asserts that a coordinator has access to a specific assignment.
+   */
   private static async assertCoordinatorAccess(
     manager: EntityManager,
     assignment: Assignment,
@@ -405,6 +441,9 @@ export class CoordinatorService {
     }
   }
 
+  /**
+   * Updates or creates a ReviewerResponse for backward compatibility.
+   */
   private static async upsertCompatibilityResponse(
     manager: EntityManager,
     assignment: Assignment,
@@ -440,6 +479,9 @@ export class CoordinatorService {
     return responseRepository.save(response);
   }
 
+  /**
+   * Reloads an assignment with all necessary relations.
+   */
   private static async loadAssignment(manager: EntityManager, id: string): Promise<Assignment> {
     const assignment = await manager.getRepository(Assignment).findOne({
       where: { id },
