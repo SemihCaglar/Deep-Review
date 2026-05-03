@@ -221,14 +221,30 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
     setPcRelatedError('');
 
     try {
+      console.log('[Frontend] Starting PC Related Work recommendation...');
+      console.log('[Frontend] Venue:', venueUrl);
+      console.log('[Frontend] Paper:', paperData.title);
+
+      const startTime = Date.now();
       const res = await getPCRelatedWorkRecommendations(
         venueUrl.trim(),
         paperData.title,
         paperData.abstractText || ''
       ) as PCRelatedWorkResponse;
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
+      console.log('[Frontend] Completed in', duration, 's');
+      console.log('[Frontend] Results:', {
+        pcMembers: res.summary.pcMembersExtracted,
+        matched: res.summary.pcMembersMatchedInOpenAlex,
+        candidates: res.summary.candidatePapersChecked,
+        recommendations: res.summary.recommendationsReturned,
+      });
+
       setLocalPCRelatedResult(res);
       onRefresh();
     } catch (err: any) {
+      console.error('[Frontend] Error:', err);
       setPcRelatedError(err.message || 'PC Related Work recommendation failed');
     } finally {
       setRunningPCRelated(false);

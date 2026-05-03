@@ -86,20 +86,31 @@ export class PCRelatedWorkRecommendationService {
     let matchedCount = 0;
     const allPapers: PCMemberPaper[] = [];
 
-    for (const member of members) {
+    for (let i = 0; i < members.length; i++) {
+      const member = members[i];
+      console.log(`[PCRelatedWork] [${i + 1}/${members.length}] Fetching papers for: ${member.name}`);
+
       const paperKey = authorPapersCacheKey(member.id);
       let papers: PCMemberPaper[];
 
       if (authorPapersCache.has(paperKey)) {
         papers = authorPapersCache.get(paperKey)!;
+        console.log(`[PCRelatedWork]   ✓ From cache: ${papers.length} papers`);
       } else {
+        console.log(`[PCRelatedWork]   ⏳ Querying OpenAlex...`);
         const result = await OpenAlexAuthorPaperService.fetchMemberPapers(member);
         papers = result.papers;
-        if (result.matched) matchedCount++;
+        if (result.matched) {
+          matchedCount++;
+          console.log(`[PCRelatedWork]   ✓ Matched: ${papers.length} papers fetched`);
+        } else {
+          console.log(`[PCRelatedWork]   ✗ Not matched in OpenAlex`);
+        }
         authorPapersCache.set(paperKey, papers);
       }
 
       allPapers.push(...papers);
+      console.log(`[PCRelatedWork]   Total candidates so far: ${allPapers.length}`);
 
       if (allPapers.length >= MAX_TOTAL_CANDIDATES) {
         console.warn(`[PCRelatedWork] Candidate cap (${MAX_TOTAL_CANDIDATES}) reached, stopping early`);
@@ -131,8 +142,15 @@ export class PCRelatedWorkRecommendationService {
     // Step 3: GPT relevance judgment
     let recommendations: RelatedWorkRecommendation[] = [];
     if (candidates.length > 0) {
+      console.log(`[PCRelatedWork] Starting GPT relevance judgment on ${candidates.length} candidates...`);
+      const judgmentStart = Date.now();
       const raw = await AIRelevanceService.judgeRelevance(paperTitle, paperAbstract, candidates);
+      const judgmentTime = ((Date.now() - judgmentStart) / 1000).toFixed(2);
+      console.log(`[PCRelatedWork] GPT judgment complete in ${judgmentTime}s - ${raw.length} relevant papers found`);
       recommendations = rankRecommendations(raw).slice(0, MAX_RECOMMENDATIONS);
+      console.log(`[PCRelatedWork] Ranked top ${recommendations.length} recommendations`);
+    } else {
+      console.log(`[PCRelatedWork] No candidates to judge`);
     }
 
     const response: PCRelatedWorkResponse = {
