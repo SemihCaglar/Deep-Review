@@ -1715,6 +1715,15 @@ export default function RoundsPage() {
   }, []);
 
   const handleSelectPaper = (paperId: string) => {
+    if (selectedPaperId === paperId) {
+      setSelectedPaperId(null);
+      setRounds([]);
+      setEditingOverleaf(false);
+      setOverleafError('');
+      setShowCreateRound(false);
+      return;
+    }
+
     setSelectedPaperId(paperId);
     setRounds([]);
     setEditingOverleaf(false);

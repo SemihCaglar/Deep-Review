@@ -43,6 +43,53 @@ function maxDateInputValue(...values: Array<string | null | undefined>) {
     return sorted[sorted.length - 1];
 }
 
+function StarRatingControl({
+    label,
+    description,
+    value,
+    onChange,
+}: {
+    label: string;
+    description: string;
+    value: number;
+    onChange: (value: number) => void;
+}) {
+    return (
+        <div className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3 transition-colors hover:border-white/10 hover:bg-white/[0.04]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+                    <p className="mt-1 text-sm text-slate-300">{description}</p>
+                </div>
+                <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs font-semibold tabular-nums text-slate-300">
+                    {value}/5
+                </span>
+            </div>
+            <div className="mt-3 flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map(starValue => {
+                    const isSelected = starValue <= value;
+                    return (
+                        <button
+                            key={starValue}
+                            type="button"
+                            onClick={() => onChange(starValue)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-white/5 hover:text-amber-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                            aria-label={`${label}: ${starValue} out of 5`}
+                            aria-pressed={isSelected}
+                        >
+                            <Star
+                                className={`h-5 w-5 transition-colors ${
+                                    isSelected ? 'fill-amber-400 text-amber-400' : 'text-slate-600'
+                                }`}
+                            />
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 const AI_PHASES = [
     { at: 0, msg: 'Uploading PDF to agent…' },
     { at: 4, msg: 'Agent is reading the paper…' },
@@ -2082,7 +2129,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
             {/* Rating Modal */}
             {ratingModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-                    <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
+                    <div className="glass rounded-2xl p-6 w-full max-w-lg shadow-2xl relative">
                         <button
                             onClick={() => setRatingModalOpen(false)}
                             className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
@@ -2093,7 +2140,7 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                             <Star className="w-5 h-5 text-amber-400" />
                             Rate Reviewer
                         </h2>
-                        <p className="text-sm text-slate-400 mb-6">
+                        <p className="text-sm text-slate-400 mb-5">
                             Provide feedback on this review. This information is only visible to the lab coordinator.
                         </p>
 
@@ -2103,33 +2150,25 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
                             </div>
                         )}
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2 flex justify-between">
-                                    <span>Quality Score</span>
-                                    <span className="text-amber-400">{qualityScore}/5</span>
-                                </label>
-                                <input type="range" min="1" max="5" value={qualityScore} onChange={(e) => setQualityScore(parseInt(e.target.value))} className="w-full accent-blue-500" />
-                                <p className="text-xs text-slate-500 mt-1">How thorough and helpful was the review?</p>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2 flex justify-between">
-                                    <span>Quantity Score</span>
-                                    <span className="text-amber-400">{quantityScore}/5</span>
-                                </label>
-                                <input type="range" min="1" max="5" value={quantityScore} onChange={(e) => setQuantityScore(parseInt(e.target.value))} className="w-full accent-blue-500" />
-                                <p className="text-xs text-slate-500 mt-1">Was there a sufficient amount of feedback?</p>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2 flex justify-between">
-                                    <span>Timeliness Score</span>
-                                    <span className="text-amber-400">{timeScore}/5</span>
-                                </label>
-                                <input type="range" min="1" max="5" value={timeScore} onChange={(e) => setTimeScore(parseInt(e.target.value))} className="w-full accent-blue-500" />
-                                <p className="text-xs text-slate-500 mt-1">Did the reviewer respect the deadlines?</p>
-                            </div>
+                        <div className="space-y-3">
+                            <StarRatingControl
+                                label="Quality"
+                                description="How thorough and helpful was the review?"
+                                value={qualityScore}
+                                onChange={setQualityScore}
+                            />
+                            <StarRatingControl
+                                label="Quantity"
+                                description="Was there a sufficient amount of feedback?"
+                                value={quantityScore}
+                                onChange={setQuantityScore}
+                            />
+                            <StarRatingControl
+                                label="Timeliness"
+                                description="Did the reviewer respect the deadlines?"
+                                value={timeScore}
+                                onChange={setTimeScore}
+                            />
                         </div>
 
                         <div className="mt-8 flex justify-end gap-3">
