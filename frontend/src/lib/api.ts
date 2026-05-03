@@ -447,6 +447,7 @@ export type AuthorRound = {
   aiReviewReport?: AIReviewReport | null;
   aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
+  referenceVerificationReport?: ReferenceVerificationReport | null;
   annotatedPdfUrl?: string | null;
   artifacts?: {
     checklistItems: { id: string; description: string; isChecked: boolean }[];
@@ -505,6 +506,38 @@ export type AIReviewReportHistory = {
   createdAt: string;
 };
 
+export type ReferenceStatus =
+  | 'verified'
+  | 'possible_match'
+  | 'not_found'
+  | 'metadata_mismatch'
+  | 'parse_failed';
+
+export type VerifiedReference = {
+  index: number;
+  rawText: string;
+  parsedDoi: string | null;
+  parsedYear: number | null;
+  parsedTitle: string | null;
+  status: ReferenceStatus;
+  openAlexTitle: string | null;
+  openAlexDoi: string | null;
+  openAlexYear: number | null;
+  note: string | null;
+};
+
+export type ReferenceVerificationReport = {
+  generatedAt: string;
+  totalReferences: number;
+  verifiedCount: number;
+  possibleMatchCount: number;
+  notFoundCount: number;
+  metadataMismatchCount: number;
+  parseFailedCount: number;
+  references: VerifiedReference[];
+  issues: string[];
+};
+
 export type RoundWithAssignments = {
   id: string;
   roundNumber: number;
@@ -521,6 +554,7 @@ export type RoundWithAssignments = {
   aiReviewReport?: AIReviewReport | null;
   aiReviewReports?: AIReviewReportHistory[];
   complianceReport?: ComplianceReport | null;
+  referenceVerificationReport?: ReferenceVerificationReport | null;
   annotatedPdfUrl?: string | null;
   checklistJson?: EmpiricalStandardsChecklist | null;
   checklistUrl?: string | null;
@@ -879,9 +913,57 @@ export async function runComplianceCheckRequest(roundId: string, pdfFile: File, 
   return payload as { message: string; data: ComplianceReport };
 }
 
+export async function runReferenceVerificationRequest(
+  roundId: string,
+  pdfFile: File
+): Promise<{ message: string; data: ReferenceVerificationReport }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('pdf', pdfFile);
+
+  const response = await fetch(buildUrl(`/rounds/${roundId}/reference-verification`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const payload = await parseResponseBody(response);
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
+  return payload as { message: string; data: ReferenceVerificationReport };
+}
+
 export function getVenueRulesRequest(roundId: string) {
   return apiRequest<any>(`/rounds/${roundId}/venue-rules`, {
     method: 'GET'
+  });
+}
+
+export async function runEmpiricalChecklistAnsweringRequest(
+  roundId: string,
+  pdfFile: File
+): Promise<{ success: boolean; data: any }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append('pdf', pdfFile);
+
+  const response = await fetch(buildUrl(`/rounds/${roundId}/empirical-checklist-answers`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  const payload = await parseResponseBody(response);
+  if (!response.ok) {
+    throw new ApiError(getErrorMessage(payload, response.statusText), response.status);
+  }
+  return payload as { success: boolean; data: any };
+}
+
+export function getEmpiricalChecklistAnswersRequest(roundId: string) {
+  return apiRequest<{ success: boolean; data: any }>(`/rounds/${roundId}/empirical-checklist-answers`, {
+    method: 'GET',
   });
 }
 

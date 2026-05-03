@@ -12,6 +12,7 @@ import { RoundController } from '../controllers/RoundController';
 import { SearchController } from '../controllers/SearchController';
 import { TopicController } from '../controllers/TopicController';
 import { SubmissionRuleController } from '../controllers/SubmissionRuleController';
+import { AIController } from '../controllers/AIController';
 import { authenticateRequest, requireAdmin, requireCoordinator, requireActiveAccount } from '../middleware/auth';
 
 import multer, { FileFilterCallback } from 'multer';
@@ -176,6 +177,11 @@ router.post('/rounds/:id/checklist', RoundController.addChecklistItem);
 router.delete('/rounds/:id/checklist/:itemId', RoundController.removeChecklistItem);
 router.put('/rounds/:id/checklist/:itemId', RoundController.updateChecklistItem);
 router.post('/rounds/:id/confirm-checklist', authenticateRequest, RoundController.confirmChecklistSelection);
+router.post('/rounds/:id/empirical-checklist-answers', authenticateRequest, handlePdfUpload, RoundController.runEmpiricalChecklistAnswering);
+router.get('/rounds/:id/empirical-checklist-answers', authenticateRequest, RoundController.getEmpiricalChecklistAnswers);
+
+// ==== AI CHECKS (standalone) ====
+router.post('/rounds/:id/reference-verification', authenticateRequest, handlePdfUpload, AIController.runReferenceVerification);
 
 // ==== SEARCH ROUTES ====
 router.get('/topics', TopicController.getAllTopics);

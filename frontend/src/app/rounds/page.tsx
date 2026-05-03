@@ -12,9 +12,11 @@ import {
   RoundStatusSummary,
   SuggestedReviewer,
   ProposedReviewer,
+  ReferenceVerificationReport,
   ApiError,
   startAIReviewRequest,
   runComplianceCheckRequest,
+  runReferenceVerificationRequest,
   getMyCoordinatedPapersRequest,
   getPaperByIdRequest,
   getPaperRoundsRequest,
@@ -38,6 +40,8 @@ import {
   approveRoundRequest,
   getRoundStatusRequest,
   confirmChecklistSelectionRequest,
+  runEmpiricalChecklistAnsweringRequest,
+  getEmpiricalChecklistAnswersRequest,
 } from '@/lib/api';
 import { confirmCancel } from '@/lib/confirmAction';
 import { ClipboardList, ChevronDown, ChevronUp, Mail, Ban, Calendar, CheckCircle, XCircle, AlertCircle, Clock, UserPlus, Loader2, Plus, ExternalLink, Edit2, Bell, Activity, ArrowLeft, Cpu, Download, Search } from 'lucide-react';
@@ -711,10 +715,22 @@ function RoundCard({
   const [runningCompliance, setRunningCompliance] = useState(false);
   const [complianceError, setComplianceError] = useState('');
   const [localComplianceResult, setLocalComplianceResult] = useState<any>(null);
+  const [complianceExpanded, setComplianceExpanded] = useState(false);
   const [confirmedStandards, setConfirmedStandards] = useState<Set<string>>(new Set());
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['General', 'Qualitative', 'Quantitative', 'Literature Review', 'Other']));
   const [finalizedChecklist, setFinalizedChecklist] = useState<any>(null);
   const [expandedReviewId, setExpandedReviewId] = useState<string | null>(null);
+  const [checklistAnswerData, setChecklistAnswerData] = useState<any>(null);
+  const [isRunningChecklistAnswering, setIsRunningChecklistAnswering] = useState(false);
+  const [checklistAnswerError, setChecklistAnswerError] = useState('');
+  const [expandedChecklistStandards, setExpandedChecklistStandards] = useState<Set<string>>(new Set());
+  const [checklistAnswerFilter, setChecklistAnswerFilter] = useState<'no' | 'unknown' | 'yes' | null>(null);
+  const checklistAnswerFileRef = useRef<HTMLInputElement>(null);
+  const refVerifFileRef = useRef<HTMLInputElement>(null);
+  const [runningRefVerif, setRunningRefVerif] = useState(false);
+  const [refVerifError, setRefVerifError] = useState('');
+  const [localRefVerifResult, setLocalRefVerifResult] = useState<ReferenceVerificationReport | null>(null);
+  const [refVerifExpanded, setRefVerifExpanded] = useState(false);
 
   const STANDARDS_BY_CATEGORY = {
     General: [
@@ -775,6 +791,7 @@ function RoundCard({
     try {
       const res = await startAIReviewRequest(round.id, file);
       const aiReviewData = res.data?.aiReview;
+      const refVerifData = res.data?.referenceVerification;
 
       // Normalize the response format for local display
       setLocalAiResult({
@@ -789,6 +806,12 @@ function RoundCard({
         const standards = new Set<string>(aiReviewData.checklist.selectedStandards.map((s: any) => s.label));
         setConfirmedStandards(standards);
       }
+
+      // Display reference verification results
+      if (refVerifData?.report) {
+        setLocalRefVerifResult(refVerifData.report);
+      }
+
       setAiStatus('');
       onRefresh();
     } catch (err: any) {
@@ -818,6 +841,24 @@ function RoundCard({
     }
   };
 
+  const handleRefVerifFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setRunningRefVerif(true);
+    setRefVerifError('');
+
+    try {
+      const res = await runReferenceVerificationRequest(round.id, file);
+      setLocalRefVerifResult(res.data);
+      onRefresh();
+    } catch (err: any) {
+      setRefVerifError(err.message || 'Reference verification failed');
+    } finally {
+      setRunningRefVerif(false);
+    }
+  };
+
   // Initialize confirmed standards when round data loads
   useEffect(() => {
     // If already confirmed, show that state
@@ -835,6 +876,14 @@ function RoundCard({
       }
     }
   }, [round.checklistJson, round.confirmedChecklistJson, localAiResult]);
+
+  useEffect(() => {
+    if (round.confirmedChecklistJson?.selectedStandards) {
+      getEmpiricalChecklistAnswersRequest(round.id)
+        .then(res => { if (res?.data) setChecklistAnswerData(res.data); })
+        .catch(() => {});
+    }
+  }, [round.id, round.confirmedChecklistJson]);
 
   const pendingCount = round.assignments.filter(
     a => a.pendingDeclineRequest || a.pendingExtensionRequest,
@@ -1457,35 +1506,158 @@ function RoundCard({
                   const comp = round.complianceReport;
                   if (!comp) return null;
 
-                  return (
-                    <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-2">
-                      <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Compliance Check</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {Object.entries(comp).map(([key, val]: [string, any]) => {
-                          let icon;
-                          if (val.status === 'pass') {
-                            icon = <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />;
-                          } else if (val.status === 'fail') {
-                            icon = <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />;
-                          } else if (val.status === 'skipped') {
-                            icon = <AlertCircle className="w-3 h-3 text-slate-500 mt-0.5 shrink-0" />;
-                          } else {
-                            icon = <AlertCircle className="w-3 h-3 text-amber-400 mt-0.5 shrink-0" />;
-                          }
+                  const entries = Object.entries(comp) as [string, any][];
+                  const passCount = entries.filter(([, v]) => v.status === 'pass').length;
+                  const failCount = entries.filter(([, v]) => v.status === 'fail').length;
+                  const unknownCount = entries.filter(([, v]) => v.status === 'unknown').length;
 
-                          return (
-                            <div key={key} className="flex items-start gap-1.5">
-                              {icon}
-                              <div>
-                                <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-                                <p className="text-[10px] text-slate-300">
-                                  {val.status === 'skipped' ? 'Not applicable' : (val.details || val.status)}
-                                </p>
+                  return (
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
+                      {/* Clickable header */}
+                      <button
+                        onClick={() => setComplianceExpanded(v => !v)}
+                        className="w-full flex items-center justify-between px-3 py-2 hover:bg-emerald-500/5 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronDown className={`w-3 h-3 text-emerald-500/60 transition-transform ${complianceExpanded ? '' : '-rotate-90'}`} />
+                          <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Compliance Check</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {failCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">{failCount} fail</span>}
+                          {unknownCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">{unknownCount} ?</span>}
+                          {passCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">{passCount} pass</span>}
+                        </div>
+                      </button>
+
+                      {/* Expanded details */}
+                      {complianceExpanded && (
+                        <div className="px-3 pb-3 pt-1 grid grid-cols-2 gap-2 border-t border-emerald-500/10">
+                          {entries.map(([key, val]) => {
+                            let icon;
+                            if (val.status === 'pass') {
+                              icon = <CheckCircle className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />;
+                            } else if (val.status === 'fail') {
+                              icon = <XCircle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />;
+                            } else if (val.status === 'skipped') {
+                              icon = <AlertCircle className="w-3 h-3 text-slate-500 mt-0.5 shrink-0" />;
+                            } else {
+                              icon = <AlertCircle className="w-3 h-3 text-amber-400 mt-0.5 shrink-0" />;
+                            }
+                            return (
+                              <div key={key} className="flex items-start gap-1.5">
+                                {icon}
+                                <div>
+                                  <p className="text-[10px] text-slate-400 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                                  <p className="text-[10px] text-slate-300">{val.status === 'skipped' ? 'Not applicable' : (val.details || val.status)}</p>
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Reference Verification */}
+                {(() => {
+                  const report = localRefVerifResult ?? round.referenceVerificationReport;
+
+                  return (
+                    <div className="pt-3 space-y-2">
+                      {/* Run button */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => refVerifFileRef.current?.click()}
+                          disabled={runningRefVerif}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {runningRefVerif ? (
+                            <>
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Analyzing references…
+                            </>
+                          ) : (
+                            <>
+                              <Search className="w-3 h-3" />
+                              {report ? 'Run again' : 'Verify References'}
+                            </>
+                          )}
+                        </button>
+                        {refVerifError && <p className="text-xs text-red-400">{refVerifError}</p>}
                       </div>
+
+                      {/* Results card */}
+                      {report && (
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+                          {/* Collapsible header */}
+                          <button
+                            onClick={() => setRefVerifExpanded(v => !v)}
+                            className="w-full flex items-center justify-between px-3 py-2 hover:bg-amber-500/5 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <ChevronDown className={`w-3 h-3 text-amber-500/60 transition-transform ${refVerifExpanded ? '' : '-rotate-90'}`} />
+                              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Reference Verification</p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {report.verifiedCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">{report.verifiedCount} ✓</span>}
+                              {report.possibleMatchCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">{report.possibleMatchCount} ~</span>}
+                              {report.notFoundCount > 0 && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">{report.notFoundCount} ✗</span>}
+                              <span className="text-[9px] text-slate-500">/ {report.totalReferences}</span>
+                            </div>
+                          </button>
+
+                          {/* Expanded: issues + reference list */}
+                          {refVerifExpanded && (
+                            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-amber-500/10 max-h-96 overflow-y-auto">
+                              {/* Pipeline-level issues */}
+                              {report.issues.length > 0 && (
+                                <div className="p-2 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                                  {report.issues.map((issue, i) => (
+                                    <p key={i} className="text-[10px] text-amber-300">{issue}</p>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Per-reference rows */}
+                              {report.references.slice(0, 50).map(ref => {
+                                const statusColors: Record<string, string> = {
+                                  verified: 'bg-emerald-500/20 text-emerald-300',
+                                  possible_match: 'bg-amber-500/20 text-amber-300',
+                                  not_found: 'bg-red-500/20 text-red-300',
+                                  metadata_mismatch: 'bg-orange-500/20 text-orange-300',
+                                  parse_failed: 'bg-slate-500/20 text-slate-300',
+                                };
+                                return (
+                                  <div key={ref.index} className="text-[10px] p-2 rounded bg-slate-800/20 space-y-1">
+                                    <div className="flex items-start gap-2 justify-between">
+                                      <p className="text-slate-400 line-clamp-2">{ref.rawText}</p>
+                                      <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded shrink-0 ${statusColors[ref.status] || 'bg-slate-500/20 text-slate-300'}`}>
+                                        {ref.status.replace(/_/g, ' ')}
+                                      </span>
+                                    </div>
+                                    {ref.openAlexTitle && ref.openAlexTitle !== ref.parsedTitle && (
+                                      <p className="text-slate-500">Found: <span className="text-slate-300">{ref.openAlexTitle.slice(0, 100)}</span></p>
+                                    )}
+                                    {ref.note && <p className="text-slate-500 italic">{ref.note}</p>}
+                                  </div>
+                                );
+                              })}
+                              {report.references.length > 50 && (
+                                <p className="text-[10px] text-slate-500 p-2">... and {report.references.length - 50} more references</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Hidden file input */}
+                      <input
+                        ref={refVerifFileRef}
+                        type="file"
+                        accept="application/pdf"
+                        className="hidden"
+                        onChange={handleRefVerifFileSelected}
+                      />
                     </div>
                   );
                 })()}
@@ -1642,8 +1814,194 @@ function RoundCard({
                 })()}
               </div>
 
+              {/* Empirical Standards Checklist Answers */}
+              {finalizedChecklist && (
+                <div className="mt-3 rounded-xl bg-slate-900/50 border border-slate-700/50 p-3 space-y-2">
+                  {/* Header */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Checklist Answers</p>
+                    {checklistAnswerData && (() => {
+                      const answers = checklistAnswerData.answers ?? [];
+                      const no = answers.filter((a: any) => a.answer === 'no').length;
+                      const unknown = answers.filter((a: any) => a.answer === 'unknown').length;
+                      const yes = answers.filter((a: any) => a.answer === 'yes').length;
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          {no > 0 && (
+                            <button
+                              onClick={() => setChecklistAnswerFilter(f => f === 'no' ? null : 'no')}
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors ${checklistAnswerFilter === 'no' ? 'bg-red-500/40 text-red-200 ring-1 ring-red-400/50' : 'bg-red-500/20 text-red-300 hover:bg-red-500/30'}`}
+                            >{no} no</button>
+                          )}
+                          {unknown > 0 && (
+                            <button
+                              onClick={() => setChecklistAnswerFilter(f => f === 'unknown' ? null : 'unknown')}
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors ${checklistAnswerFilter === 'unknown' ? 'bg-slate-500/40 text-slate-200 ring-1 ring-slate-400/50' : 'bg-slate-500/20 text-slate-400 hover:bg-slate-500/30'}`}
+                            >{unknown} ?</button>
+                          )}
+                          {yes > 0 && (
+                            <button
+                              onClick={() => setChecklistAnswerFilter(f => f === 'yes' ? null : 'yes')}
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors ${checklistAnswerFilter === 'yes' ? 'bg-emerald-500/40 text-emerald-200 ring-1 ring-emerald-400/50' : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'}`}
+                            >{yes} yes</button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Re-run button — only shown when results exist */}
+                  {checklistAnswerData && (
+                    <button
+                      onClick={() => checklistAnswerFileRef.current?.click()}
+                      disabled={isRunningChecklistAnswering}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/10 text-violet-400 border border-violet-500/20 hover:bg-violet-600/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-[11px] font-medium"
+                    >
+                      {isRunningChecklistAnswering ? <><Loader2 className="w-3 h-3 animate-spin" /> Running…</> : <><Cpu className="w-3 h-3" /> Run again</>}
+                    </button>
+                  )}
+
+                  {checklistAnswerError && (
+                    <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg p-2">{checklistAnswerError}</p>
+                  )}
+
+                  {!checklistAnswerData ? (
+                    <button
+                      onClick={() => checklistAnswerFileRef.current?.click()}
+                      disabled={isRunningChecklistAnswering}
+                      className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-violet-600/20 text-violet-300 border border-violet-500/30 hover:bg-violet-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-xs font-medium"
+                    >
+                      {isRunningChecklistAnswering ? (
+                        <><Loader2 className="w-3 h-3 animate-spin" /> Answering checklist…</>
+                      ) : (
+                        <><Cpu className="w-3 h-3" /> Run Checklist Answering</>
+                      )}
+                    </button>
+                  ) : (() => {
+                    const answerOrder: Record<string, number> = { no: 0, unknown: 1, yes: 2 };
+                    const answerMap = new Map<string, any>(
+                      (checklistAnswerData.answers ?? []).map((a: any) => [a.itemId, a])
+                    );
+
+                    // Group items: standard → section → entries[], sorted no first
+                    const grouped = new Map<string, Map<string, any[]>>();
+                    for (const item of (checklistAnswerData.items ?? [])) {
+                      const std = item.standard;
+                      const sec = item.sectionTitle ?? 'General';
+                      if (!grouped.has(std)) grouped.set(std, new Map());
+                      if (!grouped.get(std)!.has(sec)) grouped.get(std)!.set(sec, []);
+                      grouped.get(std)!.get(sec)!.push({ item, answer: answerMap.get(item.id) });
+                    }
+
+                    // Sort entries within each section: no → unknown → yes
+                    grouped.forEach(sections => {
+                      sections.forEach((entries, sec) => {
+                        sections.set(sec, entries.sort((a: any, b: any) =>
+                          (answerOrder[a.answer?.answer] ?? 1) - (answerOrder[b.answer?.answer] ?? 1)
+                        ));
+                      });
+                    });
+
+                    return (
+                      <div className="space-y-1.5">
+                        {Array.from(grouped.entries()).map(([standard, sections]) => {
+                          const stdAnswers = Array.from(sections.values()).flat().map((e: any) => e.answer?.answer);
+                          const noCount = stdAnswers.filter(a => a === 'no').length;
+                          const unknownCount = stdAnswers.filter(a => a === 'unknown').length;
+                          const yesCount = stdAnswers.filter(a => a === 'yes').length;
+
+                          // When filter active, skip standards with no matching items
+                          if (checklistAnswerFilter && !stdAnswers.includes(checklistAnswerFilter)) return null;
+
+                          // Auto-expand when filter is active
+                          const isExpanded = checklistAnswerFilter ? true : expandedChecklistStandards.has(standard);
+
+                          return (
+                            <div key={standard} className="rounded-lg bg-slate-800/40 overflow-hidden border border-slate-700/30">
+                              {/* Standard header — clickable to expand/collapse */}
+                              <button
+                                onClick={() => {
+                                  const next = new Set(expandedChecklistStandards);
+                                  if (next.has(standard)) next.delete(standard);
+                                  else next.add(standard);
+                                  setExpandedChecklistStandards(next);
+                                }}
+                                className="w-full flex items-center justify-between px-2.5 py-1.5 bg-slate-800/60 hover:bg-slate-800/80 transition-colors"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <ChevronDown className={`w-3 h-3 text-slate-500 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                                  <p className="text-[11px] font-semibold text-slate-300">{standard}</p>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {noCount > 0 && <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-red-500/20 text-red-300">{noCount}✗</span>}
+                                  {unknownCount > 0 && <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-slate-500/20 text-slate-400">{unknownCount}?</span>}
+                                  {yesCount > 0 && <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-300">{yesCount}✓</span>}
+                                </div>
+                              </button>
+
+                              {/* Expanded content */}
+                              {isExpanded && Array.from(sections.entries()).map(([section, entries]) => {
+                                const visibleEntries = checklistAnswerFilter
+                                  ? entries.filter((e: any) => e.answer?.answer === checklistAnswerFilter)
+                                  : entries;
+                                if (visibleEntries.length === 0) return null;
+                                return (
+                                <div key={section} className="px-2.5 py-2 space-y-1.5 border-t border-slate-700/40">
+                                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">{section}</p>
+                                  {visibleEntries.map(({ item, answer }: any) => (
+                                    <div key={item.id} className="flex items-start gap-2">
+                                      <span className={`shrink-0 mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded min-w-[32px] text-center ${
+                                        answer?.answer === 'yes'
+                                          ? 'bg-emerald-500/20 text-emerald-300'
+                                          : answer?.answer === 'no'
+                                          ? 'bg-red-500/20 text-red-300'
+                                          : 'bg-slate-500/20 text-slate-400'
+                                      }`}>
+                                        {answer?.answer?.toUpperCase() ?? '?'}
+                                      </span>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-[10px] text-slate-300 leading-relaxed">{item.itemText}</p>
+                                        {answer?.evidence && (
+                                          <p className="text-[9px] text-slate-500 mt-0.5 italic leading-relaxed">{answer.evidence}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* Hidden file inputs */}
               <input ref={aiFileRef} type="file" accept="application/pdf" className="hidden" onChange={handleAIFileSelected} />
+              <input
+                ref={checklistAnswerFileRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  e.target.value = '';
+                  setIsRunningChecklistAnswering(true);
+                  setChecklistAnswerError('');
+                  try {
+                    const res = await runEmpiricalChecklistAnsweringRequest(round.id, file);
+                    if (res.data) setChecklistAnswerData(res.data);
+                  } catch (err: any) {
+                    setChecklistAnswerError(err.message || 'Checklist answering failed. Please try again.');
+                  } finally {
+                    setIsRunningChecklistAnswering(false);
+                  }
+                }}
+              />
             </>
           )}
         </div>

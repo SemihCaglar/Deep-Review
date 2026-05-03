@@ -1,4 +1,4 @@
-const pdfParse = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 import { AzureOpenAIClient } from '../utils/AzureOpenAIClient';
 
 export class ComplianceService {
@@ -12,14 +12,17 @@ export class ComplianceService {
 
     // 1. Extract text + metadata from PDF
     console.log(`[ComplianceService] Parsing PDF...`);
-    const pdfData = await pdfParse(pdfBuffer);
-    const pdfText = pdfData.text;
+    const parser = new PDFParse({ data: pdfBuffer });
+    const textResult = await parser.getText();
+    const infoResult = await parser.getInfo();
+    await parser.destroy();
+    const pdfText = textResult.text;
 
     if (!pdfText || pdfText.trim().length === 0) {
       throw new Error('The uploaded PDF appears to be empty or could not be parsed.');
     }
 
-    const metadataStr = pdfData.info ? JSON.stringify(pdfData.info) : "No PDF Metadata available.";
+    const metadataStr = infoResult.info ? JSON.stringify(infoResult.info) : "No PDF Metadata available.";
 
     // 2. Run AI Compliance Check
     const complianceReport = await this.runAIComplianceCheck(pdfText, metadataStr, venueRules);

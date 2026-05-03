@@ -11,6 +11,7 @@ import { AIReviewReport } from '../entities/AIReviewReport';
 import { RoundService, RoundServiceError } from '../services/RoundService';
 import { sendEmail } from '../services/emailService';
 import { ComplianceCheckAgentService } from '../ai_content/services/ComplianceCheckAgentService';
+import { runChecklistAnswers, getStoredChecklistAnswers } from '../ai_content/services/EmpiricalChecklistOrchestrationService';
 import type { AuthenticatedRequest } from '../types/auth';
 
 export class RoundController {
@@ -690,6 +691,7 @@ export class RoundController {
         ),
         aiReviewReport: r.aiReviewReport,
         complianceReport: r.complianceReportsByUser?.[user.id]?.report ?? (r.complianceReportsByUser ? null : r.complianceReport),
+        referenceVerificationReport: r.referenceVerificationReport ?? null,
         annotatedPdfUrl: r.annotatedPdfUrl,
         aiReviewReports: (r.aiReviewReports ?? [])
           .filter(ar => !ar.requestedBy || ar.requestedBy.id === user.id)
@@ -766,6 +768,7 @@ export class RoundController {
         aiReviewReport: round.aiReviewReport ?? null,
         annotatedPdfUrl: round.annotatedPdfUrl ?? null,
         complianceReport: round.complianceReportsByUser?.[coordinator.id]?.report ?? (round.complianceReportsByUser ? null : round.complianceReport ?? null),
+        referenceVerificationReport: round.referenceVerificationReport ?? null,
         checklistJson: round.checklistJson ?? null,
         checklistUrl: round.checklistUrl ?? null,
         confirmedChecklistJson: round.confirmedChecklistJson ?? null,
@@ -1386,7 +1389,18 @@ export class RoundController {
       console.log(`[RoundController] Checklist: ${aiReviewResult.checklistJson?.selectedStandards?.length || 0} standards selected`);
       console.log(`[RoundController] =========================================\n`);
 
-      // STEP 3: Save results to database
+      // STEP 3: Reference Verification (included in aiReviewResult)
+      console.log(`[RoundController] ========== STEP 3: REFERENCE VERIFICATION ==========`);
+      const refVerifReport = aiReviewResult.referenceVerificationReport;
+      if (refVerifReport) {
+        console.log(`[RoundController] ✓ Reference verification: ${refVerifReport.verifiedCount}/${refVerifReport.totalReferences} verified`);
+        if (refVerifReport.issues && refVerifReport.issues.length > 0) {
+          console.warn(`[RoundController] Reference verification issues: ${refVerifReport.issues.join('; ')}`);
+        }
+      }
+      console.log(`[RoundController] ==================================================\n`);
+
+      // STEP 4: Save results to database
       console.log(`[RoundController] Saving results to database...`);
 
       // Create new AIReviewReport record for this run
@@ -1395,6 +1409,7 @@ export class RoundController {
       aiReviewReport.reviewText = aiReviewResult.summaryReport;
       aiReviewReport.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
       aiReviewReport.complianceReport = complianceReport;
+      aiReviewReport.referenceVerificationReport = aiReviewResult.referenceVerificationReport;
       aiReviewReport.venue = round.targetVenue;
       aiReviewReport.round = round;
       aiReviewReport.requestedBy = user as any;
@@ -1406,6 +1421,10 @@ export class RoundController {
       round.aiReviewReport = aiReviewResult.summaryReport;
       round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
 
+      if (aiReviewResult.referenceVerificationReport) {
+        round.referenceVerificationReport = aiReviewResult.referenceVerificationReport;
+      }
+
       // Set checklist only if generated (first time only)
       if (aiReviewResult.checklistJson) {
         round.checklistJson = aiReviewResult.checklistJson;
@@ -1416,10 +1435,10 @@ export class RoundController {
       await roundRepo.save(round);
       console.log(`[RoundController] ✓ Round updated`);
 
-      // STEP 4: Return combined results
+      // STEP 5: Return combined results
       return res.status(200).json({
         success: true,
-        message: 'AI Review and Compliance check completed successfully',
+        message: 'AI Review, Compliance check, and Reference Verification completed successfully',
         data: {
           compliance: complianceReport ? {
             report: complianceReport,
@@ -1434,6 +1453,13 @@ export class RoundController {
             suggestedCitations: aiReviewResult.suggestedCitations,
             checklist: aiReviewResult.checklistJson,
             checklistUrl: aiReviewResult.checklistUrl
+          },
+          referenceVerification: aiReviewResult.referenceVerificationReport ? {
+            report: aiReviewResult.referenceVerificationReport,
+            message: `${aiReviewResult.referenceVerificationReport.verifiedCount}/${aiReviewResult.referenceVerificationReport.totalReferences} references verified`
+          } : {
+            report: null,
+            message: 'Reference verification did not complete'
           }
         }
       });
@@ -1513,4 +1539,69 @@ export class RoundController {
       });
     }
   }
+
+  static runEmpiricalChecklistAnswering = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+      const pdfBuffer = req.file?.buffer;
+
+      if (!pdfBuffer) {
+        return res.status(400).json({ message: 'PDF file is required' });
+      }
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper'],
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      const confirmed = round.confirmedChecklistJson;
+      if (!confirmed || !Array.isArray(confirmed.selectedStandards) || confirmed.selectedStandards.length === 0) {
+        return res.status(400).json({
+          message: 'No confirmed checklist standards found. Please confirm the checklist selection first.',
+        });
+      }
+
+      const paperId = round.paper.id;
+      const standards: string[] = confirmed.selectedStandards;
+      const role = 'author';
+
+      console.log(`[RoundController] Running empirical checklist answering for paper ${paperId}, standards: ${standards.join(', ')}`);
+
+      const result = await runChecklistAnswers(paperId, standards, role, pdfBuffer);
+
+      return res.status(200).json({ success: true, data: result });
+    } catch (err: any) {
+      console.error('[RoundController] Error in runEmpiricalChecklistAnswering:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Internal server error' });
+    }
+  };
+
+  static getEmpiricalChecklistAnswers = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const roundRepo = AppDataSource.getRepository(Round);
+      const round = await roundRepo.findOne({
+        where: { id: id as string },
+        relations: ['paper'],
+      });
+
+      if (!round) return res.status(404).json({ message: 'Round not found' });
+
+      const confirmed = round.confirmedChecklistJson;
+      if (!confirmed || !Array.isArray(confirmed.selectedStandards) || confirmed.selectedStandards.length === 0) {
+        return res.status(200).json({ success: true, data: null });
+      }
+
+      const result = await getStoredChecklistAnswers(round.paper.id, confirmed.selectedStandards, 'author');
+
+      return res.status(200).json({ success: true, data: result });
+    } catch (err: any) {
+      console.error('[RoundController] Error in getEmpiricalChecklistAnswers:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Internal server error' });
+    }
+  };
 }

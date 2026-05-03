@@ -12,8 +12,9 @@ normalizeLegacyPaperStatuses()
     .then(() => {
         console.log('✅ Database connected & Models strictly synchronized!');
         startOverdueChecker();
-        app.listen(PORT, () => {
+        const server = app.listen(PORT, () => {
             console.log(`🚀 Server started on http://localhost:${PORT}`);
         });
+        server.timeout = 600000; // 10 minutes — long-running AI endpoints
     })
     .catch((error) => console.error('❌ Database Connection Error: ', error));

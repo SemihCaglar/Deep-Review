@@ -1,7 +1,7 @@
-import { AIGuardrailService } from './AIGuardrailService';
 import { ChecklistService } from './ChecklistService';
 import { AzureOpenAIClient } from '../utils/AzureOpenAIClient';
 import { PdfAgentService } from './PdfAgentService';
+import { ReferenceListVerificationService } from './ReferenceListVerificationService';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -77,19 +77,24 @@ export class AIReviewService {
       console.log(`[AIReviewService] ⚪ Checklist skipped (already exists)`);
     }
 
-    // 5. Citation guardrails (stub)
-    console.log(`[AIReviewService] Validating citations...`);
-    const rawCitations = [{ title: "Fake Paper 2024", authors: ["John Doe"] }];
-    const validatedCitations = await AIGuardrailService.validateCitations(rawCitations);
+    // 5. Reference verification
+    console.log(`[AIReviewService] Running reference verification...`);
+    let referenceVerificationReport: any = null;
+    try {
+      referenceVerificationReport = await ReferenceListVerificationService.verify(pdfBuffer);
+      console.log(`[AIReviewService] ✓ Reference verification complete: ${referenceVerificationReport.verifiedCount}/${referenceVerificationReport.totalReferences} verified`);
+    } catch (err) {
+      console.error('[AIReviewService] Reference verification failed:', err);
+    }
 
     return {
       success: true,
       summaryReport: summaryText,
       annotatedPdfUrl,
       annotations: [],
-      suggestedCitations: validatedCitations,
       checklistJson,
       checklistUrl,
+      referenceVerificationReport,
     };
   }
 }
