@@ -300,6 +300,10 @@ export default function PaperDetails({ params }: { params: { id: string } }) {
         );
     }
 
+    if (!user.id) {
+        return null;
+    }
+
     if (!paper) {
         return notFound();
     }
