@@ -121,13 +121,11 @@ function AssignmentRow({
   roundDeadline,
   roundStatus,
   onRefresh,
-  onReassign
 }: {
   assignment: RoundAssignment;
   roundDeadline: string | null;
   roundStatus: RoundWithAssignments['status'];
   onRefresh: () => void;
-  onReassign: (id: string) => void;
 }) {
   const [showDeadlineInput, setShowDeadlineInput] = useState(false);
   const [newDeadline, setNewDeadline] = useState('');
@@ -248,16 +246,7 @@ function AssignmentRow({
               <Ban className="w-3.5 h-3.5" /> Cancel
             </button>
           )}
-          {showReassign && (
-            <button
-              onClick={() => onReassign(assignment.id)}
-              disabled={busy || !isReassignable}
-              title={!isReassignable ? 'Cancelled assignments cannot be reassigned' : undefined}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-orange-500/30 bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-orange-500/10"
-            >
-              <UserPlus className="w-3.5 h-3.5" /> Reassign
-            </button>
-          )}
+
           {assignment.status !== 'Reassigned' && assignment.status !== 'Cancelled' && (
             <button
               onClick={() => {
@@ -460,9 +449,8 @@ function RoundCard({
   const [expanded, setExpanded] = useState(true);
   const [aiToolsOpen, setAiToolsOpen] = useState(false);
 
-  // Add Reviewer / Reassign panel
+  // Add Reviewer panel
   const [showAddPanel, setShowAddPanel] = useState(false);
-  const [reassigningForId, setReassigningForId] = useState<string | null>(null);
 
   const [suggestions, setSuggestions] = useState<SuggestedReviewer[]>([]);
   const [addSearchQuery, setAddSearchQuery] = useState('');
@@ -475,9 +463,8 @@ function RoundCard({
   const roundDeadlineHasNotPassed = round.deadline ? new Date(round.deadline).getTime() >= Date.now() : false;
   const canAddReviewer = isLatestRound && (round.status === 'Open' || (round.status === 'Completed' && roundDeadlineHasNotPassed));
 
-  const openAddPanel = async (reassignId?: string) => {
+  const openAddPanel = async () => {
     setShowAddPanel(true);
-    setReassigningForId(reassignId || null);
     setSelectedIds(new Set());
     setAssignMsg('');
     setAssignError('');
@@ -494,19 +481,15 @@ function RoundCard({
   };
 
   const toggleSelect = (id: string) => {
-    if (reassigningForId) {
-      setSelectedIds(new Set([id]));
-    } else {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        if (next.has(id)) {
-          next.delete(id);
-        } else {
-          next.add(id);
-        }
-        return next;
-      });
-    }
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   };
 
   const handleAssign = async () => {
@@ -515,15 +498,9 @@ function RoundCard({
     setAssignMsg('');
     setAssignError('');
     try {
-      if (reassigningForId) {
-        const newReviewerId = Array.from(selectedIds)[0];
-        await reassignReviewerRequest(reassigningForId, newReviewerId);
-        setAssignMsg(`Reviewer reassigned. Invitation sent automatically.`);
-      } else {
-        const result = await assignReviewersRequest(round.id, Array.from(selectedIds));
-        await sendInvitationsRequest(round.id);
-        setAssignMsg(`${result.length} reviewer(s) assigned and invited.`);
-      }
+      const result = await assignReviewersRequest(round.id, Array.from(selectedIds));
+      await sendInvitationsRequest(round.id);
+      setAssignMsg(`${result.length} reviewer(s) assigned and invited.`);
       setSelectedIds(new Set());
       setShowAddPanel(false);
       onRefresh();
@@ -1300,7 +1277,6 @@ function RoundCard({
                   roundDeadline={round.deadline}
                   roundStatus={round.status}
                   onRefresh={onRefresh}
-                  onReassign={openAddPanel}
                 />
               ))}
             </div>
