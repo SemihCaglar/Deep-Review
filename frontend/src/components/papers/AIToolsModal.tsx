@@ -161,7 +161,13 @@ export default function AIToolsModal({ isOpen, onClose, round, paperId, onRefres
       }
 
       if (refVerifData?.report) setLocalRefVerifResult(refVerifData.report);
-      if (complianceData?.report) setLocalComplianceResult(complianceData.report);
+      if (complianceData?.report) {
+        setLocalComplianceResult(complianceData.report);
+        setComplianceExpanded(true);
+      } else if (complianceData?.error) {
+        setComplianceError(`Compliance failed: ${complianceData.error}`);
+        setComplianceExpanded(true);
+      }
 
       setAiStatus('');
       onRefresh();

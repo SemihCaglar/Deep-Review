@@ -3,6 +3,7 @@ import { AppDataSource } from '../data-source';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { DeclineRequest, DeclineRequestStatus } from '../entities/DeclineRequest';
 import { Extension, ExtensionStatus } from '../entities/Extension';
+import { VenueCategory } from '../entities/Round';
 import { Summary } from '../entities/Summary';
 import { UserRole } from '../entities/User';
 import { sendTemplatedEmail } from '../services/emailService';
@@ -268,17 +269,20 @@ export class ReviewerResponseController {
       if (requested <= effectiveDeadline) {
         return res.status(400).json({ message: `Requested deadline must be after your current deadline (${currentDeadlineStr}).` });
       }
-      if (assignment.round.submissionDeadline) {
+      if (assignment.round.venueCategory === VenueCategory.Conference && assignment.round.submissionDeadline) {
         const subDeadlineStr = assignment.round.submissionDeadline.toISOString().split('T')[0];
         if (requested > assignment.round.submissionDeadline) {
           return res.status(400).json({ message: `Extension cannot exceed the conference submission deadline (${subDeadlineStr}).` });
         }
       } else {
-        const maxAllowed = new Date(effectiveDeadline);
-        maxAllowed.setDate(maxAllowed.getDate() + 5);
-        const maxStr = maxAllowed.toISOString().split('T')[0];
-        if (requested > maxAllowed) {
-          return res.status(400).json({ message: `Extension cannot exceed 5 days beyond your current deadline. Maximum allowed: ${maxStr}.` });
+        const roundDeadline = assignment.round.deadline;
+        if (roundDeadline) {
+          const maxAllowed = new Date(roundDeadline);
+          maxAllowed.setDate(maxAllowed.getDate() + 5);
+          const maxStr = maxAllowed.toISOString().split('T')[0];
+          if (requested > maxAllowed) {
+            return res.status(400).json({ message: `Journal extension cannot exceed 5 days after the round deadline. Maximum allowed: ${maxStr}.` });
+          }
         }
       }
 

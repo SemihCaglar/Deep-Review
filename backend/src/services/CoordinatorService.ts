@@ -202,23 +202,28 @@ export class CoordinatorService {
       if (decision === 'Approve') {
         const approvedDeadline = this.parseDate(newDeadline, 'newDeadline');
         const round = assignment.round;
-        const deadlineCeiling =
-          round.venueCategory === VenueCategory.Conference && round.submissionDeadline
-            ? round.submissionDeadline
-            : round.deadline;
+        let deadlineCeiling: Date | null;
+        let ceilingLabel: string;
+        if (round.venueCategory === VenueCategory.Conference && round.submissionDeadline) {
+          deadlineCeiling = round.submissionDeadline;
+          ceilingLabel = 'the conference submission deadline';
+        } else {
+          if (!round.deadline) {
+            throw new CoordinatorServiceError(400, 'Round deadline is not set');
+          }
+          deadlineCeiling = new Date(round.deadline);
+          deadlineCeiling.setDate(deadlineCeiling.getDate() + 5);
+          ceilingLabel = '5 days after the round deadline';
+        }
 
         if (!deadlineCeiling) {
           throw new CoordinatorServiceError(400, 'Round deadline is not set');
         }
 
         if (approvedDeadline.getTime() > deadlineCeiling.getTime()) {
-          const label =
-            round.venueCategory === VenueCategory.Conference
-              ? 'the submission deadline'
-              : 'the round deadline';
           throw new CoordinatorServiceError(
             400,
-            `Approved deadline cannot exceed ${label}`,
+            `Approved deadline cannot exceed ${ceilingLabel}`,
           );
         }
 

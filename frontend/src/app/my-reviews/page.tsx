@@ -149,15 +149,17 @@ function AssignmentCard({ assignment, onRefresh }: { assignment: MyAssignment; o
     : '';
   const minExtDate = laterDateInputValue(assignDeadlineDate, todayInputValue());
 
-  // Max date for extension picker: submissionDeadline if Conference, otherwise +5 days from current deadline
+  // Max date for extension picker: conference caps at submissionDeadline; journal caps at round deadline + 5 days
   const maxExtDate = (() => {
-    if (assignment.round.submissionDeadline) {
+    if (assignment.round.venueCategory === 'Conference' && assignment.round.submissionDeadline) {
       return new Date(assignment.round.submissionDeadline).toISOString().split('T')[0];
     }
-    if (!effectiveDeadline) return '';
-    const base = new Date(effectiveDeadline);
-    base.setDate(base.getDate() + 5);
-    return base.toISOString().split('T')[0];
+    if (assignment.round.deadline) {
+      const max = new Date(assignment.round.deadline);
+      max.setDate(max.getDate() + 5);
+      return max.toISOString().split('T')[0];
+    }
+    return '';
   })();
   const isOverdue = assignment.status === 'Overdue';
   const canWorkOnReview = ['Accepted', 'PendingExtension', 'PendingDecline'].includes(assignment.status);

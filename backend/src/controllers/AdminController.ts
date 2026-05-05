@@ -218,6 +218,15 @@ export class AdminController {
       await AdminController.deleteOrphanCoordinators(manager);
     });
 
+    const labRepo = AppDataSource.getRepository(Lab);
+    const existingLab = await labRepo
+      .createQueryBuilder('lab')
+      .where('LOWER(lab.name) = LOWER(:name)', { name: name.trim() })
+      .getOne();
+    if (existingLab) {
+      return res.status(409).json({ message: `A lab named "${existingLab.name}" already exists. Please choose a different name.` });
+    }
+
     const userRepo = AppDataSource.getRepository<User>('User');
     const existing = await userRepo.findOne({ where: { email: normalizedCoordinatorEmail } });
     if (existing) {
@@ -236,8 +245,7 @@ export class AdminController {
 
     await userRepo.save(coordinator);
 
-    const labRepo = AppDataSource.getRepository(Lab);
-    const lab = labRepo.create({ 
+    const lab = labRepo.create({
       name, 
       description,
       coordinator,

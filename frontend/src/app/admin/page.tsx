@@ -412,33 +412,36 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
   const [coordName, setCoordName] = useState('');
   const [coordEmail, setCoordEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createError, setCreateError] = useState('');
 
   const handleCreate = async () => {
     if (isSubmitting) return;
-    if (!newLabName.trim()) { alert('Lab name is required'); return; }
-    if (!coordName.trim()) { alert('Coordinator name is required'); return; }
-    if (!coordEmail.trim()) { alert('Coordinator email is required'); return; }
-    if (!isValidEmail(coordEmail)) { alert('Enter a valid coordinator email address'); return; }
-    
+    setCreateError('');
+    if (!newLabName.trim()) { setCreateError('Lab name is required.'); return; }
+    if (!coordName.trim()) { setCreateError('Coordinator name is required.'); return; }
+    if (!coordEmail.trim()) { setCreateError('Coordinator email is required.'); return; }
+    if (!isValidEmail(coordEmail)) { setCreateError('Enter a valid coordinator email address.'); return; }
+
     setIsSubmitting(true);
     try {
-      await apiRequest('/admin/labs', { 
-        method: 'POST', 
-        body: { 
-          name: newLabName, 
+      await apiRequest('/admin/labs', {
+        method: 'POST',
+        body: {
+          name: newLabName,
           description: newLabDesc,
           coordinatorName: coordName,
-          coordinatorEmail: coordEmail.trim() 
-        } 
+          coordinatorEmail: coordEmail.trim()
+        }
       });
       setNewLabName('');
       setNewLabDesc('');
       setCoordName('');
       setCoordEmail('');
+      setCreateError('');
       setIsCreating(false);
       refresh();
-    } catch (err: any) { 
-      alert(err.message); 
+    } catch (err: any) {
+      setCreateError(err.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -477,7 +480,7 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
                 type="text"
                 placeholder="Lab Name"
                 value={newLabName}
-                onChange={(e) => setNewLabName(e.target.value)}
+                onChange={(e) => { setNewLabName(e.target.value); setCreateError(''); }}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 autoFocus
               />
@@ -502,17 +505,22 @@ function LabsTab({ labs, refresh }: { labs: any[]; refresh: () => void }) {
                 onChange={(e) => setCoordEmail(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              {createError && (
+                <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                  {createError}
+                </p>
+              )}
               <div className="flex gap-2 pt-2">
-                <button 
+                <button
                   disabled={isSubmitting}
-                  onClick={handleCreate} 
+                  onClick={handleCreate}
                   className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   {isSubmitting ? 'Creating...' : 'Create'}
                 </button>
-                <button 
+                <button
                   disabled={isSubmitting}
-                  onClick={() => setIsCreating(false)} 
+                  onClick={() => { setIsCreating(false); setCreateError(''); }}
                   className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
                 >
                   Cancel

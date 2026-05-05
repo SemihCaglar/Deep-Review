@@ -1600,6 +1600,7 @@ export class RoundController {
       // STEP 1: Compliance Check (if rules are linked)
       let complianceReport = null;
       let complianceSourceUrl = null;
+      let complianceError: string | null = null;
 
       console.log(`[RoundController] ========== STEP 1: COMPLIANCE CHECK ==========`);
       console.log(`[RoundController] Round: ${id}`);
@@ -1635,9 +1636,9 @@ export class RoundController {
           } else {
             console.warn(`[RoundController] Rule set ID ${round.submissionRuleSetId} not found in database`);
           }
-        } catch (error) {
+        } catch (error: any) {
+          complianceError = error?.message || String(error);
           console.error(`[RoundController] ❌ Compliance check failed (continuing with AI review):`, error);
-          console.warn(`[RoundController] Compliance report will be null, proceeding with AI review only`);
         }
       } else {
         console.log(`[RoundController] ⚪ No submission rules linked, skipping compliance check`);
@@ -1697,6 +1698,7 @@ export class RoundController {
       round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
 
       if (complianceReport) {
+        round.complianceReport = complianceReport;
         round.complianceReportsByUser = {
           ...(round.complianceReportsByUser ?? {}),
           [user.id]: {
@@ -1727,10 +1729,14 @@ export class RoundController {
         data: {
           compliance: complianceReport ? {
             report: complianceReport,
-            sourceUrl: complianceSourceUrl
+            sourceUrl: complianceSourceUrl,
+            error: null
           } : {
             report: null,
-            message: 'No submission rules linked to this round'
+            error: complianceError,
+            message: complianceError
+              ? `Compliance check failed: ${complianceError}`
+              : (round.submissionRuleSetId ? 'Rule set not found' : 'No submission rules linked to this round')
           },
           aiReview: {
             summaryReport: aiReviewResult.summaryReport,
