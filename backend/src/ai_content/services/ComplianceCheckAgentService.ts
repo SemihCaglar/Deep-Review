@@ -1,8 +1,8 @@
 import { AgentsClient } from "@azure/ai-agents";
 import { ClientSecretCredential } from "@azure/identity";
+import { Readable } from "node:stream";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import yaml from "js-yaml";
 import { ComplianceReport } from "../../types/complianceReport";
 import { SubmissionRulesJSON } from "../../types/submissionRules";
@@ -38,21 +38,11 @@ export class ComplianceCheckAgentService {
   }
 
   async uploadPdf(pdfBuffer: Buffer, filename: string = "paper.pdf"): Promise<string> {
-    const tmpPath = path.join(os.tmpdir(), `compliance_${Date.now()}_${filename}`);
-    fs.writeFileSync(tmpPath, pdfBuffer);
-
-    try {
-      console.log(`[ComplianceCheckAgentService] Uploading PDF (${pdfBuffer.length} bytes)...`);
-      const uploadedFile = await this.client.files.upload(
-        fs.createReadStream(tmpPath),
-        "assistants",
-        { fileName: filename }
-      );
-      console.log(`[ComplianceCheckAgentService] File uploaded: ${uploadedFile.id}`);
-      return uploadedFile.id;
-    } finally {
-      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-    }
+    console.log(`[ComplianceCheckAgentService] Uploading PDF (${pdfBuffer.length} bytes)...`);
+    const stream = Readable.from(pdfBuffer);
+    const uploadedFile = await this.client.files.upload(stream, "assistants", { fileName: filename });
+    console.log(`[ComplianceCheckAgentService] File uploaded: ${uploadedFile.id}`);
+    return uploadedFile.id;
   }
 
   async runComplianceCheck(fileId: string, rules: SubmissionRulesJSON): Promise<ComplianceCheckResult> {
@@ -138,11 +128,24 @@ ${rulesJson}`;
     console.log(`[ComplianceCheckAgentService] Run created: ${run.id} (status: ${run.status})`);
 
     let pollCount = 0;
+    const maxPollAttempts = 120; // 120 * 1.5s = 3 minutes max
+    const pollTimeoutMs = 10000; // 10s timeout per individual poll request
     while (run.status === "queued" || run.status === "in_progress") {
       pollCount++;
       console.log(`[ComplianceCheckAgentService] Polling run status (attempt ${pollCount})... current: ${run.status}`);
+      if (pollCount > maxPollAttempts) {
+        throw new Error(`Compliance check timed out after ${pollCount} poll attempts (~${(pollCount * 1.5).toFixed(0)}s)`);
+      }
       await new Promise((r) => setTimeout(r, 1500));
-      run = await this.client.runs.get(thread.id, run.id);
+      try {
+        run = await Promise.race([
+          this.client.runs.get(thread.id, run.id),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Poll request timed out")), pollTimeoutMs))
+        ]);
+      } catch (err: any) {
+        console.warn(`[ComplianceCheckAgentService] Poll error on attempt ${pollCount}: ${err?.message || err}. Retrying...`);
+        // Don't break — retry on next iteration
+      }
     }
 
     console.log(`[ComplianceCheckAgentService] Run completed after ${pollCount} poll(s): ${run.status}`);
