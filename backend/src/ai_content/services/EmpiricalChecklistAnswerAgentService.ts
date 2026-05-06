@@ -1,8 +1,8 @@
 import { AgentsClient } from "@azure/ai-agents";
 import { ClientSecretCredential } from "@azure/identity";
+import { Readable } from "node:stream";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import yaml from "js-yaml";
 import { EmpiricalChecklistItem } from "../../entities/EmpiricalChecklistItem";
 import { ChecklistAnswerAgentResponse } from "../../types/empiricalChecklist";
@@ -35,21 +35,11 @@ export class EmpiricalChecklistAnswerAgentService {
   }
 
   async uploadPdf(pdfBuffer: Buffer, filename: string = "paper.pdf"): Promise<string> {
-    const tmpPath = path.join(os.tmpdir(), `checklist_answer_${Date.now()}_${filename}`);
-    fs.writeFileSync(tmpPath, pdfBuffer);
-
-    try {
-      console.log(`[EmpiricalChecklistAnswerAgentService] Uploading PDF (${pdfBuffer.length} bytes)...`);
-      const uploadedFile = await this.client.files.upload(
-        fs.createReadStream(tmpPath),
-        "assistants",
-        { fileName: filename }
-      );
-      console.log(`[EmpiricalChecklistAnswerAgentService] File uploaded: ${uploadedFile.id}`);
-      return uploadedFile.id;
-    } finally {
-      if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
-    }
+    console.log(`[EmpiricalChecklistAnswerAgentService] Uploading PDF (${pdfBuffer.length} bytes)...`);
+    const stream = Readable.from(pdfBuffer);
+    const uploadedFile = await this.client.files.upload(stream, "assistants", { fileName: filename });
+    console.log(`[EmpiricalChecklistAnswerAgentService] File uploaded: ${uploadedFile.id}`);
+    return uploadedFile.id;
   }
 
   async runChecklistAnswering(
