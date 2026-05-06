@@ -220,6 +220,21 @@ export class CoordinatorService {
           throw new CoordinatorServiceError(400, 'Round deadline is not set');
         }
 
+        const currentDeadline = assignment.deadline ?? round.deadline;
+        if (!currentDeadline) {
+          throw new CoordinatorServiceError(400, 'Current assignment deadline is not set');
+        }
+        const currentDeadlineLabel = assignment.deadline
+          ? 'the current assignment deadline'
+          : 'the round deadline';
+
+        if (approvedDeadline.getTime() <= new Date(currentDeadline).getTime()) {
+          throw new CoordinatorServiceError(
+            400,
+            `Approved deadline is earlier than ${currentDeadlineLabel}; an extension must be later than the existing deadline`,
+          );
+        }
+
         if (approvedDeadline.getTime() > deadlineCeiling.getTime()) {
           throw new CoordinatorServiceError(
             400,

@@ -119,11 +119,15 @@ function maxDateInputValue(...values: Array<string | null | undefined>) {
 function AssignmentRow({
   assignment,
   roundDeadline,
+  submissionDeadline,
+  venueCategory,
   roundStatus,
   onRefresh,
 }: {
   assignment: RoundAssignment;
   roundDeadline: string | null;
+  submissionDeadline: string | null;
+  venueCategory: 'Conference' | 'Journal';
   roundStatus: RoundWithAssignments['status'];
   onRefresh: () => void;
 }) {
@@ -368,28 +372,63 @@ function AssignmentRow({
                 >
                   <CheckCircle className="w-3.5 h-3.5" /> Approve
                 </button>
-              ) : (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <input
-                    type="date"
-                    value={approvedDeadline}
-                    onChange={e => setApprovedDeadline(e.target.value)}
-                    min={todayInputValue()}
-                    max={roundDeadline ? toLocalDateInput(roundDeadline) : undefined}
-                    className="bg-background border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-                  />
-                  <button
-                    onClick={() => handleProcessExtension('approve')}
-                    disabled={!approvedDeadline || busy}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 transition-colors"
-                  >
-                    Confirm
-                  </button>
-                  <button onClick={() => setShowExtApprove(false)} className="text-xs text-slate-500 hover:text-slate-300">
-                    Back
-                  </button>
-                </div>
-              )}
+              ) : (() => {
+                const floorSource = assignment.deadline ?? roundDeadline;
+                const minDateStr = (() => {
+                  if (!floorSource) return undefined;
+                  const f = new Date(floorSource);
+                  f.setDate(f.getDate() + 1);
+                  return toLocalDateInput(f);
+                })();
+                const maxDateStr = (() => {
+                  if (venueCategory === 'Conference' && submissionDeadline) {
+                    return toLocalDateInput(submissionDeadline);
+                  }
+                  if (!roundDeadline) return undefined;
+                  const c = new Date(roundDeadline);
+                  c.setDate(c.getDate() + 5);
+                  return toLocalDateInput(c);
+                })();
+                const ceilingLabel = venueCategory === 'Conference' && submissionDeadline
+                  ? 'the submission deadline'
+                  : '5 days after the round deadline';
+                const floorLabel = assignment.deadline
+                  ? 'the current assignment deadline'
+                  : 'the round deadline';
+                let inlineError = '';
+                if (approvedDeadline) {
+                  if (minDateStr && approvedDeadline < minDateStr) {
+                    inlineError = `Date must be after ${floorLabel}.`;
+                  } else if (maxDateStr && approvedDeadline > maxDateStr) {
+                    inlineError = `Date cannot be after ${ceilingLabel}.`;
+                  }
+                }
+                return (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="date"
+                      value={approvedDeadline}
+                      onChange={e => setApprovedDeadline(e.target.value)}
+                      min={minDateStr}
+                      max={maxDateStr}
+                      className="bg-background border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                    />
+                    <button
+                      onClick={() => handleProcessExtension('approve')}
+                      disabled={!approvedDeadline || !!inlineError || busy}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 transition-colors"
+                    >
+                      Confirm
+                    </button>
+                    <button onClick={() => setShowExtApprove(false)} className="text-xs text-slate-500 hover:text-slate-300">
+                      Back
+                    </button>
+                    {inlineError && (
+                      <p className="w-full text-xs text-red-400">{inlineError}</p>
+                    )}
+                  </div>
+                );
+              })()}
               <button
                 onClick={() => handleProcessExtension('reject')}
                 disabled={busy}
@@ -1284,6 +1323,8 @@ function RoundCard({
                   key={a.id}
                   assignment={a}
                   roundDeadline={round.deadline}
+                  submissionDeadline={round.submissionDeadline}
+                  venueCategory={round.venueCategory}
                   roundStatus={round.status}
                   onRefresh={onRefresh}
                 />

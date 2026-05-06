@@ -3,6 +3,7 @@ import { AppDataSource } from '../data-source';
 import { Assignment, AssignmentStatus } from '../entities/Assignment';
 import { Extension, ExtensionStatus } from '../entities/Extension';
 import { ReviewerResponse, ReviewerResponseStatus } from '../entities/ReviewerResponse';
+import { VenueCategory } from '../entities/Round';
 import { CoordinatorDecision, CoordinatorService } from './CoordinatorService';
 
 export class ReviewerResponseServiceError extends Error {
@@ -145,6 +146,43 @@ export class ReviewerResponseService {
       throw new ReviewerResponseServiceError(
         400,
         'Assignment must be Accepted before an extension request can be submitted',
+      );
+    }
+
+    const round = assignment.round;
+    let deadlineCeiling: Date;
+    let ceilingLabel: string;
+    if (round.venueCategory === VenueCategory.Conference && round.submissionDeadline) {
+      deadlineCeiling = round.submissionDeadline;
+      ceilingLabel = 'the conference submission deadline';
+    } else {
+      if (!round.deadline) {
+        throw new ReviewerResponseServiceError(400, 'Round deadline is not set');
+      }
+      deadlineCeiling = new Date(round.deadline);
+      deadlineCeiling.setDate(deadlineCeiling.getDate() + 5);
+      ceilingLabel = '5 days after the round deadline';
+    }
+
+    const currentDeadline = assignment.deadline ?? round.deadline;
+    if (!currentDeadline) {
+      throw new ReviewerResponseServiceError(400, 'Current assignment deadline is not set');
+    }
+    const currentDeadlineLabel = assignment.deadline
+      ? 'the current assignment deadline'
+      : 'the round deadline';
+
+    if (requestedDeadline.getTime() <= new Date(currentDeadline).getTime()) {
+      throw new ReviewerResponseServiceError(
+        400,
+        `Proposed deadline is earlier than ${currentDeadlineLabel}; an extension must be later than the existing deadline`,
+      );
+    }
+
+    if (requestedDeadline.getTime() > deadlineCeiling.getTime()) {
+      throw new ReviewerResponseServiceError(
+        400,
+        `Proposed deadline cannot exceed ${ceilingLabel}`,
       );
     }
 
