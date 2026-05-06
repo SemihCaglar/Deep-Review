@@ -1,11 +1,11 @@
 import { AgentsClient } from "@azure/ai-agents";
 import { ClientSecretCredential } from "@azure/identity";
-import { Readable } from "node:stream";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 import { ComplianceReport } from "../../types/complianceReport";
 import { SubmissionRulesJSON } from "../../types/submissionRules";
+import { uploadPdfWithRetry } from "../utils/uploadWithRetry";
 
 export interface ComplianceCheckResult {
   complianceReport: ComplianceReport;
@@ -39,10 +39,15 @@ export class ComplianceCheckAgentService {
 
   async uploadPdf(pdfBuffer: Buffer, filename: string = "paper.pdf"): Promise<string> {
     console.log(`[ComplianceCheckAgentService] Uploading PDF (${pdfBuffer.length} bytes)...`);
-    const stream = Readable.from(pdfBuffer);
-    const uploadedFile = await this.client.files.upload(stream, "assistants", { fileName: filename });
-    console.log(`[ComplianceCheckAgentService] File uploaded: ${uploadedFile.id}`);
-    return uploadedFile.id;
+    return uploadPdfWithRetry(
+      async (stream) => {
+        const uploadedFile = await this.client.files.upload(stream, "assistants", { fileName: filename });
+        console.log(`[ComplianceCheckAgentService] File uploaded: ${uploadedFile.id}`);
+        return uploadedFile.id;
+      },
+      pdfBuffer,
+      'ComplianceCheckAgentService'
+    );
   }
 
   async runComplianceCheck(fileId: string, rules: SubmissionRulesJSON): Promise<ComplianceCheckResult> {

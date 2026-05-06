@@ -1646,28 +1646,35 @@ export class RoundController {
       console.log(`[RoundController] ================================================\n`);
 
       // STEP 2: AI Review
+      let aiReviewResult: any = null;
+      let aiReviewError: string | null = null;
       console.log(`[RoundController] ========== STEP 2: AI REVIEW ==========`);
-      console.log(`[RoundController] Running AI review agent...`);
-      const { AIReviewService } = require('../ai_content/services/AIReviewService');
-      const skipChecklistGeneration = !!round.checklistJson;
-      if (skipChecklistGeneration) {
-        console.log(`[RoundController] ⚪ Checklist already exists, will skip generation`);
+      try {
+        console.log(`[RoundController] Running AI review agent...`);
+        const { AIReviewService } = require('../ai_content/services/AIReviewService');
+        const skipChecklistGeneration = !!round.checklistJson;
+        if (skipChecklistGeneration) {
+          console.log(`[RoundController] ⚪ Checklist already exists, will skip generation`);
+        }
+        aiReviewResult = await AIReviewService.generateAIReview(
+          round.paper.id,
+          id,
+          file.buffer,
+          skipChecklistGeneration
+        );
+        console.log(`[RoundController] ✓ AI review completed`);
+        console.log(`[RoundController] Review length: ${aiReviewResult.summaryReport?.length || 0} chars`);
+        console.log(`[RoundController] Annotated PDF: ${aiReviewResult.annotatedPdfUrl ? '✓ generated' : '✗ not generated'}`);
+        console.log(`[RoundController] Checklist: ${aiReviewResult.checklistJson?.selectedStandards?.length || 0} standards selected`);
+      } catch (error: any) {
+        aiReviewError = error?.message || String(error);
+        console.error(`[RoundController] ❌ AI review failed (saving other results):`, error);
       }
-      const aiReviewResult = await AIReviewService.generateAIReview(
-        round.paper.id,
-        id,
-        file.buffer,
-        skipChecklistGeneration
-      );
-      console.log(`[RoundController] ✓ AI review completed`);
-      console.log(`[RoundController] Review length: ${aiReviewResult.summaryReport?.length || 0} chars`);
-      console.log(`[RoundController] Annotated PDF: ${aiReviewResult.annotatedPdfUrl ? '✓ generated' : '✗ not generated'}`);
-      console.log(`[RoundController] Checklist: ${aiReviewResult.checklistJson?.selectedStandards?.length || 0} standards selected`);
       console.log(`[RoundController] =========================================\n`);
 
       // STEP 3: Reference Verification (included in aiReviewResult)
       console.log(`[RoundController] ========== STEP 3: REFERENCE VERIFICATION ==========`);
-      const refVerifReport = aiReviewResult.referenceVerificationReport;
+      const refVerifReport = aiReviewResult?.referenceVerificationReport ?? null;
       if (refVerifReport) {
         console.log(`[RoundController] ✓ Reference verification: ${refVerifReport.verifiedCount}/${refVerifReport.totalReferences} verified`);
         if (refVerifReport.issues && refVerifReport.issues.length > 0) {
@@ -1676,56 +1683,53 @@ export class RoundController {
       }
       console.log(`[RoundController] ==================================================\n`);
 
-      // STEP 4: Save results to database
+      // STEP 4: Save whatever completed
       console.log(`[RoundController] Saving results to database...`);
 
-      // Create new AIReviewReport record for this run
-      const aiReviewReportRepo = AppDataSource.getRepository(AIReviewReport);
-      const aiReviewReport = new AIReviewReport();
-      aiReviewReport.reviewText = aiReviewResult.summaryReport;
-      aiReviewReport.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
-      aiReviewReport.complianceReport = complianceReport;
-      aiReviewReport.referenceVerificationReport = aiReviewResult.referenceVerificationReport;
-      aiReviewReport.venue = round.targetVenue;
-      aiReviewReport.round = round;
-      aiReviewReport.requestedBy = user as any;
+      if (aiReviewResult) {
+        const aiReviewReportRepo = AppDataSource.getRepository(AIReviewReport);
+        const aiReviewReport = new AIReviewReport();
+        aiReviewReport.reviewText = aiReviewResult.summaryReport;
+        aiReviewReport.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+        aiReviewReport.complianceReport = complianceReport;
+        aiReviewReport.referenceVerificationReport = aiReviewResult.referenceVerificationReport;
+        aiReviewReport.venue = round.targetVenue;
+        aiReviewReport.round = round;
+        aiReviewReport.requestedBy = user as any;
+        await aiReviewReportRepo.save(aiReviewReport);
+        console.log(`[RoundController] ✓ AIReviewReport saved with ID: ${aiReviewReport.id}`);
 
-      await aiReviewReportRepo.save(aiReviewReport);
-      console.log(`[RoundController] ✓ AIReviewReport saved with ID: ${aiReviewReport.id}`);
+        round.aiReviewReport = aiReviewResult.summaryReport;
+        round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
 
-      // Update round with latest data
-      round.aiReviewReport = aiReviewResult.summaryReport;
-      round.annotatedPdfUrl = aiReviewResult.annotatedPdfUrl;
+        if (aiReviewResult.referenceVerificationReport) {
+          round.referenceVerificationReport = aiReviewResult.referenceVerificationReport;
+        }
+        if (aiReviewResult.checklistJson) {
+          round.checklistJson = aiReviewResult.checklistJson;
+          round.checklistUrl = aiReviewResult.checklistUrl;
+          console.log(`[RoundController] ✓ Checklist prefilled`);
+        }
+      }
 
       if (complianceReport) {
         round.complianceReport = complianceReport;
         round.complianceReportsByUser = {
           ...(round.complianceReportsByUser ?? {}),
-          [user.id]: {
-            report: complianceReport,
-            createdAt: new Date().toISOString(),
-          },
+          [user.id]: { report: complianceReport, createdAt: new Date().toISOString() },
         };
-      }
-
-      if (aiReviewResult.referenceVerificationReport) {
-        round.referenceVerificationReport = aiReviewResult.referenceVerificationReport;
-      }
-
-      // Set checklist only if generated (first time only)
-      if (aiReviewResult.checklistJson) {
-        round.checklistJson = aiReviewResult.checklistJson;
-        round.checklistUrl = aiReviewResult.checklistUrl;
-        console.log(`[RoundController] ✓ Checklist prefilled`);
       }
 
       await roundRepo.save(round);
       console.log(`[RoundController] ✓ Round updated`);
 
-      // STEP 5: Return combined results
+      // STEP 5: Return whatever completed (always 200 if we got this far)
+      const anySucceeded = aiReviewResult || complianceReport;
       return res.status(200).json({
         success: true,
-        message: 'AI Review, Compliance check, and Reference Verification completed successfully',
+        message: anySucceeded
+          ? 'Pipeline completed (some steps may have failed — see individual error fields)'
+          : 'Pipeline completed with no results',
         data: {
           compliance: complianceReport ? {
             report: complianceReport,
@@ -1738,16 +1742,21 @@ export class RoundController {
               ? `Compliance check failed: ${complianceError}`
               : (round.submissionRuleSetId ? 'Rule set not found' : 'No submission rules linked to this round')
           },
-          aiReview: {
+          aiReview: aiReviewResult ? {
             summaryReport: aiReviewResult.summaryReport,
             annotatedPdfUrl: aiReviewResult.annotatedPdfUrl,
             suggestedCitations: aiReviewResult.suggestedCitations,
             checklist: aiReviewResult.checklistJson,
-            checklistUrl: aiReviewResult.checklistUrl
+            checklistUrl: aiReviewResult.checklistUrl,
+            error: null
+          } : {
+            summaryReport: null,
+            annotatedPdfUrl: null,
+            error: aiReviewError
           },
-          referenceVerification: aiReviewResult.referenceVerificationReport ? {
-            report: aiReviewResult.referenceVerificationReport,
-            message: `${aiReviewResult.referenceVerificationReport.verifiedCount}/${aiReviewResult.referenceVerificationReport.totalReferences} references verified`
+          referenceVerification: refVerifReport ? {
+            report: refVerifReport,
+            message: `${refVerifReport.verifiedCount}/${refVerifReport.totalReferences} references verified`
           } : {
             report: null,
             message: 'Reference verification did not complete'

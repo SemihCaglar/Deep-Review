@@ -1,9 +1,9 @@
 import { AgentsClient } from "@azure/ai-agents";
 import { ClientSecretCredential } from "@azure/identity";
-import { Readable } from "node:stream";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
+import { uploadPdfWithRetry } from "../utils/uploadWithRetry";
 
 export interface AgentReviewResult {
   summaryText: string;
@@ -90,10 +90,15 @@ export class PdfAgentService {
 
   async uploadPdf(pdfBuffer: Buffer, filename: string = "paper.pdf"): Promise<string> {
     console.log(`[PdfAgentService] Uploading PDF (${pdfBuffer.length} bytes)...`);
-    const stream = Readable.from(pdfBuffer);
-    const uploadedFile = await this.client.files.upload(stream, "assistants", { fileName: filename });
-    console.log(`[PdfAgentService] File uploaded: ${uploadedFile.id}`);
-    return uploadedFile.id;
+    return uploadPdfWithRetry(
+      async (stream) => {
+        const uploaded = await this.client.files.upload(stream, "assistants", { fileName: filename });
+        console.log(`[PdfAgentService] File uploaded: ${uploaded.id}`);
+        return uploaded.id;
+      },
+      pdfBuffer,
+      'PdfAgentService'
+    );
   }
 
 

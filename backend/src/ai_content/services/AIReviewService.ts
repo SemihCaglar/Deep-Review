@@ -38,28 +38,34 @@ export class AIReviewService {
     const fileId = await agentService.uploadPdf(pdfBuffer, inputFilename);
 
     // 2. Review call (passes fileId, no re-upload)
-    console.log(`[AIReviewService] Calling AI agent for review and PDF annotation...`);
-    const { summaryText, annotatedPdfBuffer } = await agentService.runAnnotatedReview(fileId);
+    let summaryText: string | null = null;
+    let annotatedPdfUrl: string | null = null;
+    try {
+      console.log(`[AIReviewService] Calling AI agent for review and PDF annotation...`);
+      const result = await agentService.runAnnotatedReview(fileId);
+      summaryText = result.summaryText;
+      const annotatedPdfBuffer = result.annotatedPdfBuffer;
 
-    if (!summaryText || summaryText.trim().length === 0) {
-      throw new Error('Agent returned an empty review. Please try again.');
+      if (!summaryText || summaryText.trim().length === 0) {
+        console.warn('[AIReviewService] Agent returned empty review text.');
+      }
+
+      // Save annotated PDF
+      if (annotatedPdfBuffer) {
+        const outputFilename = `paper_${paperId}_round_${roundId}_annotated.pdf`;
+        const downloadsDir = path.join(process.cwd(), 'downloads');
+        if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
+        fs.writeFileSync(path.join(downloadsDir, outputFilename), annotatedPdfBuffer);
+        annotatedPdfUrl = `/downloads/${outputFilename}`;
+        console.log(`[AIReviewService] Annotated PDF saved to downloads/${outputFilename}`);
+      } else {
+        console.warn('[AIReviewService] Agent did not produce an annotated PDF.');
+      }
+    } catch (err) {
+      console.error('[AIReviewService] AI review agent failed (continuing with other steps):', err);
     }
 
-    // 3. Save annotated PDF
-    const outputFilename = `paper_${paperId}_round_${roundId}_annotated.pdf`;
-    const downloadsDir = path.join(process.cwd(), 'downloads');
-    if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir, { recursive: true });
-
-    if (annotatedPdfBuffer) {
-      fs.writeFileSync(path.join(downloadsDir, outputFilename), annotatedPdfBuffer);
-      console.log(`[AIReviewService] Annotated PDF saved to downloads/${outputFilename}`);
-    } else {
-      console.warn('[AIReviewService] Agent did not produce an annotated PDF.');
-    }
-
-    const annotatedPdfUrl = annotatedPdfBuffer ? `/downloads/${outputFilename}` : null;
-
-    // 4. Checklist call — separate thread, same fileId (skip if already exists)
+    // 3. Checklist call — separate thread, same fileId (skip if already exists)
     let checklistJson: EmpiricalStandardsChecklist | null = null;
     let checklistUrl: string | null = null;
     if (!skipChecklist) {
@@ -77,7 +83,7 @@ export class AIReviewService {
       console.log(`[AIReviewService] ⚪ Checklist skipped (already exists)`);
     }
 
-    // 5. Reference verification
+    // 4. Reference verification
     console.log(`[AIReviewService] Running reference verification...`);
     let referenceVerificationReport: any = null;
     try {
