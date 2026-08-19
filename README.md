@@ -5,7 +5,6 @@ A full-stack system for managing academic paper reviews, featuring AI-assisted r
 ## Project Structure
 - **/frontend:** Next.js 14 web application (React, Tailwind CSS).
 - **/backend:** Express.js TypeScript API (TypeORM, SQLite).
-- **/doc:** Architectural diagrams (PlantUML), project status, and design decisions.
 
 ## Tech Stack
 - **Frontend:** Next.js, Lucide Icons, Tailwind.
@@ -77,5 +76,4 @@ npm run dev
 
 The system supports configurable email templates and global system policies.
 Detailed placeholder and policy key references are documented in [`docs/configuration.md`](docs/configuration.md).
-
 
