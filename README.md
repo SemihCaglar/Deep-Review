@@ -77,3 +77,6 @@ npm run dev
 The system supports configurable email templates and global system policies.
 Detailed placeholder and policy key references are documented in [`docs/configuration.md`](docs/configuration.md).
 
+## 🎥 Demo Video
+
+Watch the demo here: https://youtu.be/30DnG8jxUiA?si=wUIMlcU8U3gv_Wi8
